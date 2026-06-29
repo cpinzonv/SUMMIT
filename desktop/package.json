@@ -1,0 +1,58 @@
+{
+  "name": "@student-workflow/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop shell for the student workflow app.",
+  "author": "Student Workflow",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k -n vite,electron -c blue,green \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "npm --prefix ../client run dev -- --port 3000 --strictPort",
+    "dev:electron": "wait-on tcp:127.0.0.1:3000 && cross-env ELECTRON_DEV=1 electron .",
+    "build:renderer": "npm --prefix ../client run build -- --outDir ../desktop/renderer --emptyOutDir",
+    "pack": "npm run build:renderer && electron-builder --dir",
+    "dist": "npm run build:renderer && electron-builder"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.studentworkflow.desktop",
+    "productName": "Student Workflow",
+    "electronVersion": "33.4.11",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Education"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.example.com/student-workflow"
+      }
+    ]
+  }
+}
