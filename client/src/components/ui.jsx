@@ -213,6 +213,16 @@ export function classColor(cls, index = 0) {
   return cls.color;
 }
 
+/**
+ * Gradient for a class's small accent bar/line. A "Glass / Clear" class uses the
+ * Summit brand gradient (same as the logo wordmark) rather than a flat gray, so
+ * the default still feels on-brand. Colored classes use their own color.
+ */
+export function classAccent(cls, index = 0) {
+  if (cls != null && isGlassColor(cls.color)) return 'var(--grad-teal-purple)';
+  return classGradient(cls, index);
+}
+
 // Letter grade → 4.0-scale grade points (A+ capped at 4.0).
 const GPA_POINTS = {
   'A+': 4.0, A: 4.0, 'A-': 3.7,

@@ -9,6 +9,7 @@ import {
   Toast,
   gradeColor,
   classGradient,
+  classAccent,
   isGlassColor,
   computeGpa,
 } from '../components/ui';
@@ -327,7 +328,7 @@ function ClassCard({ cls, index }) {
         <div className="flex items-center gap-3">
           <span
             className="h-12 w-1.5 rounded-full"
-            style={{ backgroundImage: gradient }}
+            style={{ backgroundImage: classAccent(cls, index) }}
           />
           <div>
             <h3 className="font-bold text-ink">{cls.name}</h3>
@@ -376,7 +377,7 @@ function ClassRow({ cls, index }) {
       to={`/classes/${cls.id}`}
       className="group flex items-center gap-4 px-5 py-3.5 transition hover:bg-white/40"
     >
-      <span className="h-9 w-1.5 rounded-full" style={{ backgroundImage: classGradient(cls, index) }} />
+      <span className="h-9 w-1.5 rounded-full" style={{ backgroundImage: classAccent(cls, index) }} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold text-ink">{cls.name}</span>

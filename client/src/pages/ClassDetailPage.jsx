@@ -10,6 +10,7 @@ import {
   LmsBadge,
   gradeColor,
   classGradient,
+  classAccent,
   isGlassColor,
   CLASS_COLOR_PRESETS,
 } from '../components/ui';
@@ -158,7 +159,7 @@ export default function ClassDetailPage() {
             <div className="flex items-start gap-3">
               <span
                 className="mt-1 h-14 w-1.5 rounded-full"
-                style={{ backgroundImage: gradient }}
+                style={{ backgroundImage: classAccent(cls, 0) }}
               />
               <div>
                 <h1 className="text-2xl font-extrabold">{cls?.name || 'Class'}</h1>
