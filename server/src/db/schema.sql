@@ -483,3 +483,255 @@ ALTER TABLE plan_items
   ADD COLUMN IF NOT EXISTS completion_date DATE;
 ALTER TABLE plan_items
   ADD COLUMN IF NOT EXISTS linked_class_id UUID REFERENCES classes(id) ON DELETE SET NULL;
+
+-- ============================================================================
+-- Learn tab — spaced-repetition flashcards + AI-generated study materials.
+-- Cards are generated from a class's notes/files/transcripts (or authored by
+-- hand); card_reviews is the source of truth for spaced repetition (SM-2), and
+-- mastery_levels / streaks / stats cache derived state for fast dashboards.
+-- ============================================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'flashcard_source') THEN
+    CREATE TYPE flashcard_source AS ENUM ('note', 'file', 'transcript');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'card_generator') THEN
+    CREATE TYPE card_generator AS ENUM ('claude', 'user');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'card_difficulty') THEN
+    CREATE TYPE card_difficulty AS ENUM ('easy', 'medium', 'hard');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'mastery_status') THEN
+    CREATE TYPE mastery_status AS ENUM ('new', 'learning', 'review', 'mastered');
+  END IF;
+END$$;
+
+-- ----------------------------------------------------------------------------
+-- flashcards — individual Q/A cards. source_id is POLYMORPHIC (points at a
+-- note / class_file / transcript depending on source_type) so it is left as a
+-- plain UUID, NOT a foreign key.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS flashcards (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id        UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  question        TEXT NOT NULL,
+  answer          TEXT NOT NULL,
+  explanation     TEXT,
+  source_type     flashcard_source,
+  source_id       UUID,                                   -- polymorphic; no FK
+  generated_by    card_generator NOT NULL DEFAULT 'claude',
+  generated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  user_edited     BOOLEAN NOT NULL DEFAULT false,
+  custom_question TEXT,
+  custom_answer   TEXT,
+  tags            TEXT[] NOT NULL DEFAULT '{}',
+  difficulty      card_difficulty NOT NULL DEFAULT 'medium',
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_flashcards_class ON flashcards(class_id);
+CREATE INDEX IF NOT EXISTS idx_flashcards_user  ON flashcards(user_id);
+
+DROP TRIGGER IF EXISTS trg_flashcards_updated_at ON flashcards;
+CREATE TRIGGER trg_flashcards_updated_at
+  BEFORE UPDATE ON flashcards
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- card_reviews — one row per review. The SM-2 state AFTER the review is stored
+-- inline so the latest row per card is the current schedule.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS card_reviews (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  card_id            UUID NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+  reviewed_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  time_spent_seconds INT,
+  confidence         SMALLINT CHECK (confidence >= 1 AND confidence <= 5),
+  correct            BOOLEAN,
+  interval_days      INT,
+  ease_factor        NUMERIC(3,2),
+  next_review_at     TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_next_review ON card_reviews(user_id, next_review_at);
+CREATE INDEX IF NOT EXISTS idx_card_reviews_card ON card_reviews(card_id);
+
+-- ----------------------------------------------------------------------------
+-- learning_streaks — per-class (class_id set) and global (class_id NULL) daily
+-- streaks. Partial unique indexes give us one row per (user, class) and one
+-- global row per user for clean upserts.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS learning_streaks (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  class_id         UUID REFERENCES classes(id) ON DELETE CASCADE,
+  current_streak   INT NOT NULL DEFAULT 0,
+  longest_streak   INT NOT NULL DEFAULT 0,
+  last_reviewed_at DATE,
+  reviews_today    INT NOT NULL DEFAULT 0,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_streak_global ON learning_streaks(user_id) WHERE class_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_streak_class  ON learning_streaks(user_id, class_id) WHERE class_id IS NOT NULL;
+
+DROP TRIGGER IF EXISTS trg_learning_streaks_updated_at ON learning_streaks;
+CREATE TRIGGER trg_learning_streaks_updated_at
+  BEFORE UPDATE ON learning_streaks
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- mastery_levels — cached per-(card,user) progression. One row per card+user.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS mastery_levels (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  card_id            UUID NOT NULL REFERENCES flashcards(id) ON DELETE CASCADE,
+  user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status             mastery_status NOT NULL DEFAULT 'new',
+  correct_count      INT NOT NULL DEFAULT 0,
+  total_reviews      INT NOT NULL DEFAULT 0,
+  confidence_average NUMERIC(3,2),
+  mastery_percent    INT NOT NULL DEFAULT 0,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_mastery_card_user ON mastery_levels(card_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_user_status ON mastery_levels(user_id, status);
+
+DROP TRIGGER IF EXISTS trg_mastery_levels_updated_at ON mastery_levels;
+CREATE TRIGGER trg_mastery_levels_updated_at
+  BEFORE UPDATE ON mastery_levels
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- learning_sessions — one row per study session (duration + focus metrics).
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS learning_sessions (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  class_id           UUID REFERENCES classes(id) ON DELETE CASCADE,
+  started_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ended_at           TIMESTAMPTZ,
+  duration_minutes   INT,
+  cards_reviewed     INT NOT NULL DEFAULT 0,
+  cards_mastered     INT NOT NULL DEFAULT 0,
+  average_confidence NUMERIC(3,2),
+  interruptions      INT NOT NULL DEFAULT 0,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_learning_sessions_user ON learning_sessions(user_id);
+
+-- ----------------------------------------------------------------------------
+-- podcasts — NotebookLM-style audio summaries. NOTE: Anthropic has no TTS, so
+-- audio_url generation is a future seam; transcript_text can be generated now.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS podcasts (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id           UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title              TEXT NOT NULL,
+  description        TEXT,
+  audio_url          TEXT,
+  transcript_text    TEXT,
+  duration_seconds   INT,
+  generated_from     TEXT[] NOT NULL DEFAULT '{}',
+  generated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  listened_at        TIMESTAMPTZ,
+  completion_percent INT NOT NULL DEFAULT 0,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_podcasts_class ON podcasts(class_id);
+
+DROP TRIGGER IF EXISTS trg_podcasts_updated_at ON podcasts;
+CREATE TRIGGER trg_podcasts_updated_at
+  BEFORE UPDATE ON podcasts
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- quizzes — auto-generated; questions kept as JSONB for flexible item types.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS quizzes (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id           UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title              TEXT NOT NULL,
+  question_count     INT,
+  questions          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  attempted_at       TIMESTAMPTZ,
+  score              INT,
+  time_spent_seconds INT,
+  generated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_quizzes_class ON quizzes(class_id);
+
+-- ----------------------------------------------------------------------------
+-- study_guides — structured markdown summaries.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS study_guides (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id       UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title          TEXT NOT NULL,
+  content        TEXT NOT NULL,
+  generated_from TEXT[] NOT NULL DEFAULT '{}',
+  generated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  read_at        TIMESTAMPTZ,
+  bookmarked     BOOLEAN NOT NULL DEFAULT false,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_study_guides_class ON study_guides(class_id);
+
+DROP TRIGGER IF EXISTS trg_study_guides_updated_at ON study_guides;
+CREATE TRIGGER trg_study_guides_updated_at
+  BEFORE UPDATE ON study_guides
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- mind_maps — node/edge graph data as JSONB.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS mind_maps (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id       UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title          TEXT NOT NULL,
+  topic          TEXT,
+  nodes          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  edges          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  generated_from TEXT[] NOT NULL DEFAULT '{}',
+  generated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_mind_maps_class ON mind_maps(class_id);
+
+-- ----------------------------------------------------------------------------
+-- user_learning_stats — one aggregated row per user (dashboard cache).
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_learning_stats (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  total_cards             INT NOT NULL DEFAULT 0,
+  mastered_cards          INT NOT NULL DEFAULT 0,
+  learning_cards          INT NOT NULL DEFAULT 0,
+  new_cards               INT NOT NULL DEFAULT 0,
+  global_streak           INT NOT NULL DEFAULT 0,
+  longest_global_streak   INT NOT NULL DEFAULT 0,
+  total_study_hours       NUMERIC(10,2) NOT NULL DEFAULT 0,
+  average_session_minutes INT NOT NULL DEFAULT 0,
+  average_mastery_percent INT NOT NULL DEFAULT 0,
+  retention_rate          NUMERIC(3,2),
+  total_badges_earned     INT NOT NULL DEFAULT 0,
+  level                   INT NOT NULL DEFAULT 1,
+  experience_points       INT NOT NULL DEFAULT 0,
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_learning_stats_user ON user_learning_stats(user_id);
+
+DROP TRIGGER IF EXISTS trg_user_learning_stats_updated_at ON user_learning_stats;
+CREATE TRIGGER trg_user_learning_stats_updated_at
+  BEFORE UPDATE ON user_learning_stats
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();

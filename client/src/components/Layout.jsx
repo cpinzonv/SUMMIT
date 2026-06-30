@@ -6,6 +6,7 @@ const navItems = [
   { to: '/schedule', label: 'Schedule' },
   { to: '/calendar', label: 'Calendar' },
   { to: '/planner', label: 'Planner' },
+  { to: '/learn', label: 'Learn' },
   { to: '/settings', label: 'Settings' },
 ];
 

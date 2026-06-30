@@ -1,0 +1,575 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { api, errorMessage } from '../api/client';
+import { Modal, Spinner, ErrorBanner, EmptyState, Toast } from '../components/ui';
+
+/**
+ * Learn tab — spaced-repetition flashcards. Pick a class, generate cards with
+ * AI (or add them by hand), then study the cards that are due today. Reviews
+ * feed the SM-2 scheduler on the backend; stats/streaks update live.
+ */
+
+const MASTERY = {
+  new: { label: 'New', cls: 'bg-slate-400/15 text-slate-500' },
+  learning: { label: 'Learning', cls: 'bg-amber-400/15 text-amber-600' },
+  review: { label: 'Review', cls: 'bg-sky-400/15 text-sky-600' },
+  mastered: { label: 'Mastered', cls: 'bg-emerald-400/15 text-emerald-600' },
+};
+const DIFFICULTY = {
+  easy: 'text-emerald-500',
+  medium: 'text-amber-500',
+  hard: 'text-rose-500',
+};
+const CONFIDENCE = [
+  { v: 1, label: 'Forgot', cls: 'border-rose-300 text-rose-600 hover:bg-rose-50' },
+  { v: 2, label: 'Hard', cls: 'border-orange-300 text-orange-600 hover:bg-orange-50' },
+  { v: 3, label: 'OK', cls: 'border-amber-300 text-amber-600 hover:bg-amber-50' },
+  { v: 4, label: 'Good', cls: 'border-sky-300 text-sky-600 hover:bg-sky-50' },
+  { v: 5, label: 'Easy', cls: 'border-emerald-300 text-emerald-600 hover:bg-emerald-50' },
+];
+
+function StatChip({ label, value, accent }) {
+  return (
+    <div className="glass-panel flex min-w-[7rem] flex-col px-4 py-3">
+      <span className="text-2xl font-bold text-ink" style={accent ? { color: accent } : undefined}>
+        {value}
+      </span>
+      <span className="text-xs font-medium text-muted">{label}</span>
+    </div>
+  );
+}
+
+export default function LearnPage() {
+  const [classes, setClasses] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [classId, setClassId] = useState('');
+  const [cards, setCards] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [cardsLoading, setCardsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState(null);
+
+  const [reviewing, setReviewing] = useState(false);
+  const [editorCard, setEditorCard] = useState(undefined); // undefined=closed, null=new, obj=edit
+  const [generating, setGenerating] = useState(false);
+
+  const flash = useCallback((msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 2600);
+  }, []);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/learn/stats');
+      setStats(data);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
+  // Initial load: classes + stats.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cls] = await Promise.all([api.get('/api/classes'), loadStats()]);
+        const list = (cls.data.classes || []).filter((c) => !c.archivedAt);
+        setClasses(list);
+        if (list.length) setClassId(list[0].id);
+      } catch (err) {
+        setError(errorMessage(err));
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loadStats]);
+
+  const loadCards = useCallback(async (cid) => {
+    if (!cid) return setCards([]);
+    setCardsLoading(true);
+    try {
+      const { data } = await api.get(`/api/learn/classes/${cid}/cards`);
+      setCards(data.cards);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setCardsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCards(classId);
+  }, [classId, loadCards]);
+
+  const dueCount = stats?.dueToday ?? 0;
+  const selectedClass = classes.find((c) => c.id === classId);
+
+  const afterChange = useCallback(() => {
+    loadCards(classId);
+    loadStats();
+  }, [classId, loadCards, loadStats]);
+
+  if (loading) return <Spinner label="Loading your study deck…" />;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-ink">
+            <span className="text-gradient">Learn</span>
+          </h1>
+          <p className="text-sm text-muted">Spaced-repetition flashcards from your notes & transcripts</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <StatChip label="Day streak" value={`🔥 ${stats?.currentStreak ?? 0}`} />
+          <StatChip label="Due today" value={dueCount} accent={dueCount ? '#ff7a52' : undefined} />
+          <StatChip label="Mastered" value={`${stats?.masteredCards ?? 0}/${stats?.totalCards ?? 0}`} />
+          <StatChip label="Avg mastery" value={`${stats?.averageMasteryPercent ?? 0}%`} />
+        </div>
+      </div>
+
+      {error && <ErrorBanner message={error} />}
+
+      {classes.length === 0 ? (
+        <EmptyState title="No classes yet">
+          Add a class first — then generate flashcards from its notes and transcripts.
+        </EmptyState>
+      ) : (
+        <>
+          {/* Controls */}
+          <div className="glass-panel flex flex-wrap items-center gap-3 p-4">
+            <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+              Class
+              <select
+                value={classId}
+                onChange={(e) => setClassId(e.target.value)}
+                className="field !w-auto !py-1.5"
+              >
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="ml-auto flex flex-wrap gap-2">
+              <button
+                className="btn btn-primary"
+                disabled={dueCount === 0}
+                onClick={() => setReviewing(true)}
+                title={dueCount === 0 ? 'Nothing due right now' : undefined}
+              >
+                Study due ({dueCount})
+              </button>
+              <button className="btn btn-soft" onClick={() => setGenerating(true)}>
+                ✦ Generate with AI
+              </button>
+              <button className="btn btn-soft" onClick={() => setEditorCard(null)}>
+                + Add card
+              </button>
+            </div>
+          </div>
+
+          {/* Cards list */}
+          {cardsLoading ? (
+            <Spinner label="Loading cards…" />
+          ) : cards.length === 0 ? (
+            <EmptyState title={`No cards in ${selectedClass?.name ?? 'this class'} yet`}>
+              Generate a set from this class's notes & transcripts, or add a card by hand.
+            </EmptyState>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {cards.map((card) => (
+                <CardTile
+                  key={card.id}
+                  card={card}
+                  onEdit={() => setEditorCard(card)}
+                  onDelete={async () => {
+                    if (!confirm('Delete this card?')) return;
+                    try {
+                      await api.delete(`/api/learn/cards/${card.id}`);
+                      flash('Card deleted');
+                      afterChange();
+                    } catch (err) {
+                      flash(errorMessage(err), 'error');
+                    }
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {editorCard !== undefined && (
+        <CardEditorModal
+          classId={classId}
+          card={editorCard}
+          onClose={() => setEditorCard(undefined)}
+          onSaved={(msg) => {
+            setEditorCard(undefined);
+            flash(msg);
+            afterChange();
+          }}
+        />
+      )}
+
+      {generating && (
+        <GenerateModal
+          classId={classId}
+          onClose={() => setGenerating(false)}
+          onGenerated={(n) => {
+            setGenerating(false);
+            flash(`Generated ${n} card${n === 1 ? '' : 's'}`);
+            afterChange();
+          }}
+        />
+      )}
+
+      {reviewing && (
+        <ReviewSession
+          classId={classId}
+          className={selectedClass?.name}
+          onClose={() => {
+            setReviewing(false);
+            afterChange();
+          }}
+        />
+      )}
+
+      {toast && <Toast toast={toast} />}
+    </div>
+  );
+}
+
+/** A single card in the management grid — click to flip and preview the answer. */
+function CardTile({ card, onEdit, onDelete }) {
+  const [flipped, setFlipped] = useState(false);
+  const m = MASTERY[card.mastery?.status || 'new'];
+  const pct = card.mastery?.masteryPercent ?? 0;
+  return (
+    <div className="glass-panel flex flex-col gap-2 p-4">
+      <div className="flex items-start justify-between gap-2">
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m.cls}`}>{m.label}</span>
+        <div className="flex items-center gap-2 text-xs">
+          <span className={`font-bold uppercase ${DIFFICULTY[card.difficulty]}`}>{card.difficulty}</span>
+          <button onClick={onEdit} className="text-muted hover:text-ink" aria-label="Edit card">✎</button>
+          <button onClick={onDelete} className="text-muted hover:text-rose-500" aria-label="Delete card">🗑</button>
+        </div>
+      </div>
+
+      <button onClick={() => setFlipped((f) => !f)} className="text-left">
+        <p className="font-semibold text-ink">{card.question}</p>
+        {flipped && (
+          <p className="mt-2 border-t border-white/40 pt-2 text-sm text-muted">{card.answer}</p>
+        )}
+        {!flipped && <p className="mt-1 text-xs text-muted/70">Click to reveal answer</p>}
+      </button>
+
+      {card.tags?.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {card.tags.map((t) => (
+            <span key={t} className="rounded-full bg-white/50 px-2 py-0.5 text-[10px] font-medium text-muted">
+              #{t}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-auto h-1.5 overflow-hidden rounded-full bg-white/40">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--grad-teal-purple)' }} />
+      </div>
+    </div>
+  );
+}
+
+/** Create / edit a flashcard. */
+function CardEditorModal({ classId, card, onClose, onSaved }) {
+  const editing = Boolean(card);
+  const [form, setForm] = useState({
+    question: card?.question || '',
+    answer: card?.answer || '',
+    explanation: card?.explanation || '',
+    difficulty: card?.difficulty || 'medium',
+    tags: (card?.tags || []).join(', '),
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const upd = (f) => (e) => setForm((s) => ({ ...s, [f]: e.target.value }));
+
+  const save = async () => {
+    setSaving(true);
+    setErr('');
+    const payload = {
+      question: form.question.trim(),
+      answer: form.answer.trim(),
+      explanation: form.explanation.trim() || undefined,
+      difficulty: form.difficulty,
+      tags: form.tags.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 8),
+    };
+    try {
+      if (editing) {
+        await api.patch(`/api/learn/cards/${card.id}`, payload);
+      } else {
+        await api.post(`/api/learn/classes/${classId}/cards`, payload);
+      }
+      onSaved(editing ? 'Card updated' : 'Card added');
+    } catch (e) {
+      setErr(errorMessage(e));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title={editing ? 'Edit card' : 'New card'} onClose={onClose} wide>
+      <div className="space-y-3">
+        {err && <ErrorBanner message={err} />}
+        <Labeled label="Question">
+          <textarea className="field min-h-[3rem]" value={form.question} onChange={upd('question')} autoFocus />
+        </Labeled>
+        <Labeled label="Answer">
+          <textarea className="field min-h-[3rem]" value={form.answer} onChange={upd('answer')} />
+        </Labeled>
+        <Labeled label="Explanation (optional)">
+          <textarea className="field min-h-[2.5rem]" value={form.explanation} onChange={upd('explanation')} />
+        </Labeled>
+        <div className="flex gap-3">
+          <Labeled label="Difficulty">
+            <select className="field" value={form.difficulty} onChange={upd('difficulty')}>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </Labeled>
+          <Labeled label="Tags (comma-separated)">
+            <input className="field" value={form.tags} onChange={upd('tags')} placeholder="vocabulary, formula" />
+          </Labeled>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button className="btn btn-soft" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            disabled={saving || !form.question.trim() || !form.answer.trim()}
+            onClick={save}
+          >
+            {saving ? 'Saving…' : editing ? 'Save' : 'Add card'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** AI generation dialog — count + source, with friendly 503 / no-material handling. */
+function GenerateModal({ classId, onClose, onGenerated }) {
+  const [count, setCount] = useState(15);
+  const [sourceType, setSourceType] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const go = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      const { data } = await api.post(`/api/learn/classes/${classId}/generate`, {
+        count: Number(count),
+        ...(sourceType ? { sourceType } : {}),
+      });
+      onGenerated(data.cards.length);
+    } catch (e) {
+      setErr(errorMessage(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Generate flashcards with AI" onClose={onClose}>
+      <div className="space-y-3">
+        {err && <ErrorBanner message={err} />}
+        <p className="text-sm text-muted">
+          Claude reads this class's notes & transcripts and writes study cards. You can edit or delete
+          any of them afterward.
+        </p>
+        <div className="flex gap-3">
+          <Labeled label="How many">
+            <input
+              type="number"
+              min={1}
+              max={40}
+              className="field"
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
+            />
+          </Labeled>
+          <Labeled label="From">
+            <select className="field" value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
+              <option value="">Notes & transcripts</option>
+              <option value="note">Notes only</option>
+              <option value="transcript">Transcripts only</option>
+            </select>
+          </Labeled>
+        </div>
+        <div className="flex justify-end gap-2 pt-1">
+          <button className="btn btn-soft" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={busy} onClick={go}>
+            {busy ? 'Generating…' : 'Generate'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Full-screen study session over the due queue. */
+function ReviewSession({ classId, className, onClose }) {
+  const [queue, setQueue] = useState(null); // null=loading
+  const [idx, setIdx] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
+  const [err, setErr] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const startedAt = useRef(Date.now());
+  const confidences = useRef([]);
+  const ran = useRef(false);
+
+  useEffect(() => {
+    if (ran.current) return;
+    ran.current = true;
+    (async () => {
+      try {
+        const [dueRes, sessRes] = await Promise.all([
+          api.get('/api/learn/due', { params: { classId } }),
+          api.post('/api/learn/sessions', { classId }),
+        ]);
+        setQueue(dueRes.data.cards);
+        setSessionId(sessRes.data.session.id);
+        startedAt.current = Date.now();
+      } catch (e) {
+        setErr(errorMessage(e));
+        setQueue([]);
+      }
+    })();
+  }, [classId]);
+
+  const endSession = useCallback(async () => {
+    if (!sessionId) return;
+    const avg =
+      confidences.current.length
+        ? confidences.current.reduce((a, b) => a + b, 0) / confidences.current.length
+        : undefined;
+    try {
+      await api.patch(`/api/learn/sessions/${sessionId}`, avg ? { averageConfidence: avg } : {});
+    } catch {
+      /* best-effort */
+    }
+  }, [sessionId]);
+
+  const rate = async (confidence) => {
+    const card = queue[idx];
+    setSubmitting(true);
+    const timeSpentSeconds = Math.round((Date.now() - startedAt.current) / 1000);
+    try {
+      await api.post(`/api/learn/cards/${card.id}/review`, {
+        confidence,
+        timeSpentSeconds,
+        ...(sessionId ? { sessionId } : {}),
+      });
+      confidences.current.push(confidence);
+      setRevealed(false);
+      startedAt.current = Date.now();
+      setIdx((i) => i + 1);
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const finish = async () => {
+    await endSession();
+    onClose();
+  };
+
+  const total = queue?.length ?? 0;
+  const done = queue !== null && idx >= total;
+  const card = queue && idx < total ? queue[idx] : null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col items-center bg-slate-900/40 p-4 backdrop-blur-sm">
+      <div className="glass-panel mt-10 flex w-full max-w-xl flex-col gap-4 p-6">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-semibold text-muted">{className} · Study session</span>
+          <button onClick={finish} className="text-2xl leading-none text-muted hover:text-ink" aria-label="End session">×</button>
+        </div>
+
+        {err && <ErrorBanner message={err} />}
+
+        {queue === null ? (
+          <Spinner label="Building your study queue…" />
+        ) : total === 0 ? (
+          <EmptyState title="Nothing due right now">Great work — check back later!</EmptyState>
+        ) : done ? (
+          <div className="py-8 text-center">
+            <p className="text-4xl">🎉</p>
+            <p className="mt-2 text-lg font-bold text-ink">Session complete!</p>
+            <p className="text-sm text-muted">You reviewed {total} card{total === 1 ? '' : 's'}.</p>
+            <button onClick={finish} className="btn btn-primary mt-4">Done</button>
+          </div>
+        ) : (
+          <>
+            <div className="h-1.5 overflow-hidden rounded-full bg-white/40">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${(idx / total) * 100}%`, background: 'var(--grad-teal-purple)' }}
+              />
+            </div>
+            <p className="text-center text-xs font-medium text-muted">
+              Card {idx + 1} of {total}
+            </p>
+
+            <div className="min-h-[8rem] rounded-2xl bg-white/50 p-5 text-center">
+              <p className="text-lg font-semibold text-ink">{card.question}</p>
+              {revealed && (
+                <div className="mt-3 border-t border-white/50 pt-3">
+                  <p className="text-ink">{card.answer}</p>
+                  {card.explanation && <p className="mt-2 text-sm text-muted">{card.explanation}</p>}
+                </div>
+              )}
+            </div>
+
+            {!revealed ? (
+              <button className="btn btn-primary w-full" onClick={() => setRevealed(true)}>
+                Show answer
+              </button>
+            ) : (
+              <div>
+                <p className="mb-2 text-center text-xs font-medium text-muted">How well did you know it?</p>
+                <div className="grid grid-cols-5 gap-2">
+                  {CONFIDENCE.map((c) => (
+                    <button
+                      key={c.v}
+                      disabled={submitting}
+                      onClick={() => rate(c.v)}
+                      className={`flex flex-col items-center rounded-xl border bg-white/60 py-2 text-xs font-semibold transition disabled:opacity-50 ${c.cls}`}
+                    >
+                      <span className="text-base">{c.v}</span>
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Labeled({ label, children }) {
+  return (
+    <label className="block flex-1">
+      <span className="mb-1 block text-sm font-semibold text-ink">{label}</span>
+      {children}
+    </label>
+  );
+}
