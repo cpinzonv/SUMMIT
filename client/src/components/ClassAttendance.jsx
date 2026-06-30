@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import { Spinner, ErrorBanner, EmptyState, gradeColor } from './ui';
+import { Spinner, ErrorBanner, EmptyState, gradeColor, Toggle } from './ui';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const STATUSES = [
@@ -131,6 +131,11 @@ export function ClassAttendance({ classId }) {
             <span>{summary.late} late</span>
             <span>{summary.absent} absent</span>
           </div>
+          {schedule.attendanceGraded && schedule.attendanceWeight != null && (
+            <div className="relative mt-3 rounded-full bg-brand-50/80 px-3 py-1 text-xs font-semibold text-brand-700">
+              Worth {schedule.attendanceWeight}% of your grade
+            </div>
+          )}
         </div>
         <div className="glass-card p-4 text-sm">
           <div className="font-bold text-ink">Schedule</div>
@@ -189,6 +194,10 @@ function ScheduleForm({ classId, schedule, onSaved, onCancel }) {
   const [endDate, setEndDate] = useState(schedule.endDate || '');
   const [days, setDays] = useState(schedule.meetingDays || []);
   const [time, setTime] = useState(schedule.meetingTime || '');
+  const [graded, setGraded] = useState(Boolean(schedule.attendanceGraded));
+  const [weight, setWeight] = useState(
+    schedule.attendanceWeight != null ? String(schedule.attendanceWeight) : '',
+  );
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -209,6 +218,8 @@ function ScheduleForm({ classId, schedule, onSaved, onCancel }) {
         endDate,
         meetingDays: days,
         meetingTime: time || null,
+        attendanceGraded: graded,
+        attendanceWeight: graded && weight !== '' ? Number(weight) : null,
       });
       await onSaved();
     } catch (err) {
@@ -263,6 +274,33 @@ function ScheduleForm({ classId, schedule, onSaved, onCancel }) {
         <span className="mb-1 block text-sm font-semibold text-ink">Time (optional)</span>
         <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
       </label>
+
+      <div className="rounded-2xl border border-white/60 bg-white/40 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <span className="text-sm font-semibold text-ink">Attendance is graded</span>
+            <p className="text-xs text-muted">Count attendance toward the final class grade.</p>
+          </div>
+          <Toggle on={graded} onChange={() => setGraded((v) => !v)} />
+        </div>
+        {graded && (
+          <label className="mt-3 block max-w-[14rem]">
+            <span className="mb-1 block text-sm font-semibold text-ink">
+              Attendance grade weight (%)
+            </span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder="10"
+              className="field"
+            />
+          </label>
+        )}
+      </div>
+
       <div className="flex justify-end gap-2 pt-1">
         {onCancel && (
           <button type="button" onClick={onCancel} className="btn btn-soft">

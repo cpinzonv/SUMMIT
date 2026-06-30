@@ -33,6 +33,14 @@ const syllabusSchema = {
       type: 'boolean',
       description: 'True if attendance is graded or mandatory',
     },
+    attendanceGraded: {
+      type: 'boolean',
+      description: 'True if the syllabus states attendance/participation is worth a percentage of the grade',
+    },
+    attendanceWeight: {
+      type: ['number', 'null'],
+      description: 'The percentage of the final grade attendance is worth (0-100), or null if not stated',
+    },
     assignmentNames: {
       type: 'array',
       items: { type: 'string' },
@@ -71,6 +79,8 @@ const syllabusSchema = {
     'termStart',
     'termEnd',
     'attendanceRequired',
+    'attendanceGraded',
+    'attendanceWeight',
     'assignmentNames',
     'assignments',
     'gradingBreakdown',
@@ -84,6 +94,9 @@ Read the document carefully and populate the schema:
 - assignmentNames: just the names of those items.
 - gradingBreakdown: the weighting of each grade category as a percentage (weights should sum to ~100).
 - attendanceRequired: true if attendance/participation is graded or mandatory.
+- attendanceGraded / attendanceWeight: if the syllabus says attendance or participation is worth
+  a percentage of the grade (e.g. "Attendance: 10%"), set attendanceGraded true and attendanceWeight
+  to that number (10). Otherwise attendanceGraded false and attendanceWeight null.
 Use null for any field the syllabus does not specify. Do not invent data.`;
 
 /**
@@ -156,6 +169,8 @@ function normalize(data) {
     termStart: data.termStart ?? null,
     termEnd: data.termEnd ?? null,
     attendanceRequired: Boolean(data.attendanceRequired),
+    attendanceGraded: Boolean(data.attendanceGraded),
+    attendanceWeight: data.attendanceWeight ?? null,
     assignmentNames: names,
     assignments,
     gradingBreakdown: breakdown,

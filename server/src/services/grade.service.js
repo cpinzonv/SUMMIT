@@ -1,24 +1,110 @@
 import { query, withTransaction } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
-import { summarizeGrade } from '../utils/grade.js';
+import { letterGrade } from '../utils/grade.js';
+import { generateSessionDates } from '../utils/sessions.js';
+
+const round1 = (n) => Math.round(n * 10) / 10;
 
 /**
- * Compute a class's current grade from the point totals of its graded
- * assignments. `db` may be a transaction client.
+ * Compute a class's current grade. The assignment component is point-based
+ * (sum earned / sum possible). When attendance is graded, the final grade is a
+ * weighted blend of the assignment percentage and the attendance rate — and if
+ * one component has no data yet, the available components are renormalized so a
+ * not-yet-graded piece doesn't unfairly drag the grade down. `db` may be a
+ * transaction client.
  */
 export async function computeClassGrade(classId, db = { query }) {
-  const { rows } = await db.query(
-    `SELECT
-       COALESCE(SUM(g.points_earned), 0)   AS earned,
-       COALESCE(SUM(g.points_possible), 0) AS possible,
-       COUNT(g.id)                         AS graded
-     FROM assignments a
-     JOIN grades g ON g.assignment_id = a.id
-     WHERE a.class_id = $1`,
-    [classId],
-  );
-  const { earned, possible, graded } = rows[0];
-  return summarizeGrade(Number(earned), Number(possible), Number(graded));
+  const gradeRow = (
+    await db.query(
+      `SELECT
+         COALESCE(SUM(g.points_earned), 0)   AS earned,
+         COALESCE(SUM(g.points_possible), 0) AS possible,
+         COUNT(g.id)                         AS graded
+       FROM assignments a
+       JOIN grades g ON g.assignment_id = a.id
+       WHERE a.class_id = $1`,
+      [classId],
+    )
+  ).rows[0];
+
+  const clsRow = (
+    await db.query(
+      `SELECT attendance_graded, attendance_weight, meeting_days, start_date, end_date
+       FROM classes WHERE id = $1`,
+      [classId],
+    )
+  ).rows[0];
+
+  const earned = Number(gradeRow.earned);
+  const possible = Number(gradeRow.possible);
+  const graded = Number(gradeRow.graded);
+  const assignmentPct = possible > 0 ? round1((earned / possible) * 100) : null;
+
+  const attendanceGraded = Boolean(clsRow?.attendance_graded);
+  const attendanceWeight =
+    clsRow?.attendance_weight == null ? null : Number(clsRow.attendance_weight);
+
+  // Count attendance only over the generated session dates — the same set the
+  // attendance UI shows — so the rate is consistent everywhere. Excused and
+  // unmarked sessions are excluded from the denominator.
+  let attendancePct = null;
+  {
+    const sessionDates = new Set(
+      generateSessionDates(
+        clsRow?.start_date,
+        clsRow?.end_date,
+        Array.isArray(clsRow?.meeting_days) ? clsRow.meeting_days : [],
+      ),
+    );
+    if (sessionDates.size > 0) {
+      const recs = (
+        await db.query(
+          `SELECT session_date, status FROM attendance WHERE class_id = $1`,
+          [classId],
+        )
+      ).rows;
+      let attended = 0;
+      let denom = 0;
+      for (const r of recs) {
+        if (!sessionDates.has(r.session_date)) continue;
+        if (r.status === 'present' || r.status === 'late') {
+          attended += 1;
+          denom += 1;
+        } else if (r.status === 'absent') {
+          denom += 1;
+        }
+      }
+      // Integer percent, matching the attendance UI's summary.
+      if (denom > 0) attendancePct = Math.round((attended / denom) * 100);
+    }
+  }
+
+  // Build weighted components, renormalizing over those with data.
+  const useAttendance =
+    attendanceGraded && attendanceWeight != null && attendanceWeight > 0 && attendancePct != null;
+  const components = [];
+  if (assignmentPct != null) {
+    components.push([assignmentPct, useAttendance ? 100 - attendanceWeight : 100]);
+  }
+  if (useAttendance) components.push([attendancePct, attendanceWeight]);
+
+  const totalWeight = components.reduce((s, [, w]) => s + w, 0);
+  const percentage =
+    totalWeight > 0
+      ? round1(components.reduce((s, [p, w]) => s + p * w, 0) / totalWeight)
+      : null;
+
+  return {
+    percentage,
+    letter: letterGrade(percentage),
+    pointsEarned: earned,
+    pointsPossible: possible,
+    gradedAssignments: graded,
+    assignmentPercentage: assignmentPct,
+    attendanceGraded,
+    attendanceWeight,
+    attendancePercentage: attendancePct,
+  };
 }
 
 function toPublicGrade(row) {

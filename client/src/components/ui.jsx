@@ -34,6 +34,24 @@ export function Modal({ title, onClose, children, wide = false }) {
   );
 }
 
+/** Glassy on/off switch. */
+export function Toggle({ on, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onChange}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition ${on ? '' : 'bg-slate-300/70'}`}
+      style={on ? { backgroundImage: 'var(--grad-teal-purple)' } : undefined}
+    >
+      <span
+        className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${on ? 'left-[1.4rem]' : 'left-0.5'}`}
+      />
+    </button>
+  );
+}
+
 export function Spinner({ label = 'Loading…' }) {
   return (
     <div className="flex items-center justify-center gap-3 py-10 text-muted">

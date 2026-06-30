@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import { ErrorBanner, Spinner } from '../components/ui';
+import { ErrorBanner, Spinner, Toggle } from '../components/ui';
 
 const ROW_INPUT =
   'rounded-lg border border-white/70 bg-white/60 px-2.5 py-1.5 text-sm text-ink outline-none backdrop-blur transition focus:border-brand-400 focus:bg-white/85';
@@ -24,6 +24,8 @@ export default function CreateClassPage() {
   // Meeting schedule → drives auto-generated attendance sessions.
   const [meetingDays, setMeetingDays] = useState([]);
   const [meetingTime, setMeetingTime] = useState('');
+  const [attendanceGraded, setAttendanceGraded] = useState(false);
+  const [attendanceWeight, setAttendanceWeight] = useState('');
 
   // Preview rows populated from a syllabus extraction; user-editable.
   const [assignments, setAssignments] = useState([]);
@@ -76,6 +78,8 @@ export default function CreateClassPage() {
           weight,
         })),
       );
+      setAttendanceGraded(Boolean(s.attendanceGraded));
+      setAttendanceWeight(s.attendanceWeight != null ? String(s.attendanceWeight) : '');
       setImported(true);
     } catch (err) {
       setExtractError(errorMessage(err, 'Could not extract the syllabus.'));
@@ -124,6 +128,9 @@ export default function CreateClassPage() {
         endDate: form.endDate || undefined,
         meetingDays: meetingDays.length ? meetingDays : undefined,
         meetingTime: meetingTime || undefined,
+        attendanceGraded: attendanceGraded || undefined,
+        attendanceWeight:
+          attendanceGraded && attendanceWeight !== '' ? Number(attendanceWeight) : undefined,
         syllabus: {
           instructor: form.instructor || undefined,
           gradingScheme: grading
@@ -243,6 +250,33 @@ export default function CreateClassPage() {
           <p className="mt-1.5 text-xs text-muted">
             Used to auto-generate attendance sessions across the term.
           </p>
+        </div>
+
+        {/* Attendance grading */}
+        <div className="rounded-2xl border border-white/60 bg-white/40 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <span className="text-sm font-semibold text-ink">Attendance is graded</span>
+              <p className="text-xs text-muted">Count attendance toward the final class grade.</p>
+            </div>
+            <Toggle on={attendanceGraded} onChange={() => setAttendanceGraded((v) => !v)} />
+          </div>
+          {attendanceGraded && (
+            <label className="mt-3 block max-w-[16rem]">
+              <span className="mb-1 block text-sm font-semibold text-ink">
+                Attendance grade weight (%)
+              </span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={attendanceWeight}
+                onChange={(e) => setAttendanceWeight(e.target.value)}
+                placeholder="10"
+                className="field"
+              />
+            </label>
+          )}
         </div>
 
         <label className="block">

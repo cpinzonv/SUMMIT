@@ -98,6 +98,9 @@ ALTER TABLE classes ADD COLUMN IF NOT EXISTS description TEXT;
 -- Meeting schedule (weekday codes + time) used to auto-generate attendance sessions.
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS meeting_days JSONB NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS meeting_time TEXT;
+-- Attendance grading: whether attendance counts toward the grade, and its weight (percent).
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS attendance_graded BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS attendance_weight NUMERIC(5,2);
 
 CREATE INDEX IF NOT EXISTS idx_classes_user_id ON classes(user_id);
 CREATE INDEX IF NOT EXISTS idx_classes_user_term ON classes(user_id, term);

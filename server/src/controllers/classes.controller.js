@@ -42,6 +42,8 @@ export const createClassSchema = z.object({
   endDate: dateString.optional(),
   meetingDays: z.array(weekday).optional(),
   meetingTime: z.string().optional(),
+  attendanceGraded: z.boolean().optional(),
+  attendanceWeight: z.number().min(0).max(100).optional(),
   syllabus: syllabusSchema,
 });
 
@@ -57,6 +59,8 @@ export const updateClassSchema = z
     endDate: dateString.nullable().optional(),
     meetingDays: z.array(weekday).optional(),
     meetingTime: z.string().nullable().optional(),
+    attendanceGraded: z.boolean().optional(),
+    attendanceWeight: z.number().min(0).max(100).nullable().optional(),
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 

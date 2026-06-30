@@ -16,6 +16,8 @@ export function toPublicClass(row) {
     endDate: row.end_date,
     meetingDays: row.meeting_days ?? [],
     meetingTime: row.meeting_time ?? null,
+    attendanceGraded: row.attendance_graded ?? false,
+    attendanceWeight: row.attendance_weight == null ? null : Number(row.attendance_weight),
     archivedAt: row.archived_at,
     syllabus: {
       instructor: row.instructor,
@@ -49,12 +51,13 @@ export async function createClass(userId, input) {
   const { rows } = await query(
     `INSERT INTO classes
        (user_id, name, description, code, term, credits, color, start_date, end_date,
-        meeting_days, meeting_time,
+        meeting_days, meeting_time, attendance_graded, attendance_weight,
         instructor, instructor_email, location, meeting_times, grading_scheme,
         syllabus_url)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10,'[]'::jsonb), $11,
-             $12,$13,$14,
-             COALESCE($15,'[]'::jsonb), COALESCE($16,'[]'::jsonb), $17)
+             COALESCE($12, false), $13,
+             $14,$15,$16,
+             COALESCE($17,'[]'::jsonb), COALESCE($18,'[]'::jsonb), $19)
      RETURNING *`,
     [
       userId,
@@ -68,6 +71,8 @@ export async function createClass(userId, input) {
       input.endDate ?? null,
       input.meetingDays ? JSON.stringify(input.meetingDays) : null,
       input.meetingTime ?? null,
+      input.attendanceGraded ?? null,
+      input.attendanceWeight ?? null,
       s.instructor ?? null,
       s.instructorEmail ?? null,
       s.location ?? null,
@@ -89,6 +94,8 @@ const CLASS_UPDATABLE = {
   startDate: 'start_date',
   endDate: 'end_date',
   meetingTime: 'meeting_time',
+  attendanceGraded: 'attendance_graded',
+  attendanceWeight: 'attendance_weight',
 };
 
 /** Partially update a class the user owns (schedule, basic fields). */
@@ -121,26 +128,19 @@ export async function updateClass(userId, classId, input) {
 /** List the user's active (non-archived) classes, each with grade + attendance. */
 export async function listCurrentClasses(userId) {
   const { rows } = await query(
-    `SELECT c.*,
-       (SELECT COUNT(*) FROM attendance a
-        WHERE a.class_id = c.id AND a.status IN ('present', 'late', 'absent')) AS att_denom,
-       (SELECT COUNT(*) FROM attendance a
-        WHERE a.class_id = c.id AND a.status IN ('present', 'late')) AS att_attended
-     FROM classes c
-     WHERE c.user_id = $1 AND c.archived_at IS NULL
-     ORDER BY c.created_at DESC`,
+    `SELECT * FROM classes
+     WHERE user_id = $1 AND archived_at IS NULL
+     ORDER BY created_at DESC`,
     [userId],
   );
   return Promise.all(
     rows.map(async (row) => {
-      const denom = Number(row.att_denom);
+      const currentGrade = await computeClassGrade(row.id);
       return {
         ...toPublicClass(row),
-        currentGrade: await computeClassGrade(row.id),
-        attendanceRate:
-          denom > 0
-            ? Math.round((Number(row.att_attended) / denom) * 100)
-            : null,
+        currentGrade,
+        // Single source of truth: same generated-session rate the grade uses.
+        attendanceRate: currentGrade.attendancePercentage,
       };
     }),
   );
