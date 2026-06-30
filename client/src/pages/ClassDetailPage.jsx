@@ -10,6 +10,7 @@ import {
   LmsBadge,
   gradeColor,
   classGradient,
+  CLASS_COLOR_PRESETS,
 } from '../components/ui';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
 import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
@@ -586,6 +587,7 @@ function ClassEditModal({ cls, onClose, onSaved }) {
             className="field"
           />
         </label>
+        <ColorPicker value={form.color} onChange={(c) => setForm((f) => ({ ...f, color: c }))} />
         <div className="grid grid-cols-2 gap-3">
           <Input label="Start date" type="date" value={form.startDate} onChange={update('startDate')} />
           <Input label="End date" type="date" value={form.endDate} onChange={update('endDate')} />
@@ -881,5 +883,47 @@ function Input({ label, ...props }) {
       <span className="mb-1 block text-xs font-semibold text-ink">{label}</span>
       <input {...props} className="field" />
     </label>
+  );
+}
+
+/** Class color picker: preset swatches + a custom color well, with a clear option. */
+function ColorPicker({ value, onChange }) {
+  const current = value || '';
+  return (
+    <div className="block">
+      <span className="mb-1 block text-xs font-semibold text-ink">Color</span>
+      <div className="flex flex-wrap items-center gap-2">
+        {CLASS_COLOR_PRESETS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            aria-label={`Use ${c}`}
+            className={`h-7 w-7 rounded-full ring-offset-1 transition ${
+              current.toLowerCase() === c.toLowerCase() ? 'ring-2 ring-ink' : 'ring-1 ring-white/60 hover:ring-ink/40'
+            }`}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+        {/* Custom color well */}
+        <label
+          className="grid h-7 w-7 cursor-pointer place-items-center rounded-full border border-dashed border-muted/50 text-xs text-muted"
+          title="Custom color"
+        >
+          🎨
+          <input
+            type="color"
+            value={current || '#5aa9d6'}
+            onChange={(e) => onChange(e.target.value)}
+            className="sr-only"
+          />
+        </label>
+        {current && (
+          <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-muted hover:text-ink">
+            Clear
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

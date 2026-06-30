@@ -165,7 +165,29 @@ const GRADIENTS = [
 // Representative solid tones (for small calendar chips).
 const PALETTE = ['#ff7a52', '#ff7e79', '#3fb8c0', '#5aa9d6', '#ff9a3d', '#7e8fe0'];
 
+// Preset swatches offered in the class color picker.
+export const CLASS_COLOR_PRESETS = [
+  '#ff7a52', '#ff6f73', '#f6c453', '#5fbf77', '#3fb8c0',
+  '#5aa9d6', '#7e8fe0', '#b07ad6', '#e8739c', '#8a93a6',
+];
+
+/** Lighten a #rrggbb hex toward white by `amt` (0..1). */
+function lighten(hex, amt = 0.22) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const mix = (c) => Math.round(c + (255 - c) * amt);
+  return `#${[mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** A class's accent gradient. When the user has set a custom color, derive a
+ *  two-stop gradient from it; otherwise cycle the default vivid gradients. */
 export function classGradient(cls, index = 0) {
+  if (cls?.color && /^#?[0-9a-f]{6}$/i.test(cls.color)) {
+    const c = cls.color.startsWith('#') ? cls.color : `#${cls.color}`;
+    return `linear-gradient(135deg, ${c} 0%, ${lighten(c, 0.28)} 100%)`;
+  }
   return GRADIENTS[index % GRADIENTS.length];
 }
 
