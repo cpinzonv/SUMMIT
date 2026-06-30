@@ -12,4 +12,11 @@ router.use(requireAuth);
 // current class grade.
 router.post('/', validate(grades.submitGradeSchema), asyncHandler(grades.submit));
 
+// Clear a grade (delete the record) — recomputes the class grade without it.
+router.delete(
+  '/:assignmentId',
+  validate(grades.assignmentIdParam, 'params'),
+  asyncHandler(grades.clear),
+);
+
 export default router;

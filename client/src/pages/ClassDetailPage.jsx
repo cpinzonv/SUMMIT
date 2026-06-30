@@ -987,8 +987,31 @@ function GradeModal({ assignment, onClose, onSaved }) {
   const update = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
 
+  // Clear an existing grade (delete the record) so the assignment is ungraded.
+  const clearGrade = async () => {
+    if (!existing) {
+      onClose();
+      return;
+    }
+    if (!confirm('Clear this grade? The class grade will recalculate without it.')) return;
+    setSaving(true);
+    setError('');
+    try {
+      await api.delete(`/api/grades/${assignment.id}`);
+      await onSaved();
+    } catch (err) {
+      setError(errorMessage(err));
+      setSaving(false);
+    }
+  };
+
   const submit = async (e) => {
     e.preventDefault();
+    // Empty "points earned" means "no grade" → clear it (or no-op if never set).
+    if (String(form.pointsEarned).trim() === '') {
+      await clearGrade();
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -1015,14 +1038,36 @@ function GradeModal({ assignment, onClose, onSaved }) {
       <form onSubmit={submit} className="space-y-3">
         <ErrorBanner message={error} />
         <div className="grid grid-cols-2 gap-3">
-          <Input label="Points earned" type="number" value={form.pointsEarned} onChange={update('pointsEarned')} required />
+          <Input label="Points earned" type="number" value={form.pointsEarned} onChange={update('pointsEarned')} placeholder="—" />
           <Input label="Points possible" type="number" value={form.pointsPossible} onChange={update('pointsPossible')} placeholder={assignment.pointValue ?? '?'} />
         </div>
+        <p className="text-[11px] text-muted">Leave “Points earned” empty to clear the grade.</p>
         <label className="block">
           <span className="mb-1 block text-xs font-semibold text-ink">Feedback (optional)</span>
           <textarea value={form.feedback} onChange={update('feedback')} rows={2} className="field" />
         </label>
-        <ModalActions saving={saving} disabled={form.pointsEarned === ''} onClose={onClose} label={existing ? 'Update grade' : 'Submit grade'} />
+        <div className="flex items-center justify-between pt-1">
+          <div>
+            {existing && (
+              <button
+                type="button"
+                onClick={clearGrade}
+                disabled={saving}
+                className="text-xs font-semibold text-rose-600 transition hover:underline disabled:opacity-50"
+              >
+                Clear grade
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="btn btn-soft">
+              Cancel
+            </button>
+            <button type="submit" disabled={saving} className="btn btn-primary">
+              {saving ? 'Saving…' : existing ? 'Update grade' : 'Submit grade'}
+            </button>
+          </div>
+        </div>
       </form>
     </Modal>
   );

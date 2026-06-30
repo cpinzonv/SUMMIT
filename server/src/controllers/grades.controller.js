@@ -13,9 +13,19 @@ export const gradeSimSchema = z.object({
   targetGrade: z.union([z.string().min(1), z.number()]),
 });
 
+export const assignmentIdParam = z.object({
+  assignmentId: z.string().uuid('Invalid assignment id'),
+});
+
 export async function submit(req, res) {
   const result = await gradeService.submitGrade(req.user.id, req.body);
   res.status(201).json(result);
+}
+
+/** Clear a grade (delete the record) so the assignment is ungraded again. */
+export async function clear(req, res) {
+  const result = await gradeService.clearGrade(req.user.id, req.params.assignmentId);
+  res.json(result);
 }
 
 export async function simulate(req, res) {

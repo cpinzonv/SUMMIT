@@ -255,3 +255,31 @@ export async function submitGrade(userId, input) {
     };
   });
 }
+
+/**
+ * Clear (delete) a grade so the assignment becomes ungraded again — used when a
+ * student entered a grade by mistake. The class grade recalculates without it.
+ */
+export async function clearGrade(userId, assignmentId) {
+  return withTransaction(async (client) => {
+    const { rows: aRows } = await client.query(
+      `SELECT a.id, a.class_id
+       FROM assignments a
+       JOIN classes c ON c.id = a.class_id
+       WHERE a.id = $1 AND c.user_id = $2`,
+      [assignmentId, userId],
+    );
+    const assignment = aRows[0];
+    if (!assignment) throw AppError.notFound('Assignment not found');
+
+    await client.query('DELETE FROM grades WHERE assignment_id = $1', [assignmentId]);
+    // It's no longer graded; revert the auto-"graded" status (leave other statuses alone).
+    await client.query(
+      `UPDATE assignments SET status = 'not_started' WHERE id = $1 AND status = 'graded'`,
+      [assignmentId],
+    );
+
+    const classGrade = await computeClassGrade(assignment.class_id, client);
+    return { cleared: true, classId: assignment.class_id, classGrade };
+  });
+}
