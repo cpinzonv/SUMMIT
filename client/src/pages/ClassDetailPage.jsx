@@ -693,15 +693,19 @@ function ClassEditModal({ cls, onClose, onSaved }) {
 /** "What if?" grade simulator: pick a target, see what's needed on remaining work. */
 function GradeSimModal({ classId, onClose }) {
   const [target, setTarget] = useState('A');
+  const [forId, setForId] = useState(''); // '' = all remaining work; else an assignment id
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const run = async (t) => {
+  const run = async (t, fid) => {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.post(`/api/classes/${classId}/grade-simulation`, { targetGrade: t });
+      const { data } = await api.post(`/api/classes/${classId}/grade-simulation`, {
+        targetGrade: t,
+        ...(fid ? { assignmentId: fid } : {}),
+      });
       setResult(data);
     } catch (err) {
       setError(errorMessage(err, 'Could not run the simulation.'));
@@ -710,16 +714,39 @@ function GradeSimModal({ classId, onClose }) {
     }
   };
 
-  // Run once on open and whenever the target changes.
+  // Run on open and whenever the target or the selected assignment changes.
   useEffect(() => {
-    run(target);
+    run(target, forId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target]);
+  }, [target, forId]);
+
+  // Options for the "Calculate for" dropdown — only ungraded assignments.
+  const remaining = result?.remainingAssignments ?? [];
 
   const message = (() => {
     if (!result) return null;
     const cur = result.currentPercent == null ? 'no grades yet' : `${result.currentPercent}%`;
     const tgt = `${typeof result.targetGrade === 'string' ? result.targetGrade : ''} (${result.targetPercent}%)`.trim();
+
+    // Single-assignment mode.
+    if (result.forAssignment) {
+      const { title, pointValue } = result.forAssignment;
+      const caveat = result.remainingAssignments.length > 1
+        ? ' (assuming full marks on your other remaining work)'
+        : '';
+      switch (result.status) {
+        case 'already_achieved':
+          return `You've already secured ${tgt} — you don't need any points on ${title}. You currently have ${cur}.`;
+        case 'impossible':
+          return `Even a perfect score on ${title} (${pointValue} pts) won't reach ${tgt}. You currently have ${cur}.`;
+        case 'reachable':
+          return `On ${title} (${pointValue} pts), you need ${result.requiredPointsOnAssignment} points (${result.requiredPercentOnAssignment}%) to get ${tgt}${caveat}.`;
+        default:
+          return null;
+      }
+    }
+
+    // All-remaining-work mode.
     switch (result.status) {
       case 'all_done':
         return `All work is graded — your grade is locked at ${cur}. There's no remaining work to change it.`;
@@ -744,6 +771,18 @@ function GradeSimModal({ classId, onClose }) {
   return (
     <Modal title="What if? — grade simulator" onClose={onClose}>
       <div className="space-y-4">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-ink">Calculate for</span>
+          <select value={forId} onChange={(e) => setForId(e.target.value)} className="field">
+            <option value="">All remaining work</option>
+            {remaining.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.title} ({a.pointValue} pts)
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label className="block">
           <span className="mb-1 block text-xs font-semibold text-ink">Target final grade</span>
           <div className="flex flex-wrap gap-1.5">
@@ -788,10 +827,19 @@ function GradeSimModal({ classId, onClose }) {
                 </h3>
                 <div className="max-h-44 space-y-1 overflow-y-auto">
                   {result.remainingAssignments.map((a) => (
-                    <div key={a.id} className="flex justify-between rounded-lg border border-white/50 bg-white/45 px-3 py-1.5 text-sm">
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setForId(a.id)}
+                      className={`flex w-full justify-between rounded-lg border px-3 py-1.5 text-left text-sm transition ${
+                        forId === a.id
+                          ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-400'
+                          : 'border-white/50 bg-white/45 hover:bg-white/70'
+                      }`}
+                    >
                       <span className="truncate text-ink">{a.title}</span>
                       <span className="shrink-0 text-muted">{a.pointValue} pts</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>

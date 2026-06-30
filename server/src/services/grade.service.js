@@ -25,7 +25,7 @@ function resolveTargetPercent(target) {
  * (ungraded) assignments. Handles the already-achieved / impossible / all-done
  * edge cases.
  */
-export async function simulateGrade(userId, classId, target) {
+export async function simulateGrade(userId, classId, target, assignmentId = null) {
   const cls = await getOwnedClass(userId, classId); // 404s if not owned
   const targetPercent = resolveTargetPercent(target);
 
@@ -57,6 +57,40 @@ export async function simulateGrade(userId, classId, target) {
   const currentPercent = possible > 0 ? round1((earned / possible) * 100) : null;
   const totalPoints = possible + remainingPoints;
 
+  const base = {
+    className: cls.name,
+    currentPercent,
+    currentLetter: letterGrade(currentPercent),
+    targetGrade: target,
+    targetPercent,
+    remainingPoints,
+    remainingAssignments,
+  };
+
+  // Single-assignment mode: what's needed on JUST the chosen assignment,
+  // assuming full marks on the other remaining work.
+  if (assignmentId) {
+    const sel = remainingAssignments.find((a) => a.id === assignmentId);
+    if (!sel) {
+      throw AppError.badRequest('That assignment is already graded or has no point value.');
+    }
+    const otherRemaining = remainingPoints - sel.pointValue;
+    const requiredPoints = (targetPercent / 100) * totalPoints - earned - otherRemaining;
+    const requiredPercent = round1((requiredPoints / sel.pointValue) * 100);
+    let status;
+    if (requiredPoints <= 0) status = 'already_achieved';
+    else if (requiredPercent > 100) status = 'impossible';
+    else status = 'reachable';
+    return {
+      ...base,
+      forAssignment: sel,
+      requiredPointsOnAssignment: round1(requiredPoints),
+      requiredPercentOnAssignment: requiredPercent,
+      status,
+    };
+  }
+
+  // All-remaining-work mode (default).
   let status;
   let requiredGradeOnRemaining = null;
   if (remainingPoints === 0) {
@@ -71,14 +105,9 @@ export async function simulateGrade(userId, classId, target) {
   }
 
   return {
-    className: cls.name,
-    currentPercent,
-    currentLetter: letterGrade(currentPercent),
-    targetGrade: target,
-    targetPercent,
+    ...base,
+    forAssignment: null,
     requiredGradeOnRemaining,
-    remainingPoints,
-    remainingAssignments,
     status,
   };
 }

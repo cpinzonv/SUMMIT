@@ -11,6 +11,8 @@ export const submitGradeSchema = z.object({
 
 export const gradeSimSchema = z.object({
   targetGrade: z.union([z.string().min(1), z.number()]),
+  // Optional: simulate for ONE ungraded assignment instead of all remaining work.
+  assignmentId: z.string().uuid().optional(),
 });
 
 export const assignmentIdParam = z.object({
@@ -29,5 +31,12 @@ export async function clear(req, res) {
 }
 
 export async function simulate(req, res) {
-  res.json(await gradeService.simulateGrade(req.user.id, req.params.id, req.body.targetGrade));
+  res.json(
+    await gradeService.simulateGrade(
+      req.user.id,
+      req.params.id,
+      req.body.targetGrade,
+      req.body.assignmentId,
+    ),
+  );
 }
