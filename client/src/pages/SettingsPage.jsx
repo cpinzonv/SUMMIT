@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Toast, Toggle, classGradient, gradeColor } from '../components/ui';
 import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
+import { gcalApi, summarizeGcalSync } from '../lib/gcal';
 
 const TABS = [
   { key: 'account', label: 'Account' },
@@ -17,7 +18,7 @@ export default function SettingsPage() {
   // OAuth redirect (?lms=... ; ?canvas=... kept for backward-compatible links).
   const [tab, setTab] = useState(() => {
     const q = new URLSearchParams(window.location.search);
-    return q.has('lms') || q.has('canvas') ? 'preferences' : 'account';
+    return q.has('lms') || q.has('canvas') || q.has('gcal') ? 'preferences' : 'account';
   });
   const set = (key) => (value) => savePreferences({ [key]: value });
 
@@ -186,7 +187,122 @@ function PreferencesTab({ prefs, set }) {
       </Section>
 
       <LmsConnections />
+      <GoogleCalendarSection />
     </>
+  );
+}
+
+/* ---- Google Calendar sync ---------------------------------------------- */
+function GoogleCalendarSection() {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState(null);
+
+  const reload = () => gcalApi.status().then(setStatus).catch(() => setStatus({ available: false }));
+  useEffect(() => {
+    reload();
+  }, []);
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const justConnected = new URLSearchParams(window.location.search).get('gcal') === 'connected';
+
+  const connect = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const { url, state } = await gcalApi.authUrl();
+      beginConnect({ provider: 'google_calendar', url, state, domain: null });
+    } catch (err) {
+      setError(errorMessage(err, 'Could not start the Google Calendar connection.'));
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (!confirm('Disconnect Google Calendar? Synced events stay in your calendar.')) return;
+    setBusy(true);
+    try {
+      setStatus(await gcalApi.disconnect());
+      setToast({ type: 'success', msg: 'Google Calendar disconnected' });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleEnabled = async () => {
+    try {
+      setStatus(await gcalApi.setEnabled(!status.syncEnabled));
+    } catch (err) {
+      setToast({ type: 'error', msg: errorMessage(err) });
+    }
+  };
+
+  const sync = async () => {
+    setSyncing(true);
+    setToast({ loading: true, msg: 'Syncing to Google Calendar…' });
+    try {
+      const result = await gcalApi.sync();
+      setStatus(await gcalApi.status());
+      setToast({ type: 'success', msg: summarizeGcalSync(result) });
+    } catch (err) {
+      setToast({ type: 'error', msg: errorMessage(err, 'Google Calendar sync failed') });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const lastSynced = status?.syncedAt
+    ? new Date(status.syncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : 'never';
+
+  return (
+    <Section title="Google Calendar" description="Push your assignments and due dates to Google Calendar.">
+      {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
+      {justConnected && status?.connected && (
+        <div className="mb-3 rounded-2xl border border-emerald-300/50 bg-emerald-50/70 px-4 py-2.5 text-sm font-medium text-emerald-700">
+          Google Calendar connected — you can now sync your assignments.
+        </div>
+      )}
+
+      {!status ? (
+        <p className="text-sm text-muted">Loading…</p>
+      ) : !status.available ? (
+        <p className="text-sm text-muted">
+          Google Calendar isn’t configured on this server yet. An admin needs to set the Google
+          Calendar client credentials and the token encryption key.
+        </p>
+      ) : status.connected ? (
+        <div className="space-y-1">
+          <Row label="Sync assignments to Google Calendar" hint="Summit is the source of truth.">
+            <Toggle on={!!status.syncEnabled} onChange={toggleEnabled} />
+          </Row>
+          <Row label="Last synced">
+            <span className="text-sm text-muted">{lastSynced}</span>
+          </Row>
+          <div className="flex gap-2 pt-2">
+            <button onClick={sync} disabled={syncing || !status.syncEnabled} className="btn btn-primary">
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+            <button onClick={disconnect} disabled={busy} className="btn btn-soft">
+              Disconnect
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={connect} disabled={busy} className="btn btn-primary">
+          {busy ? 'Redirecting…' : 'Connect Google Calendar'}
+        </button>
+      )}
+      <Toast toast={toast} />
+    </Section>
   );
 }
 

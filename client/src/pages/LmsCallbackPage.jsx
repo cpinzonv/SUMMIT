@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { errorMessage } from '../api/client';
 import { Spinner, ErrorBanner } from '../components/ui';
 import { lmsApi, lmsLabel, readPendingConnect, clearPendingConnect } from '../lib/lms';
+import { gcalApi } from '../lib/gcal';
 
 /**
  * An LMS redirects here (LMS_REDIRECT_URI) with ?code & ?state after the user
@@ -30,7 +31,8 @@ export default function LmsCallbackPage() {
     clearPendingConnect();
 
     const provider = pending?.provider || 'canvas';
-    const providerLabel = lmsLabel(provider);
+    const isGcal = provider === 'google_calendar';
+    const providerLabel = isGcal ? 'Google Calendar' : lmsLabel(provider);
     setLabel(providerLabel);
 
     (async () => {
@@ -47,6 +49,11 @@ export default function LmsCallbackPage() {
         return;
       }
       try {
+        if (isGcal) {
+          await gcalApi.connect({ code, state });
+          navigate('/settings?gcal=connected', { replace: true });
+          return;
+        }
         await lmsApi(provider).connect({ domain: pending.domain, code, state });
         await refreshUser();
         navigate(`/settings?lms=${provider}`, { replace: true });

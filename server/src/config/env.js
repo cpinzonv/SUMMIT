@@ -80,6 +80,15 @@ export const env = {
   },
 };
 
+// Google Calendar one-way sync (separate from the LMS providers).
+env.gcal = {
+  clientId: optional('GOOGLE_CALENDAR_CLIENT_ID', ''),
+  clientSecret: optional('GOOGLE_CALENDAR_CLIENT_SECRET', ''),
+  // Dev: simulate Google Calendar (no network) so the connect/sync flow works
+  // with no credentials. Honors the global LMS_MOCK too.
+  useMock: optional('LMS_MOCK', 'false') === 'true' || optional('MOCK_GOOGLE_CALENDAR_MODE', 'false') === 'true',
+};
+
 // Back-compat alias: canvas.js historically read env.lms.canvas.*
 env.lms.canvas = env.lms.providers.canvas;
 

@@ -58,10 +58,39 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_token_expires_at  TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_connected         BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_synced_at         TIMESTAMPTZ;
 
+-- Google Calendar one-way sync (Summit → Google). Tokens stored ENCRYPTED, same
+-- as the LMS tokens. gcal_sync_enabled gates the push; gcal_synced_at records the
+-- last successful run.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_connected          BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_access_token       TEXT;   -- encrypted
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_refresh_token      TEXT;   -- encrypted
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_token_expires_at   TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_sync_enabled       BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_synced_at          TIMESTAMPTZ;
+
 DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
 CREATE TRIGGER trg_users_updated_at
   BEFORE UPDATE ON users
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- gcal_events — maps a Summit assignment date to the Google Calendar event it
+-- created, so syncs can UPDATE (not duplicate) and DELETE events when the
+-- assignment is removed/completed. assignment_id is intentionally NOT a FK so a
+-- deleted assignment leaves a tombstone the next sync can clean up remotely.
+-- kind is 'due' or 'planned' (each maps to its own calendar event).
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS gcal_events (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  assignment_id UUID NOT NULL,
+  kind          TEXT NOT NULL,            -- 'due' | 'planned'
+  event_id      TEXT NOT NULL,            -- Google Calendar event id
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, assignment_id, kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gcal_events_user_id ON gcal_events(user_id);
 
 -- ----------------------------------------------------------------------------
 -- lms_connections — one row per (user, LMS provider) the student has linked.

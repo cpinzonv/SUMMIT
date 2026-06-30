@@ -10,6 +10,7 @@ import planRoutes from './plan.routes.js';
 import userRoutes from './user.routes.js';
 import adminRoutes from './admin.routes.js';
 import workloadRoutes from './workload.routes.js';
+import gcalRoutes from './gcal.routes.js';
 import lmsRoutes from './lms.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -46,5 +47,6 @@ router.use('/notes', notesRoutes); // update/delete by id + cross-class search
 router.use('/attendance', attendanceRoutes); // delete by id
 router.use('/plan', planRoutes);
 router.use('/workload', workloadRoutes); // weekly estimated-hours prediction
+router.use('/google-calendar', gcalRoutes); // Summit → Google Calendar one-way sync
 
 export default router;
