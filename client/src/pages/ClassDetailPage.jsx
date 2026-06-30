@@ -9,6 +9,14 @@ import {
   gradeColor,
   classGradient,
 } from '../components/ui';
+import { ClassNotes } from '../components/ClassNotes';
+import { ClassAttendance } from '../components/ClassAttendance';
+
+const TABS = [
+  { key: 'assignments', label: 'Assignments' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'attendance', label: 'Attendance' },
+];
 
 export default function ClassDetailPage() {
   const { id } = useParams();
@@ -21,6 +29,7 @@ export default function ClassDetailPage() {
 
   // Active modal: { type: 'assignment', assignment? } or { type: 'grade', assignment }
   const [modal, setModal] = useState(null);
+  const [tab, setTab] = useState('assignments');
 
   const load = useCallback(async () => {
     setError('');
@@ -75,7 +84,11 @@ export default function ClassDetailPage() {
 
       <div className="glass-card relative mt-3 overflow-hidden p-6">
         <span
-          className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full opacity-30 blur-2xl"
+          className="pointer-events-none absolute inset-0 opacity-[0.12]"
+          style={{ backgroundImage: gradient }}
+        />
+        <span
+          className="pointer-events-none absolute -right-12 -top-14 h-44 w-44 rounded-full opacity-60 blur-2xl"
           style={{ backgroundImage: gradient }}
         />
         <div className="relative flex items-start justify-between gap-4">
@@ -96,15 +109,23 @@ export default function ClassDetailPage() {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-5">
             <div className="text-right">
               <div className={`text-3xl font-extrabold ${gradeColor(grade?.percentage)}`}>
                 {grade?.percentage != null ? `${grade.percentage}%` : '—'}
               </div>
               <div className="text-xs font-medium text-muted">
-                Current grade {grade?.letter ? `(${grade.letter})` : ''}
+                Grade {grade?.letter ? `(${grade.letter})` : ''}
               </div>
             </div>
+            {cls?.attendanceRate != null && (
+              <div className="text-right">
+                <div className={`text-3xl font-extrabold ${gradeColor(cls.attendanceRate)}`}>
+                  {cls.attendanceRate}%
+                </div>
+                <div className="text-xs font-medium text-muted">Attendance</div>
+              </div>
+            )}
             <button onClick={handleArchive} className="btn btn-soft">
               Archive
             </button>
@@ -114,7 +135,36 @@ export default function ClassDetailPage() {
 
       <ErrorBanner message={error} />
 
-      <section className="mt-6">
+      {/* Tabs */}
+      <div className="mt-6 flex gap-1.5">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+              tab === t.key
+                ? 'bg-white/75 text-brand-700 shadow-sm'
+                : 'text-muted hover:bg-white/50 hover:text-ink'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'notes' && (
+        <div className="mt-5">
+          <ClassNotes classId={id} />
+        </div>
+      )}
+      {tab === 'attendance' && (
+        <div className="mt-5">
+          <ClassAttendance classId={id} />
+        </div>
+      )}
+
+      {tab === 'assignments' && (
+      <section className="mt-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">Assignments</h2>
           <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
@@ -192,6 +242,7 @@ export default function ClassDetailPage() {
           </div>
         )}
       </section>
+      )}
 
       {modal?.type === 'assignment' && (
         <AssignmentModal

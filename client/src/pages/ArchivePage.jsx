@@ -50,7 +50,11 @@ export default function ArchivePage() {
             return (
               <div key={arc.id} className="glass-card relative overflow-hidden p-6">
                 <span
-                  className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full opacity-25 blur-2xl"
+                  className="pointer-events-none absolute inset-0 opacity-[0.13]"
+                  style={{ backgroundImage: gradient }}
+                />
+                <span
+                  className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full opacity-55 blur-2xl"
                   style={{ backgroundImage: gradient }}
                 />
                 <div className="relative flex items-start justify-between">

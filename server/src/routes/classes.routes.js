@@ -6,6 +6,8 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import * as classes from '../controllers/classes.controller.js';
 import * as assignments from '../controllers/assignments.controller.js';
 import * as syllabus from '../controllers/syllabus.controller.js';
+import * as notes from '../controllers/notes.controller.js';
+import * as attendance from '../controllers/attendance.controller.js';
 
 // Keep the uploaded PDF in memory; cap at 32MB (the Claude API request limit).
 const upload = multer({
@@ -46,6 +48,33 @@ router.get(
   '/:id/assignments',
   validate(classes.classIdParam, 'params'),
   asyncHandler(assignments.list),
+);
+
+// Notes nested under a class (update/delete by note id live in notes.routes).
+router.get(
+  '/:id/notes',
+  validate(classes.classIdParam, 'params'),
+  validate(notes.listQuery, 'query'),
+  asyncHandler(notes.list),
+);
+router.post(
+  '/:id/notes',
+  validate(classes.classIdParam, 'params'),
+  validate(notes.createNoteSchema),
+  asyncHandler(notes.create),
+);
+
+// Attendance nested under a class (delete by id lives in attendance.routes).
+router.get(
+  '/:id/attendance',
+  validate(classes.classIdParam, 'params'),
+  asyncHandler(attendance.list),
+);
+router.post(
+  '/:id/attendance',
+  validate(classes.classIdParam, 'params'),
+  validate(attendance.markSchema),
+  asyncHandler(attendance.mark),
 );
 
 export default router;

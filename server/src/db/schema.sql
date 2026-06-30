@@ -181,3 +181,86 @@ CREATE TABLE IF NOT EXISTS archives (
 );
 
 CREATE INDEX IF NOT EXISTS idx_archives_user_id ON archives(user_id);
+
+-- ============================================================================
+-- Tier 2 features: notes, attendance, academic plan
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- notes — rich-text (Markdown) notes per class. Searchable by title/content.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS notes (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id   UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title      TEXT NOT NULL DEFAULT 'Untitled note',
+  content    TEXT NOT NULL DEFAULT '',               -- Markdown
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notes_class_id ON notes(class_id);
+CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
+
+DROP TRIGGER IF EXISTS trg_notes_updated_at ON notes;
+CREATE TRIGGER trg_notes_updated_at
+  BEFORE UPDATE ON notes
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- attendance — one record per class session (date). Drives attendance %.
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attendance_status') THEN
+    CREATE TYPE attendance_status AS ENUM ('present', 'absent', 'late', 'excused');
+  END IF;
+END$$;
+
+CREATE TABLE IF NOT EXISTS attendance (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id     UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  session_date DATE NOT NULL,
+  status       attendance_status NOT NULL,
+  note         TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (class_id, session_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attendance_class_id ON attendance(class_id);
+
+DROP TRIGGER IF EXISTS trg_attendance_updated_at ON attendance;
+CREATE TRIGGER trg_attendance_updated_at
+  BEFORE UPDATE ON attendance
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- plan_items — 4-year academic plan. Courses planned per term (season + year).
+-- ----------------------------------------------------------------------------
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'plan_status') THEN
+    CREATE TYPE plan_status AS ENUM ('planned', 'in_progress', 'completed');
+  END IF;
+END$$;
+
+CREATE TABLE IF NOT EXISTS plan_items (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  year       INT  NOT NULL,
+  season     TEXT NOT NULL,                           -- Spring | Summer | Fall | Winter
+  name       TEXT NOT NULL,
+  code       TEXT,
+  credits    NUMERIC(4,2),
+  status     plan_status NOT NULL DEFAULT 'planned',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_plan_items_user_id ON plan_items(user_id);
+
+DROP TRIGGER IF EXISTS trg_plan_items_updated_at ON plan_items;
+CREATE TRIGGER trg_plan_items_updated_at
+  BEFORE UPDATE ON plan_items
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();

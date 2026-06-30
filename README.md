@@ -143,6 +143,11 @@ the authenticated student (other users' data returns `404`).
 | POST   | `/api/grades`                     | `assignmentId` (req), `pointsEarned` (req), `pointsPossible?`, `feedback?` |
 | PUT    | `/api/classes/:id/archive`        | — (snapshots the class + final grade into `archives`)       |
 | GET    | `/api/archives`                   | — (archived class snapshots, newest first)                  |
+| GET/POST | `/api/classes/:id/notes`        | Markdown notes per class; GET takes `?q=` search            |
+| PATCH/DELETE | `/api/notes/:noteId`        | edit/delete a note; `GET /api/notes?q=` searches all notes  |
+| GET/POST | `/api/classes/:id/attendance`   | mark/list sessions (present/absent/late/excused); upsert per date |
+| DELETE | `/api/attendance/:attendanceId`   | remove a session record                                     |
+| GET/POST/PATCH/DELETE | `/api/plan[/:itemId]` | 4-year academic plan items (year/season/status)             |
 
 - **`syllabus`** object: `{ instructor?, instructorEmail?, location?, meetingTimes?, gradingScheme?, syllabusUrl? }`.
 - **Grade auto-calculation:** `POST /api/grades` returns `{ grade, classId, classGrade }`,
@@ -183,6 +188,9 @@ curl -s localhost:4000/api/auth/register \
   unpacked-prod, and fully-packaged builds.
 - **Phase 5 — done:** syllabus PDF extraction via the Claude API
   (`POST /api/classes/extract-syllabus`) + create-class auto-fill. Needs `ANTHROPIC_API_KEY`.
+- **Tier 2 — done:** per-class Markdown notes (searchable), attendance tracker
+  (present/absent/late/excused + attendance %), and a 4-year academic planner with a
+  roadmap-to-graduation progress bar.
 - **Deploy:** Railway (provides `DATABASE_URL`; set `DATABASE_SSL=true`, JWT secrets, and
   `ANTHROPIC_API_KEY`).
 

@@ -73,19 +73,30 @@ export async function createClass(userId, input) {
   return toPublicClass(rows[0]);
 }
 
-/** List the user's active (non-archived) classes, each with its current grade. */
+/** List the user's active (non-archived) classes, each with grade + attendance. */
 export async function listCurrentClasses(userId) {
   const { rows } = await query(
-    `SELECT * FROM classes
-     WHERE user_id = $1 AND archived_at IS NULL
-     ORDER BY created_at DESC`,
+    `SELECT c.*,
+       (SELECT COUNT(*) FROM attendance a WHERE a.class_id = c.id) AS att_total,
+       (SELECT COUNT(*) FROM attendance a
+        WHERE a.class_id = c.id AND a.status IN ('present', 'late')) AS att_attended
+     FROM classes c
+     WHERE c.user_id = $1 AND c.archived_at IS NULL
+     ORDER BY c.created_at DESC`,
     [userId],
   );
   return Promise.all(
-    rows.map(async (row) => ({
-      ...toPublicClass(row),
-      currentGrade: await computeClassGrade(row.id),
-    })),
+    rows.map(async (row) => {
+      const attTotal = Number(row.att_total);
+      return {
+        ...toPublicClass(row),
+        currentGrade: await computeClassGrade(row.id),
+        attendanceRate:
+          attTotal > 0
+            ? Math.round((Number(row.att_attended) / attTotal) * 100)
+            : null,
+      };
+    }),
   );
 }
 

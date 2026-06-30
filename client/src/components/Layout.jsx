@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/calendar', label: 'Calendar' },
+  { to: '/planner', label: 'Planner' },
   { to: '/archives', label: 'Archives' },
 ];
 

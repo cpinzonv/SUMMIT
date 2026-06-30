@@ -59,18 +59,20 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="Active classes" value={classes.length} />
+            <Stat label="Active classes" value={classes.length} glow={classGradient(null, 0)} />
             <Stat
               label="Current GPA"
               value={gpa == null ? '—' : gpa.toFixed(2)}
               gradient
+              glow={classGradient(null, 2)}
             />
             <Stat
               label="Overall average"
               value={average == null ? '—' : `${average}%`}
               valueClass={gradeColor(average)}
+              glow={classGradient(null, 1)}
             />
-            <Stat label="Graded classes" value={graded.length} />
+            <Stat label="Graded classes" value={graded.length} glow={classGradient(null, 3)} />
           </div>
 
           {classes.length === 0 ? (
@@ -92,14 +94,20 @@ export default function DashboardPage() {
   );
 }
 
-function Stat({ label, value, valueClass = 'text-ink', gradient = false }) {
+function Stat({ label, value, valueClass = 'text-ink', gradient = false, glow }) {
   return (
-    <div className="glass-card p-5">
-      <div className="text-xs font-medium uppercase tracking-wide text-muted">
+    <div className="glass-card relative overflow-hidden p-5">
+      {glow && (
+        <span
+          className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full opacity-50 blur-2xl"
+          style={{ backgroundImage: glow }}
+        />
+      )}
+      <div className="relative text-xs font-medium uppercase tracking-wide text-muted">
         {label}
       </div>
       <div
-        className={`mt-1 text-3xl font-extrabold ${gradient ? 'text-gradient' : valueClass}`}
+        className={`relative mt-1 text-3xl font-extrabold ${gradient ? 'text-gradient' : valueClass}`}
       >
         {value}
       </div>
@@ -113,11 +121,16 @@ function ClassCard({ cls, index }) {
   return (
     <Link
       to={`/classes/${cls.id}`}
-      className="glass-card group relative overflow-hidden p-6 transition hover:-translate-y-1 hover:shadow-[0_18px_40px_-16px_rgba(90,80,130,0.4)]"
+      className="glass-card group relative overflow-hidden p-6 transition hover:-translate-y-1 hover:shadow-[0_22px_48px_-18px_rgba(180,120,80,0.45)]"
     >
-      {/* Soft organic gradient blob in the corner */}
+      {/* Unique gradient wash tinting the whole card */}
       <span
-        className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full opacity-30 blur-2xl transition group-hover:opacity-50"
+        className="pointer-events-none absolute inset-0 opacity-[0.16] transition group-hover:opacity-25"
+        style={{ backgroundImage: gradient }}
+      />
+      {/* Soft organic gradient glow in the corner */}
+      <span
+        className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full opacity-60 blur-2xl transition group-hover:opacity-80"
         style={{ backgroundImage: gradient }}
       />
       <div className="relative flex items-start justify-between">
@@ -142,10 +155,15 @@ function ClassCard({ cls, index }) {
           </div>
         </div>
       </div>
-      <p className="relative mt-4 text-xs text-muted">
-        {grade?.gradedAssignments
-          ? `${grade.gradedAssignments} graded`
-          : 'No graded assignments yet'}
+      <p className="relative mt-4 flex gap-3 text-xs text-muted">
+        <span>
+          {grade?.gradedAssignments
+            ? `${grade.gradedAssignments} graded`
+            : 'No graded assignments'}
+        </span>
+        {cls.attendanceRate != null && (
+          <span>· {cls.attendanceRate}% attendance</span>
+        )}
       </p>
     </Link>
   );

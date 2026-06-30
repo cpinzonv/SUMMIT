@@ -2,7 +2,7 @@
 import { useEffect } from 'react';
 
 /** Centered modal dialog. Closes on backdrop click or Escape. */
-export function Modal({ title, onClose, children }) {
+export function Modal({ title, onClose, children, wide = false }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -15,7 +15,7 @@ export function Modal({ title, onClose, children }) {
       onClick={onClose}
     >
       <div
-        className="glass-panel w-full max-w-md p-6"
+        className={`glass-panel max-h-[90vh] w-full overflow-y-auto p-6 ${wide ? 'max-w-2xl' : 'max-w-md'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -79,18 +79,18 @@ export function gradeColor(percentage) {
   return 'text-rose-400';
 }
 
-// Sophisticated gradient pairs — color-coded per class, cycled by index.
+// Vivid, sophisticated gradient pairs — color-coded per class, cycled by index.
 const GRADIENTS = [
-  'linear-gradient(135deg, #5ba3a8 0%, #9b8fc4 100%)', // teal → slate blue
-  'linear-gradient(135deg, #e8a3a0 0%, #f3c9a8 100%)', // rose → peach
-  'linear-gradient(135deg, #8b7ba8 0%, #5ba3a8 100%)', // slate blue → teal
-  'linear-gradient(135deg, #d4888b 0%, #9b8fc4 100%)', // rose → periwinkle
-  'linear-gradient(135deg, #4b9b9f 0%, #f3c9a8 100%)', // deep teal → peach
-  'linear-gradient(135deg, #9b8fc4 0%, #e8a3a0 100%)', // periwinkle → rose
+  'linear-gradient(135deg, #3fa1a6 0%, #8b7fd0 100%)', // teal → slate blue
+  'linear-gradient(135deg, #ef9078 0%, #f6c9a0 100%)', // coral → peach
+  'linear-gradient(135deg, #e87f9a 0%, #9b8fd0 100%)', // rose → periwinkle
+  'linear-gradient(135deg, #6f9fe0 0%, #4bb0a8 100%)', // blue → teal
+  'linear-gradient(135deg, #f6b98f 0%, #e58aa0 100%)', // peach → rose
+  'linear-gradient(135deg, #9b8fd0 0%, #4bb0a8 100%)', // periwinkle → teal
 ];
 
 // Representative solid tones (for small calendar chips).
-const PALETTE = ['#4b9b9f', '#d4888b', '#8b7ba8', '#5ba3a8', '#e8a3a0', '#9b8fc4'];
+const PALETTE = ['#3fa1a6', '#e8857e', '#8b7ba8', '#6f9fe0', '#ef9078', '#9b8fd0'];
 
 export function classGradient(cls, index = 0) {
   return GRADIENTS[index % GRADIENTS.length];
