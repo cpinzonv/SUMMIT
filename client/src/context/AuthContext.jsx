@@ -79,6 +79,16 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const { data } = await api.post('/api/auth/login', { email, password });
+    // 2FA accounts get a challenge instead of tokens — caller shows the code step.
+    if (data.twoFactorRequired) return { twoFactorRequired: true, challengeToken: data.challengeToken };
+    setTokens(data);
+    setUser(data.user);
+    return data.user;
+  }, []);
+
+  /** Complete the 2FA login step with a TOTP or backup code. */
+  const completeTwoFactor = useCallback(async (challengeToken, code) => {
+    const { data } = await api.post('/api/auth/login/2fa', { challengeToken, code });
     setTokens(data);
     setUser(data.user);
     return data.user;
@@ -130,7 +140,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, preferences, login, register, logout, savePreferences, refreshUser }}
+      value={{ user, loading, preferences, login, completeTwoFactor, register, logout, savePreferences, refreshUser }}
     >
       {children}
     </AuthContext.Provider>

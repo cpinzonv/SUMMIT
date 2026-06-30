@@ -26,6 +26,11 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const login2faSchema = z.object({
+  challengeToken: z.string().min(1, 'challengeToken is required'),
+  code: z.string().min(1, 'Enter your authentication code'),
+});
+
 export const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'refreshToken is required'),
 });
@@ -47,6 +52,11 @@ export async function register(req, res) {
 
 export async function login(req, res) {
   const result = await authService.login(req.body);
+  res.json(result);
+}
+
+export async function loginTwoFactor(req, res) {
+  const result = await authService.loginTwoFactor(req.body);
   res.json(result);
 }
 

@@ -21,17 +21,17 @@ const PREFIX = 'v1:';
 
 /** True when a usable encryption key is configured. */
 export function isEncryptionConfigured() {
-  return /^[0-9a-fA-F]{64}$/.test(env.lms.tokenEncKey || '');
+  return /^[0-9a-fA-F]{64}$/.test(env.encryptionKey || '');
 }
 
 function getKey() {
   if (!isEncryptionConfigured()) {
     throw new AppError(
       503,
-      'LMS integration is not configured. Set LMS_TOKEN_ENC_KEY (64 hex chars) in the server environment.',
+      'Encryption is not configured. Set APP_ENCRYPTION_KEY (64 hex chars) in the server environment.',
     );
   }
-  return Buffer.from(env.lms.tokenEncKey, 'hex');
+  return Buffer.from(env.encryptionKey, 'hex');
 }
 
 /** Encrypt a UTF-8 string, returning the self-describing payload. */

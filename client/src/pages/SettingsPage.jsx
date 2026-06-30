@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
-import { ErrorBanner, Toast, Toggle, classGradient, gradeColor } from '../components/ui';
+import { ErrorBanner, Toast, Toggle, Modal, Spinner, classGradient, gradeColor } from '../components/ui';
 import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
 import { gcalApi, summarizeGcalSync } from '../lib/gcal';
 
@@ -97,12 +97,150 @@ function AccountTab({ user }) {
 
       <ChangePassword />
 
+      <TwoFactorSection user={user} />
+
       <Section title="Session" description="Sign out of Summit on this device.">
         <button onClick={handleLogout} className="btn btn-soft">
           Log out
         </button>
       </Section>
     </>
+  );
+}
+
+/* ---- Two-factor authentication ----------------------------------------- */
+function TwoFactorSection({ user }) {
+  const { refreshUser } = useAuth();
+  const [flow, setFlow] = useState(null); // 'enable' | 'disable'
+  const enabled = Boolean(user?.twoFactorEnabled);
+  const done = async () => { setFlow(null); await refreshUser(); };
+
+  return (
+    <Section
+      title="Two-factor authentication"
+      description="Add a second step at login with an authenticator app (TOTP), like GitHub or Google."
+    >
+      {enabled ? (
+        <div className="flex items-center justify-between gap-4">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-600">
+            ✓ Enabled
+          </span>
+          <button onClick={() => setFlow('disable')} className="btn btn-soft">Disable</button>
+        </div>
+      ) : (
+        <button onClick={() => setFlow('enable')} className="btn btn-primary">Enable 2FA</button>
+      )}
+      {flow === 'enable' && <Enable2FAModal onClose={() => setFlow(null)} onDone={done} />}
+      {flow === 'disable' && <Disable2FAModal onClose={() => setFlow(null)} onDone={done} />}
+    </Section>
+  );
+}
+
+function Enable2FAModal({ onClose, onDone }) {
+  const [step, setStep] = useState('loading'); // loading | scan | backup
+  const [data, setData] = useState(null);
+  const [code, setCode] = useState('');
+  const [backupCodes, setBackupCodes] = useState([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api
+      .post('/api/user/2fa/setup')
+      .then((r) => { setData(r.data); setStep('scan'); })
+      .catch((err) => setError(errorMessage(err, 'Could not start 2FA setup.')));
+  }, []);
+
+  const confirm = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const r = await api.post('/api/user/2fa/confirm', { code: code.trim() });
+      setBackupCodes(r.data.backupCodes);
+      setStep('backup');
+    } catch (err) {
+      setError(errorMessage(err, 'Invalid code.'));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Enable two-factor authentication" onClose={onClose}>
+      {step === 'loading' && <Spinner label="Preparing…" />}
+      {step === 'scan' && data && (
+        <form onSubmit={confirm} className="space-y-3">
+          <p className="text-sm text-muted">
+            Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password…),
+            then enter the 6-digit code it shows.
+          </p>
+          <img src={data.qrCode} alt="2FA QR code" className="mx-auto h-44 w-44 rounded-xl border border-white/60 bg-white p-2" />
+          <p className="break-all text-center text-xs text-muted">
+            Can’t scan? Enter this key: <code className="font-mono text-ink">{data.secret}</code>
+          </p>
+          <ErrorBanner message={error} />
+          <Field label="6-digit code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" autoComplete="one-time-code" required />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn btn-soft">Cancel</button>
+            <button type="submit" disabled={busy || !code.trim()} className="btn btn-primary">{busy ? 'Verifying…' : 'Verify & enable'}</button>
+          </div>
+        </form>
+      )}
+      {step === 'scan' && !data && <ErrorBanner message={error} />}
+      {step === 'backup' && (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-ink">Save your backup codes</p>
+          <p className="text-sm text-muted">
+            Store these somewhere safe. Each works once if you lose access to your authenticator —
+            they won’t be shown again.
+          </p>
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/60 bg-white/55 p-4 text-center font-mono text-sm text-ink">
+            {backupCodes.map((c) => <span key={c}>{c}</span>)}
+          </div>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(backupCodes.join('\n'))}
+            className="text-xs font-semibold text-brand-600 hover:underline"
+          >
+            Copy all codes
+          </button>
+          <div className="flex justify-end">
+            <button onClick={onDone} className="btn btn-primary">I’ve saved them — done</button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function Disable2FAModal({ onClose, onDone }) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post('/api/user/2fa/disable', { password });
+      await onDone();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not disable 2FA.'));
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal title="Disable two-factor authentication" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <p className="text-sm text-muted">Enter your password to turn off 2FA.</p>
+        <ErrorBanner message={error} />
+        <Field label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn btn-soft">Cancel</button>
+          <button type="submit" disabled={busy || !password} className="btn btn-danger">{busy ? 'Disabling…' : 'Disable 2FA'}</button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

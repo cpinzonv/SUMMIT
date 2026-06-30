@@ -14,4 +14,9 @@ router.patch(
   asyncHandler(user.updatePreferences),
 );
 
+// Two-factor authentication setup/management (the user is authenticated).
+router.post('/2fa/setup', asyncHandler(user.twofaSetup));
+router.post('/2fa/confirm', validate(user.twofaConfirmSchema), asyncHandler(user.twofaConfirm));
+router.post('/2fa/disable', validate(user.twofaDisableSchema), asyncHandler(user.twofaDisable));
+
 export default router;

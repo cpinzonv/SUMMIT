@@ -19,6 +19,13 @@ router.post(
   asyncHandler(authController.login),
 );
 
+// Second step when the account has 2FA enabled.
+router.post(
+  '/login/2fa',
+  validate(authController.login2faSchema),
+  asyncHandler(authController.loginTwoFactor),
+);
+
 router.post(
   '/refresh',
   validate(authController.refreshSchema),

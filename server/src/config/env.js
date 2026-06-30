@@ -43,6 +43,12 @@ export const env = {
   anthropicApiKey: optional('ANTHROPIC_API_KEY', ''),
   anthropicModel: optional('ANTHROPIC_MODEL', 'claude-opus-4-8'),
 
+  // Symmetric key (64 hex chars) for encrypting secrets at rest — LMS OAuth
+  // tokens AND 2FA secrets/backup codes. Prefers APP_ENCRYPTION_KEY, falling
+  // back to the original LMS_TOKEN_ENC_KEY for backward compatibility.
+  // Generate with: openssl rand -hex 32
+  encryptionKey: optional('APP_ENCRYPTION_KEY', '') || optional('LMS_TOKEN_ENC_KEY', ''),
+
   // LMS integration (Canvas, Blackboard, Google Classroom, Brightspace, Moodle,
   // Sakai). All optional — a provider 503s until configured, exactly like the
   // syllabus/Anthropic feature. Every provider shares this block; per-provider

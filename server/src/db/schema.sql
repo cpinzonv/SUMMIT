@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS users (
 -- User settings (theme, color scheme, font size, default views, etc.).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- Two-factor auth (TOTP). Secret + backup codes are stored ENCRYPTED at rest.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret  TEXT;     -- encrypted base32 secret
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS backup_codes TEXT;     -- encrypted JSON array
+
 -- How the user discovered Summit (signup attribution). One of a small enum set;
 -- 'other' may carry a free-text detail in referral_source_detail.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_source TEXT;

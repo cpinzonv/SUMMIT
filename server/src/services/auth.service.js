@@ -5,7 +5,10 @@ import {
   signAccessToken,
   generateRefreshToken,
   hashToken,
+  signTwoFactorChallenge,
+  verifyTwoFactorChallenge,
 } from '../utils/jwt.js';
+import { verifyLoginCode } from './twofa.service.js';
 
 const SALT_ROUNDS = 12;
 
@@ -18,6 +21,7 @@ function toPublicUser(row) {
     school: row.school,
     timezone: row.timezone,
     preferences: row.preferences ?? {},
+    twoFactorEnabled: Boolean(row.totp_enabled),
     // LMS connection status only — tokens are never exposed.
     lms: {
       connected: Boolean(row.lms_connected),
@@ -109,6 +113,30 @@ export async function login({ email, password }) {
   if (!user || !ok) {
     throw AppError.unauthorized('Invalid email or password');
   }
+
+  // With 2FA on, hold off on tokens — return a short-lived challenge instead.
+  if (user.totp_enabled) {
+    return { twoFactorRequired: true, challengeToken: signTwoFactorChallenge(user.id) };
+  }
+
+  const tokens = await issueTokens(user.id);
+  return { user: toPublicUser(user), ...tokens };
+}
+
+/** Second login step: validate the TOTP/backup code and issue tokens. */
+export async function loginTwoFactor({ challengeToken, code }) {
+  let payload;
+  try {
+    payload = verifyTwoFactorChallenge(challengeToken);
+  } catch {
+    throw AppError.unauthorized('Your verification session expired. Please log in again.');
+  }
+  const { rows } = await query('SELECT * FROM users WHERE id = $1', [payload.sub]);
+  const user = rows[0];
+  if (!user || !user.totp_enabled) throw AppError.unauthorized('Invalid verification session.');
+
+  const valid = await verifyLoginCode(user, code);
+  if (!valid) throw AppError.unauthorized('Invalid authentication code.');
 
   const tokens = await issueTokens(user.id);
   return { user: toPublicUser(user), ...tokens };

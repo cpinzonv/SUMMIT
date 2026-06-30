@@ -6,7 +6,7 @@ import { ErrorBanner } from '../components/ui';
 import { MountainMark } from '../components/MountainMark';
 
 export default function LoginPage() {
-  const { user, login, register, loading } = useAuth();
+  const { user, login, completeTwoFactor, register, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
@@ -21,6 +21,8 @@ export default function LoginPage() {
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [twoFactor, setTwoFactor] = useState(null); // { challengeToken } when 2FA prompt is shown
+  const [code, setCode] = useState('');
 
   // Already authenticated → skip the form.
   if (!loading && user) return <Navigate to={from} replace />;
@@ -34,7 +36,12 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       if (mode === 'login') {
-        await login(form.email, form.password);
+        const res = await login(form.email, form.password);
+        if (res?.twoFactorRequired) {
+          setTwoFactor({ challengeToken: res.challengeToken });
+          setSubmitting(false);
+          return; // show the 2FA code step instead of navigating
+        }
       } else {
         await register({
           email: form.email,
@@ -50,6 +57,19 @@ export default function LoginPage() {
     } catch (err) {
       setError(errorMessage(err, 'Authentication failed'));
     } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const verifyTwoFactor = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      await completeTwoFactor(twoFactor.challengeToken, code.trim());
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(errorMessage(err, 'Verification failed'));
       setSubmitting(false);
     }
   };
@@ -89,6 +109,35 @@ export default function LoginPage() {
           </p>
         </div>
 
+        {twoFactor ? (
+          <form onSubmit={verifyTwoFactor} className="glass-panel space-y-4 p-6">
+            <div>
+              <h2 className="text-lg font-bold text-ink">Two-factor authentication</h2>
+              <p className="mt-0.5 text-sm text-muted">Enter the 6-digit code from your authenticator app, or a backup code.</p>
+            </div>
+            <ErrorBanner message={error} />
+            <Field
+              label="Authentication code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
+              autoFocus
+              autoComplete="one-time-code"
+              inputMode="text"
+              required
+            />
+            <button type="submit" disabled={submitting || !code.trim()} className="btn btn-primary w-full">
+              {submitting ? 'Verifying…' : 'Verify'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTwoFactor(null); setCode(''); setError(''); }}
+              className="w-full text-center text-sm font-semibold text-muted hover:text-ink"
+            >
+              ← Back to sign in
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleSubmit} className="glass-panel space-y-4 p-6">
           <ErrorBanner message={error} />
 
@@ -146,6 +195,7 @@ export default function LoginPage() {
             </button>
           </p>
         </form>
+        )}
 
         <p className="mt-4 text-center text-xs text-muted">
           Demo: demo@student.app / password123
