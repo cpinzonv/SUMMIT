@@ -526,6 +526,9 @@ function WeekView({ cursor, byDay, todayKey, act, dnd }) {
                 >
                   {d.getDate()}
                 </div>
+                {dayHours(evs) > 0 && (
+                  <div className="mt-0.5 text-[10px] font-semibold text-brand-600">~{dayHours(evs)}h</div>
+                )}
               </div>
               <div className="space-y-1 p-1.5">
                 {evs.length === 0 ? (
@@ -542,10 +545,19 @@ function WeekView({ cursor, byDay, todayKey, act, dnd }) {
   );
 }
 
+// Sum estimated hours of the DUE events on a day (planned events would double-count).
+function dayHours(evs) {
+  const total = (evs || [])
+    .filter((e) => e.type === 'due' && e.a.estimatedHours != null)
+    .reduce((s, e) => s + Number(e.a.estimatedHours), 0);
+  return Math.round(total * 10) / 10;
+}
+
 function EventRow({ ev, act, dnd }) {
   const isDue = ev.type === 'due';
   const draggable = !ev.cls.archivedAt;
   const isDragging = dnd.draggingId === ev.id;
+  const hoursHint = ev.a.estimatedHours != null ? ` · ~${ev.a.estimatedHours}h` : '';
   return (
     <button
       type="button"
@@ -554,6 +566,7 @@ function EventRow({ ev, act, dnd }) {
       onDragEnd={dnd.endDrag}
       onClick={() => act.open(ev)}
       onDoubleClick={() => act.edit(ev)}
+      title={`${ev.a.title} — ${ev.cls.name} (${isDue ? 'due' : 'planned'}${hoursHint})`}
       className={`flex w-full items-center gap-2 rounded-lg border border-white/50 bg-white/45 px-2 py-1.5 text-left transition hover:bg-white/75 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 shadow-lg ring-2 ring-brand-400/50' : ''}`}
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${eventDot(ev)}`} />

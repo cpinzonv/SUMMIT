@@ -14,6 +14,7 @@ import {
 } from '../components/ui';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
 import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
+import { suggestHours } from '../lib/workload';
 import { ClassNotes } from '../components/ClassNotes';
 import { ClassAttendance } from '../components/ClassAttendance';
 
@@ -748,9 +749,11 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
     plannedDate: toDateInput(assignment?.plannedDate),
     pointValue: assignment?.pointValue ?? '',
     priority: assignment?.priority ?? 'none',
+    estimatedHours: assignment?.estimatedHours ?? '',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const suggested = suggestHours({ category: form.category, title: form.title, pointValue: form.pointValue });
 
   const update = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -768,6 +771,7 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
       plannedDate: form.plannedDate ? dateInputToISO(form.plannedDate) : blank,
       pointValue: form.pointValue === '' ? blank : Number(form.pointValue),
       priority: form.priority,
+      estimatedHours: form.estimatedHours === '' ? blank : Number(form.estimatedHours),
     };
     try {
       if (isEdit) {
@@ -804,6 +808,30 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
             </select>
           </label>
         </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-ink">Estimated hours</span>
+          <input
+            type="number"
+            step="0.5"
+            min="0"
+            value={form.estimatedHours}
+            onChange={update('estimatedHours')}
+            placeholder={`e.g. ${suggested}`}
+            className="field"
+          />
+          <span className="mt-1 block text-xs text-muted">
+            Suggested ~{suggested}h based on type/points.{' '}
+            {form.estimatedHours === '' && (
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, estimatedHours: suggested }))}
+                className="font-semibold text-brand-600 hover:underline"
+              >
+                Use {suggested}h
+              </button>
+            )}
+          </span>
+        </label>
         <ModalActions saving={saving} disabled={!form.title} onClose={onClose} label={isEdit ? 'Save changes' : 'Add assignment'} />
       </form>
     </Modal>

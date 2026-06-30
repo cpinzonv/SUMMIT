@@ -21,6 +21,7 @@ export const createAssignmentSchema = z.object({
   dueDate: timestamp.optional(),
   plannedDate: timestamp.optional(),
   pointValue: z.number().nonnegative().optional(),
+  estimatedHours: z.number().nonnegative().max(999).optional(),
   status: statusEnum.optional(),
   priority: priorityEnum.optional(),
 });
@@ -35,6 +36,7 @@ export const updateAssignmentSchema = z
     dueDate: timestamp.nullable().optional(),
     plannedDate: timestamp.nullable().optional(),
     pointValue: z.number().nonnegative().nullable().optional(),
+    estimatedHours: z.number().nonnegative().max(999).nullable().optional(),
     status: statusEnum.optional(),
     priority: priorityEnum.optional(),
   })

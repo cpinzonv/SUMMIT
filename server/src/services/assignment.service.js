@@ -12,6 +12,7 @@ function toPublicAssignment(row) {
     dueDate: row.due_date,
     plannedDate: row.planned_date,
     pointValue: row.point_value == null ? null : Number(row.point_value),
+    estimatedHours: row.estimated_hours == null ? null : Number(row.estimated_hours),
     status: row.status,
     priority: row.priority ?? 'none',
     externalSource: row.external_source ?? null, // 'canvas' if synced from an LMS
@@ -67,10 +68,11 @@ export async function createAssignment(userId, classId, input) {
   const { rows } = await query(
     `INSERT INTO assignments
        (class_id, title, description, category, due_date, planned_date,
-        point_value, status, priority)
+        point_value, status, priority, estimated_hours)
      VALUES ($1,$2,$3,$4,$5,$6,$7,
              COALESCE($8::assignment_status, 'not_started'),
-             COALESCE($9::assignment_priority, 'none'))
+             COALESCE($9::assignment_priority, 'none'),
+             $10)
      RETURNING id`,
     [
       classId,
@@ -82,6 +84,7 @@ export async function createAssignment(userId, classId, input) {
       input.pointValue ?? null,
       input.status ?? null,
       input.priority ?? null,
+      input.estimatedHours ?? null,
     ],
   );
   return fetchPublicAssignment(rows[0].id);
@@ -97,6 +100,7 @@ const UPDATABLE = {
   pointValue: 'point_value',
   status: 'status',
   priority: 'priority',
+  estimatedHours: 'estimated_hours',
 };
 
 // Enum columns need a cast on the placeholder so a text value type-checks.

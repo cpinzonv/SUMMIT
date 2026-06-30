@@ -220,6 +220,9 @@ CREATE TABLE IF NOT EXISTS assignments (
 ALTER TABLE assignments
   ADD COLUMN IF NOT EXISTS priority assignment_priority NOT NULL DEFAULT 'none';
 
+-- Estimated effort in hours (nullable) — powers the weekly workload prediction.
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS estimated_hours NUMERIC(5,2);
+
 -- LMS provenance: assignments pulled from Canvas/etc. carry the source + the
 -- external assignment id, used to prevent duplicate imports and to show a badge.
 ALTER TABLE assignments ADD COLUMN IF NOT EXISTS external_source TEXT;

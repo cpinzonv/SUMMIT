@@ -26,6 +26,8 @@ export default function DashboardPage() {
   const [connectedLms, setConnectedLms] = useState([]);
   // Class ids currently playing the archive exit animation (before removal).
   const [animatingIds, setAnimatingIds] = useState(() => new Set());
+  // Weekly estimated-hours workload (this week + next week + per-day breakdown).
+  const [workload, setWorkload] = useState(null);
 
   // Archive a class with a smooth exit: play the fade/slide animation, then call
   // the API and drop it from the list once the animation has finished.
@@ -87,6 +89,10 @@ export default function DashboardPage() {
       .then((providers) => {
         if (active) setConnectedLms(providers.filter((p) => p.connected));
       })
+      .catch(() => {});
+    api
+      .get('/api/workload/weekly')
+      .then((r) => active && setWorkload(r.data))
       .catch(() => {});
     return () => {
       active = false;
@@ -196,6 +202,10 @@ export default function DashboardPage() {
             <Stat label="Graded classes" value={graded.length} glow={classGradient(null, 3)} />
           </div>
 
+          {workload && (workload.thisWeek.totalHours > 0 || workload.nextWeek.totalHours > 0) && (
+            <WorkloadWidget workload={workload} />
+          )}
+
           {classes.length === 0 ? (
             <EmptyState title="No classes yet">
               <Link to="/classes/new" className="font-semibold text-brand-600 hover:underline">
@@ -231,6 +241,42 @@ export default function DashboardPage() {
       )}
 
       <Toast toast={toast} />
+    </div>
+  );
+}
+
+const DOW_LABEL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function WorkloadWidget({ workload }) {
+  const days = workload.thisWeek.byDay;
+  const max = Math.max(1, ...days.map((d) => d.hours));
+  return (
+    <div className="glass-card mb-8 p-5">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-display text-lg font-bold text-ink">Weekly workload</h2>
+        <div className="text-sm text-muted">
+          <span className="font-semibold text-ink">This week: {workload.thisWeek.totalHours}h</span>
+          <span className="mx-2">·</span>
+          Next week: {workload.nextWeek.totalHours}h
+        </div>
+      </div>
+      <div className="flex items-end gap-2" style={{ height: 96 }}>
+        {days.map((d, i) => (
+          <div key={d.date} className="flex flex-1 flex-col items-center justify-end gap-1">
+            <span className="text-[10px] font-semibold text-muted">{d.hours > 0 ? `${d.hours}h` : ''}</span>
+            <div
+              className="w-full rounded-t-md"
+              style={{
+                height: `${(d.hours / max) * 70}px`,
+                minHeight: d.hours > 0 ? 4 : 0,
+                backgroundImage: 'var(--grad-teal-purple)',
+              }}
+              title={`${DOW_LABEL[i]}: ${d.hours}h`}
+            />
+            <span className="text-[10px] font-medium text-muted">{DOW_LABEL[i]}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
