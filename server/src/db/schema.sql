@@ -314,6 +314,26 @@ CREATE INDEX IF NOT EXISTS idx_archives_user_id ON archives(user_id);
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
+-- class_files — uploaded documents (syllabus, notes, handouts) per class. For
+-- the MVP the file bytes are stored inline as base64 in `data` so it works with
+-- no object storage; `size_bytes` and `mime_type` drive the UI. category is one
+-- of 'syllabus' | 'notes' | 'handouts' | 'other'.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS class_files (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id    UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  filename    TEXT NOT NULL,
+  mime_type   TEXT,
+  category    TEXT NOT NULL DEFAULT 'other',
+  size_bytes  INTEGER NOT NULL DEFAULT 0,
+  data        TEXT NOT NULL,                 -- base64-encoded file bytes
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_class_files_class_id ON class_files(class_id);
+
+-- ----------------------------------------------------------------------------
 -- notes — rich-text (Markdown) notes per class. Searchable by title/content.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS notes (

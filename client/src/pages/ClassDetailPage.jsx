@@ -17,11 +17,13 @@ import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
 import { suggestHours } from '../lib/workload';
 import { ClassNotes } from '../components/ClassNotes';
 import { ClassAttendance } from '../components/ClassAttendance';
+import { ClassFiles } from '../components/ClassFiles';
 import NotesChatbot from '../components/NotesChatbot';
 
 const TABS = [
   { key: 'assignments', label: 'Assignments' },
   { key: 'notes', label: 'Notes' },
+  { key: 'files', label: 'Files' },
   { key: 'attendance', label: 'Attendance' },
 ];
 
@@ -244,6 +246,11 @@ export default function ClassDetailPage() {
           ) : (
             <ClassNotes classId={id} />
           )}
+        </div>
+      )}
+      {tab === 'files' && (
+        <div className="mt-5">
+          <ClassFiles classId={id} />
         </div>
       )}
       {tab === 'attendance' && (

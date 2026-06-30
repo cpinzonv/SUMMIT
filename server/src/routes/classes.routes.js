@@ -9,6 +9,7 @@ import * as assignments from '../controllers/assignments.controller.js';
 import * as syllabus from '../controllers/syllabus.controller.js';
 import * as notes from '../controllers/notes.controller.js';
 import * as attendance from '../controllers/attendance.controller.js';
+import * as files from '../controllers/files.controller.js';
 
 // Syllabus uploads: PDF, DOCX (Word), JPG, PNG. Kept in memory; 32MB cap
 // (the Claude API request limit).
@@ -24,6 +25,32 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     if (SYLLABUS_MIME.has(file.mimetype)) cb(null, true);
     else cb(AppError.badRequest('Unsupported file type. Upload a PDF, DOCX, JPG, or PNG.'));
+  },
+});
+
+// Class file attachments: a broader set than syllabus uploads (PDF, Office docs,
+// images, plain text). Stored inline as base64, so cap a little smaller (16MB).
+const FILE_MIME = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'text/plain',
+  'text/csv',
+]);
+const fileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 16 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (FILE_MIME.has(file.mimetype)) cb(null, true);
+    else cb(AppError.badRequest('Unsupported file type. Upload a PDF, Office doc, image, or text file.'));
   },
 });
 
@@ -98,6 +125,19 @@ router.post(
   validate(classes.classIdParam, 'params'),
   validate(notes.chatbotSchema),
   asyncHandler(notes.chatbot),
+);
+
+// Files nested under a class (download/delete by file id live in files.routes).
+router.get(
+  '/:id/files',
+  validate(classes.classIdParam, 'params'),
+  asyncHandler(files.list),
+);
+router.post(
+  '/:id/files',
+  validate(classes.classIdParam, 'params'),
+  fileUpload.single('file'),
+  asyncHandler(files.upload),
 );
 
 // Attendance nested under a class (delete by id lives in attendance.routes).
