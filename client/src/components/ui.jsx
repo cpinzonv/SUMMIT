@@ -15,15 +15,15 @@ export function Modal({ title, onClose, children, wide = false }) {
       onClick={onClose}
     >
       <div
-        className={`glass-panel max-h-[90vh] w-full overflow-y-auto p-6 ${wide ? 'max-w-2xl' : 'max-w-md'}`}
+        className={`glass-modal animate-fade-up max-h-[90vh] w-full overflow-y-auto p-6 sm:p-7 ${wide ? 'max-w-2xl' : 'max-w-md'}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-ink">{title}</h3>
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <h3 className="text-xl font-bold text-ink">{title}</h3>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-2xl leading-none text-muted transition hover:text-ink"
+            className="-mr-1 grid h-8 w-8 place-items-center rounded-full text-2xl leading-none text-muted transition hover:bg-black/5 hover:text-ink"
           >
             ×
           </button>
