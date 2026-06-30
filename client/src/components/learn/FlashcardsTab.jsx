@@ -4,6 +4,7 @@ import { Modal, Spinner, ErrorBanner, EmptyState } from '../ui';
 import { Labeled } from './common';
 import { exportDeck } from '../../lib/learnExport';
 import { CardFace, CardTypeBadge } from './CardTypes';
+import { LearnEmptyState } from './LearnEmptyState';
 
 /** Flashcards: manage a class's cards and run spaced-repetition review sessions. */
 
@@ -70,18 +71,19 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <button
-          className="btn btn-primary"
-          disabled={dueCount === 0}
-          onClick={() => setReviewing(true)}
-          title={dueCount === 0 ? 'Nothing due right now' : undefined}
-        >
-          Study due ({dueCount})
-        </button>
-        <button className="btn btn-soft" onClick={() => setGenerating(true)}>✦ Generate with AI</button>
-        <button className="btn btn-soft" onClick={() => setEditorCard(null)}>+ Add card</button>
-        {cards.length > 0 && (
+      {/* Toolbar only when there are cards — otherwise the empty-state hero carries the CTAs. */}
+      {cards.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="btn btn-primary"
+            disabled={dueCount === 0}
+            onClick={() => setReviewing(true)}
+            title={dueCount === 0 ? 'Nothing due right now' : undefined}
+          >
+            Study due ({dueCount})
+          </button>
+          <button className="btn btn-soft" onClick={() => setGenerating(true)}>✦ Generate with AI</button>
+          <button className="btn btn-soft" onClick={() => setEditorCard(null)}>+ Add card</button>
           <details className="relative">
             <summary className="btn btn-soft cursor-pointer list-none">⬇ Export</summary>
             <div className="glass-panel absolute right-0 z-10 mt-1 w-44 p-1 text-sm">
@@ -89,15 +91,17 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
               <button className="menu-item" onClick={() => exportDeck(cards, className, 'csv')}>CSV spreadsheet</button>
             </div>
           </details>
-        )}
-      </div>
+        </div>
+      )}
 
       {error && <ErrorBanner message={error} />}
 
       {cards.length === 0 ? (
-        <EmptyState title={`No cards in ${className ?? 'this class'} yet`}>
-          Generate a set from this class's notes & transcripts, or add a card by hand.
-        </EmptyState>
+        <LearnEmptyState
+          className={className}
+          onGenerate={() => setGenerating(true)}
+          onAddManual={() => setEditorCard(null)}
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {cards.map((card) => (
