@@ -21,23 +21,30 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [archivedNotice, setArchivedNotice] = useState(0);
+  const [plannerNotice, setPlannerNotice] = useState(0);
   const [toast, setToast] = useState(null);
   const [syncingProvider, setSyncingProvider] = useState(null);
   // Connected LMS providers (each gets its own "Sync" button).
   const [connectedLms, setConnectedLms] = useState([]);
   // Weekly estimated-hours workload (this week + next week + per-day breakdown).
   const [workload, setWorkload] = useState(null);
-  // Auto-archive runs once per dashboard load. Holding the in-flight promise in
-  // a ref makes both React StrictMode mounts await the SAME archive call, so the
-  // class list is always loaded AFTER expired classes are archived (no stale
-  // rows) and the "semester ended" notice fires exactly once.
-  const archivePromise = useRef(null);
+  // On load we (1) move planner courses whose term has started into the
+  // Dashboard, then (2) archive expired classes. Holding the in-flight promise
+  // in a ref makes both React StrictMode mounts await the SAME work, so the
+  // class list is loaded AFTER both run and each notice fires exactly once.
+  const initPromise = useRef(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
-      if (!archivePromise.current) {
-        archivePromise.current = (async () => {
+      if (!initPromise.current) {
+        initPromise.current = (async () => {
+          try {
+            const { data: sync } = await api.post('/api/plan/sync-active-courses');
+            if (sync.count > 0) setPlannerNotice(sync.count);
+          } catch {
+            // Non-fatal — planner may be empty / unreachable.
+          }
           try {
             const { data: aa } = await api.post('/api/classes/auto-archive');
             if (aa.count > 0) setArchivedNotice(aa.count);
@@ -46,7 +53,7 @@ export default function DashboardPage() {
           }
         })();
       }
-      await archivePromise.current;
+      await initPromise.current;
       try {
         const res = await api.get('/api/classes');
         if (active) setClasses(res.data.classes);
@@ -83,6 +90,12 @@ export default function DashboardPage() {
     const t = setTimeout(() => setArchivedNotice(0), 6000);
     return () => clearTimeout(t);
   }, [archivedNotice]);
+
+  useEffect(() => {
+    if (!plannerNotice) return undefined;
+    const t = setTimeout(() => setPlannerNotice(0), 8000);
+    return () => clearTimeout(t);
+  }, [plannerNotice]);
 
   useEffect(() => {
     if (!toast || toast.loading) return undefined;
@@ -144,6 +157,20 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {plannerNotice > 0 && (
+        <div className="mb-4 flex items-center gap-3 rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm backdrop-blur">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-white" style={{ backgroundImage: 'var(--grad-teal-purple)' }}>
+            🎓
+          </span>
+          <span className="font-medium text-ink">
+            {plannerNotice} planned {plannerNotice === 1 ? 'course' : 'courses'} moved to active from Planner.
+          </span>
+          <Link to="/planner" className="ml-auto text-xs font-semibold text-brand-600 hover:underline">
+            View planner →
+          </Link>
+        </div>
+      )}
+
       {archivedNotice > 0 && (
         <div className="mb-6 flex items-center gap-3 rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm backdrop-blur">
           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-white" style={{ backgroundImage: 'var(--grad-teal-purple)' }}>
@@ -152,8 +179,8 @@ export default function DashboardPage() {
           <span className="font-medium text-ink">
             {archivedNotice} {archivedNotice === 1 ? 'class' : 'classes'} archived as the semester ended.
           </span>
-          <Link to="/archives" className="ml-auto text-xs font-semibold text-brand-600 hover:underline">
-            View archives →
+          <Link to="/planner?tab=archived" className="ml-auto text-xs font-semibold text-brand-600 hover:underline">
+            View archived →
           </Link>
         </div>
       )}

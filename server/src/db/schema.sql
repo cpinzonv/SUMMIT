@@ -411,3 +411,19 @@ DROP TRIGGER IF EXISTS trg_plan_items_updated_at ON plan_items;
 CREATE TRIGGER trg_plan_items_updated_at
   BEFORE UPDATE ON plan_items
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- Planner ↔ Dashboard linkage. A planned course (plan_items) auto-creates a
+-- Dashboard class when its term starts, and archiving that class marks the
+-- planned course completed. The two-way FKs are nullable + ON DELETE SET NULL,
+-- so deleting either side just unlinks the other. Added here (after both tables
+-- exist) to satisfy the cross-references.
+-- ----------------------------------------------------------------------------
+ALTER TABLE classes
+  ADD COLUMN IF NOT EXISTS plan_item_id UUID REFERENCES plan_items(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_classes_plan_item ON classes(plan_item_id);
+
+ALTER TABLE plan_items
+  ADD COLUMN IF NOT EXISTS completion_date DATE;
+ALTER TABLE plan_items
+  ADD COLUMN IF NOT EXISTS linked_class_id UUID REFERENCES classes(id) ON DELETE SET NULL;

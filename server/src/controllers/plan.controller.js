@@ -31,6 +31,12 @@ export async function get(req, res) {
   res.json(plan);
 }
 
+/** Auto-create Dashboard classes for planner courses whose term has started. */
+export async function syncActive(req, res) {
+  const result = await planService.syncActiveCourses(req.user.id);
+  res.json(result);
+}
+
 export async function create(req, res) {
   const item = await planService.createPlanItem(req.user.id, req.body);
   res.status(201).json({ item });

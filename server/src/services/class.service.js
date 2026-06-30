@@ -19,6 +19,7 @@ export function toPublicClass(row) {
     attendanceGraded: row.attendance_graded ?? false,
     attendanceWeight: row.attendance_weight == null ? null : Number(row.attendance_weight),
     archivedAt: row.archived_at,
+    plannerCourseId: row.plan_item_id ?? null, // planner course this class was created from
     syllabus: {
       instructor: row.instructor,
       instructorEmail: row.instructor_email,
@@ -48,40 +49,58 @@ export async function getOwnedClass(userId, classId, db = { query }) {
 
 export async function createClass(userId, input) {
   const s = input.syllabus ?? {};
-  const { rows } = await query(
-    `INSERT INTO classes
+  const params = [
+    userId,
+    input.name,
+    input.description ?? null,
+    input.code ?? null,
+    input.term ?? null,
+    input.credits ?? null,
+    input.color ?? null,
+    input.startDate ?? null,
+    input.endDate ?? null,
+    input.meetingDays ? JSON.stringify(input.meetingDays) : null,
+    input.meetingTime ?? null,
+    input.attendanceGraded ?? null,
+    input.attendanceWeight ?? null,
+    s.instructor ?? null,
+    s.instructorEmail ?? null,
+    s.location ?? null,
+    s.meetingTimes ? JSON.stringify(s.meetingTimes) : null,
+    s.gradingScheme ? JSON.stringify(s.gradingScheme) : null,
+    s.syllabusUrl ?? null,
+    input.plannerCourseId ?? null,
+  ];
+  const insertSql = `INSERT INTO classes
        (user_id, name, description, code, term, credits, color, start_date, end_date,
         meeting_days, meeting_time, attendance_graded, attendance_weight,
         instructor, instructor_email, location, meeting_times, grading_scheme,
-        syllabus_url)
+        syllabus_url, plan_item_id)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10,'[]'::jsonb), $11,
              COALESCE($12, false), $13,
              $14,$15,$16,
-             COALESCE($17,'[]'::jsonb), COALESCE($18,'[]'::jsonb), $19)
-     RETURNING *`,
-    [
-      userId,
-      input.name,
-      input.description ?? null,
-      input.code ?? null,
-      input.term ?? null,
-      input.credits ?? null,
-      input.color ?? null,
-      input.startDate ?? null,
-      input.endDate ?? null,
-      input.meetingDays ? JSON.stringify(input.meetingDays) : null,
-      input.meetingTime ?? null,
-      input.attendanceGraded ?? null,
-      input.attendanceWeight ?? null,
-      s.instructor ?? null,
-      s.instructorEmail ?? null,
-      s.location ?? null,
-      s.meetingTimes ? JSON.stringify(s.meetingTimes) : null,
-      s.gradingScheme ? JSON.stringify(s.gradingScheme) : null,
-      s.syllabusUrl ?? null,
-    ],
-  );
-  return toPublicClass(rows[0]);
+             COALESCE($17,'[]'::jsonb), COALESCE($18,'[]'::jsonb), $19, $20)
+     RETURNING *`;
+
+  // No planner link: a single insert is enough.
+  if (!input.plannerCourseId) {
+    const { rows } = await query(insertSql, params);
+    return toPublicClass(rows[0]);
+  }
+
+  // Linked to a planner course: insert the class and mark the planner course
+  // in-progress + pointing back at it, atomically.
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(insertSql, params);
+    const created = rows[0];
+    await client.query(
+      `UPDATE plan_items
+         SET linked_class_id = $1, status = 'in_progress'
+       WHERE id = $2 AND user_id = $3`,
+      [created.id, input.plannerCourseId, userId],
+    );
+    return toPublicClass(created);
+  });
 }
 
 // Whitelisted fields for PATCH /api/classes/:id (column mapping).
@@ -228,6 +247,17 @@ export async function archiveClass(userId, classId) {
         JSON.stringify(snapshot),
       ],
     );
+
+    // Sync completion back to the linked planner course (if any): it moves to
+    // the Planner "Archived" tab with a completion date.
+    if (archivedClass.plan_item_id) {
+      await client.query(
+        `UPDATE plan_items
+           SET status = 'completed', completion_date = CURRENT_DATE
+         WHERE id = $1 AND user_id = $2`,
+        [archivedClass.plan_item_id, userId],
+      );
+    }
 
     return { class: toPublicClass(archivedClass), archive: archiveRows[0] };
   });

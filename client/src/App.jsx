@@ -6,7 +6,6 @@ import DashboardPage from './pages/DashboardPage';
 import ClassDetailPage from './pages/ClassDetailPage';
 import CalendarPage from './pages/CalendarPage';
 import CreateClassPage from './pages/CreateClassPage';
-import ArchivePage from './pages/ArchivePage';
 import PlannerPage from './pages/PlannerPage';
 import SettingsPage from './pages/SettingsPage';
 import SchedulePage from './pages/SchedulePage';
@@ -30,7 +29,8 @@ export default function App() {
         <Route path="/schedule" element={<SchedulePage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/planner" element={<PlannerPage />} />
-        <Route path="/archives" element={<ArchivePage />} />
+        {/* Archives now live inside the Planner as the "Archived" tab. */}
+        <Route path="/archives" element={<Navigate to="/planner?tab=archived" replace />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/lms/callback" element={<LmsCallbackPage />} />
       </Route>

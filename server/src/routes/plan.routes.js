@@ -10,6 +10,10 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/', asyncHandler(plan.get));
+// Auto-move planned courses whose term has started into the Dashboard.
+// POST (it mutates); GET is accepted too for the spec's on-load call.
+router.post('/sync-active-courses', asyncHandler(plan.syncActive));
+router.get('/sync-active-courses', asyncHandler(plan.syncActive));
 router.post('/', validate(plan.createSchema), asyncHandler(plan.create));
 router.patch(
   '/:itemId',

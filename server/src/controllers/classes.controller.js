@@ -44,6 +44,7 @@ export const createClassSchema = z.object({
   meetingTime: z.string().optional(),
   attendanceGraded: z.boolean().optional(),
   attendanceWeight: z.number().min(0).max(100).optional(),
+  plannerCourseId: z.string().uuid().optional(), // link to a planner course
   syllabus: syllabusSchema,
 });
 
