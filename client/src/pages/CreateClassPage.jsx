@@ -177,7 +177,7 @@ export default function CreateClassPage() {
           <div>
             <h2 className="font-bold text-ink">Import from syllabus</h2>
             <p className="text-sm text-muted">
-              Upload a syllabus PDF and Claude will fill in the details below.
+              Upload a syllabus — PDF, Word, or a photo — and Claude fills in the details below.
             </p>
           </div>
           <button
@@ -186,12 +186,12 @@ export default function CreateClassPage() {
             disabled={extracting}
             className="btn btn-primary shrink-0"
           >
-            {extracting ? 'Reading…' : 'Upload PDF'}
+            {extracting ? 'Reading…' : 'Upload file'}
           </button>
           <input
             ref={fileInput}
             type="file"
-            accept="application/pdf"
+            accept=".pdf,.docx,.jpg,.jpeg,.png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
             onChange={handleFile}
             className="hidden"
           />

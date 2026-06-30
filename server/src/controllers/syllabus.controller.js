@@ -3,11 +3,9 @@ import { AppError } from '../utils/AppError.js';
 
 export async function extractSyllabus(req, res) {
   if (!req.file) {
-    throw AppError.badRequest('No file uploaded. Send a PDF in the "file" field.');
+    throw AppError.badRequest('No file uploaded. Send a PDF, DOCX, JPG, or PNG in the "file" field.');
   }
-  if (req.file.mimetype !== 'application/pdf') {
-    throw AppError.badRequest('Uploaded file must be a PDF.');
-  }
-  const syllabus = await syllabusService.extractSyllabus(req.file.buffer);
+  // Allowed MIME types are enforced by the multer fileFilter.
+  const syllabus = await syllabusService.extractSyllabus(req.file);
   res.json({ syllabus });
 }

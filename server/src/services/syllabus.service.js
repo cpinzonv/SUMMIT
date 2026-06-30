@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import mammoth from 'mammoth';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 
@@ -99,12 +100,62 @@ Read the document carefully and populate the schema:
   to that number (10). Otherwise attendanceGraded false and attendanceWeight null.
 Use null for any field the syllabus does not specify. Do not invent data.`;
 
+const DOCX_MIME =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
 /**
- * Send a syllabus PDF to Claude and return structured course data.
- * @param {Buffer} pdfBuffer
+ * Build the user content blocks for a syllabus upload, per file type:
+ *   - PDF        → a document block (Claude reads the PDF natively)
+ *   - JPG / PNG  → an image block (Claude vision reads the image)
+ *   - DOCX       → text is extracted with mammoth and sent as a text block
+ * The instruction prompt always comes last.
  */
-export async function extractSyllabus(pdfBuffer) {
-  const base64 = pdfBuffer.toString('base64');
+async function buildContent(file) {
+  const { buffer, mimetype } = file;
+
+  if (mimetype === 'application/pdf') {
+    return [
+      {
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') },
+      },
+      { type: 'text', text: PROMPT },
+    ];
+  }
+
+  if (mimetype === 'image/jpeg' || mimetype === 'image/png') {
+    return [
+      {
+        type: 'image',
+        source: { type: 'base64', media_type: mimetype, data: buffer.toString('base64') },
+      },
+      { type: 'text', text: PROMPT },
+    ];
+  }
+
+  if (mimetype === DOCX_MIME) {
+    let text;
+    try {
+      ({ value: text } = await mammoth.extractRawText({ buffer }));
+    } catch {
+      throw AppError.badRequest('Could not read the Word document.');
+    }
+    if (!text || !text.trim()) {
+      throw AppError.badRequest('The Word document appears to be empty.');
+    }
+    return [{ type: 'text', text: `${PROMPT}\n\nSyllabus text:\n"""\n${text}\n"""` }];
+  }
+
+  throw AppError.badRequest('Unsupported file type.');
+}
+
+/**
+ * Send a syllabus (PDF, DOCX, JPG, or PNG) to Claude and return structured
+ * course data. DOCX text is extracted first; images and PDFs are sent directly.
+ * @param {{ buffer: Buffer, mimetype: string }} file
+ */
+export async function extractSyllabus(file) {
+  const content = await buildContent(file);
 
   let message;
   try {
@@ -113,19 +164,7 @@ export async function extractSyllabus(pdfBuffer) {
       max_tokens: 4096,
       // Structured outputs: constrain the response to our JSON schema.
       output_config: { format: { type: 'json_schema', schema: syllabusSchema } },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            // Document block goes before the instruction text.
-            {
-              type: 'document',
-              source: { type: 'base64', media_type: 'application/pdf', data: base64 },
-            },
-            { type: 'text', text: PROMPT },
-          ],
-        },
-      ],
+      messages: [{ role: 'user', content }],
     });
   } catch (err) {
     if (err instanceof AppError) throw err;

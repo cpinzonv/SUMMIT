@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { AppError } from '../utils/AppError.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -9,10 +10,21 @@ import * as syllabus from '../controllers/syllabus.controller.js';
 import * as notes from '../controllers/notes.controller.js';
 import * as attendance from '../controllers/attendance.controller.js';
 
-// Keep the uploaded PDF in memory; cap at 32MB (the Claude API request limit).
+// Syllabus uploads: PDF, DOCX (Word), JPG, PNG. Kept in memory; 32MB cap
+// (the Claude API request limit).
+const SYLLABUS_MIME = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg',
+  'image/png',
+]);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 32 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (SYLLABUS_MIME.has(file.mimetype)) cb(null, true);
+    else cb(AppError.badRequest('Unsupported file type. Upload a PDF, DOCX, JPG, or PNG.'));
+  },
 });
 
 const router = Router();
