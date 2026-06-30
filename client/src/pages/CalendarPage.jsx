@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -52,12 +52,18 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [view, setView] = useState(() => preferences.defaultCalendarView || 'month');
+  const [selected, setSelected] = useState(null);
+  const [toast, setToast] = useState(null);
   const [cursor, setCursor] = useState(() => {
     const n = new Date();
     n.setHours(0, 0, 0, 0);
     return n;
   });
-  const [selected, setSelected] = useState(null);
+
+  // Drag-and-drop state.
+  const draggedRef = useRef(null);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dragOverKey, setDragOverKey] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -77,9 +83,9 @@ export default function CalendarPage() {
           const gradient = classGradient(cls, i);
           assignments.forEach((a) => {
             if (a.dueDate)
-              evs.push({ date: new Date(a.dueDate), type: 'due', a, cls, gradient });
+              evs.push({ id: `${a.id}:due`, date: new Date(a.dueDate), type: 'due', a, cls, gradient });
             if (a.plannedDate)
-              evs.push({ date: new Date(a.plannedDate), type: 'planned', a, cls, gradient });
+              evs.push({ id: `${a.id}:planned`, date: new Date(a.plannedDate), type: 'planned', a, cls, gradient });
           });
         });
         setEvents(evs);
@@ -93,6 +99,12 @@ export default function CalendarPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const byDay = useMemo(() => {
     const map = new Map();
@@ -111,6 +123,71 @@ export default function CalendarPage() {
       if (view === 'month') return new Date(c.getFullYear(), c.getMonth() + dir, 1);
       return addDays(c, dir * (view === 'week' ? 7 : 1));
     });
+
+  // ---- Drag and drop: move an assignment's date to the dropped-on day -----
+  async function moveEvent(ev, targetKey) {
+    const field = ev.type === 'due' ? 'dueDate' : 'plannedDate';
+    const [y, m, d] = targetKey.split('-').map(Number);
+    const orig = ev.date;
+    const newDate = new Date(y, m - 1, d, orig.getHours(), orig.getMinutes(), 0, 0);
+    if (localKey(newDate) === localKey(orig)) return; // same day, no-op
+
+    const prevDate = ev.date;
+    const prevField = ev.a[field];
+    const iso = newDate.toISOString();
+
+    // Optimistic update.
+    setEvents((es) =>
+      es.map((e) => (e.id === ev.id ? { ...e, date: newDate, a: { ...e.a, [field]: iso } } : e)),
+    );
+
+    try {
+      await api.patch(`/api/assignments/${ev.a.id}`, { [field]: iso });
+      setToast({
+        type: 'success',
+        msg: `Moved “${ev.a.title}” to ${newDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
+      });
+    } catch (err) {
+      // Revert on failure.
+      setEvents((es) =>
+        es.map((e) =>
+          e.id === ev.id ? { ...e, date: prevDate, a: { ...e.a, [field]: prevField } } : e,
+        ),
+      );
+      setToast({ type: 'error', msg: errorMessage(err, 'Could not move assignment') });
+    }
+  }
+
+  const dnd = {
+    draggingId,
+    dragOverKey,
+    startDrag: (ev) => (e) => {
+      if (ev.cls.archivedAt) return; // read-only / archived: not draggable
+      draggedRef.current = ev;
+      setDraggingId(ev.id);
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', ev.id);
+    },
+    endDrag: () => {
+      draggedRef.current = null;
+      setDraggingId(null);
+      setDragOverKey(null);
+    },
+    overDate: (key) => (e) => {
+      if (!draggedRef.current) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (dragOverKey !== key) setDragOverKey(key);
+    },
+    dropDate: (key) => (e) => {
+      e.preventDefault();
+      const ev = draggedRef.current;
+      draggedRef.current = null;
+      setDraggingId(null);
+      setDragOverKey(null);
+      if (ev) moveEvent(ev, key);
+    },
+  };
 
   const label = useMemo(() => {
     if (view === 'month')
@@ -133,10 +210,11 @@ export default function CalendarPage() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Calendar</h1>
-          <p className="mt-1 text-sm text-muted">All assignments across your classes</p>
+          <p className="mt-1 text-sm text-muted">
+            All assignments across your classes — drag to reschedule
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          {/* View toggle */}
           <div className="flex gap-1 rounded-full bg-white/45 p-1 backdrop-blur">
             {VIEWS.map((v) => (
               <button
@@ -158,7 +236,6 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Legend */}
       <div className="mb-4 flex flex-wrap gap-4 text-xs font-medium text-muted">
         <span className="flex items-center gap-1.5"><Dot p="high" /> High</span>
         <span className="flex items-center gap-1.5"><Dot p="medium" /> Medium</span>
@@ -176,14 +253,31 @@ export default function CalendarPage() {
       ) : error ? (
         <ErrorBanner message={error} />
       ) : view === 'month' ? (
-        <MonthView cursor={cursor} byDay={byDay} todayKey={todayKey} onSelect={setSelected} />
+        <MonthView cursor={cursor} byDay={byDay} todayKey={todayKey} onSelect={setSelected} dnd={dnd} />
       ) : view === 'week' ? (
-        <WeekView cursor={cursor} byDay={byDay} todayKey={todayKey} onSelect={setSelected} />
+        <WeekView cursor={cursor} byDay={byDay} todayKey={todayKey} onSelect={setSelected} dnd={dnd} />
       ) : (
         <DayView cursor={cursor} byDay={byDay} onSelect={setSelected} />
       )}
 
       {selected && <EventModal ev={selected} onClose={() => setSelected(null)} />}
+      {toast && <Toast toast={toast} />}
+    </div>
+  );
+}
+
+function Toast({ toast }) {
+  const ok = toast.type === 'success';
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+      <div
+        className={`glass-panel pointer-events-auto px-4 py-2.5 text-sm font-semibold shadow-lg ${
+          ok ? 'text-emerald-600' : 'text-rose-600'
+        }`}
+      >
+        {ok ? '✓ ' : '⚠ '}
+        {toast.msg}
+      </div>
     </div>
   );
 }
@@ -193,7 +287,7 @@ function Dot({ p }) {
 }
 
 /* ---- Month ------------------------------------------------------------- */
-function MonthView({ cursor, byDay, todayKey, onSelect }) {
+function MonthView({ cursor, byDay, todayKey, onSelect, dnd }) {
   const cells = useMemo(() => {
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     start.setDate(1 - start.getDay());
@@ -213,8 +307,14 @@ function MonthView({ cursor, byDay, todayKey, onSelect }) {
           const inMonth = d.getMonth() === cursor.getMonth();
           const evs = sortEvents(byDay.get(key) || []);
           const isToday = key === todayKey;
+          const isOver = dnd.dragOverKey === key;
           return (
-            <div key={i} className={`min-h-[96px] border-b border-r border-white/30 p-1.5 ${inMonth ? '' : 'bg-white/10'}`}>
+            <div
+              key={i}
+              onDragOver={dnd.overDate(key)}
+              onDrop={dnd.dropDate(key)}
+              className={`min-h-[96px] border-b border-r border-white/30 p-1.5 transition ${inMonth ? '' : 'bg-white/10'} ${isOver ? 'bg-brand-50/60 shadow-[inset_0_0_0_2px_rgba(63,161,166,0.6)]' : ''}`}
+            >
               <div className={`mb-1 flex justify-end text-xs ${isToday ? 'font-extrabold' : inMonth ? 'text-slate-500' : 'text-slate-300'}`}>
                 <span
                   className={isToday ? 'grid h-5 w-5 place-items-center rounded-full text-white' : ''}
@@ -224,8 +324,8 @@ function MonthView({ cursor, byDay, todayKey, onSelect }) {
                 </span>
               </div>
               <div className="space-y-1">
-                {evs.slice(0, 3).map((ev, j) => (
-                  <MonthChip key={j} ev={ev} onSelect={onSelect} />
+                {evs.slice(0, 3).map((ev) => (
+                  <MonthChip key={ev.id} ev={ev} onSelect={onSelect} dnd={dnd} />
                 ))}
                 {evs.length > 3 && <div className="text-[10px] text-muted">+{evs.length - 3} more</div>}
               </div>
@@ -237,15 +337,20 @@ function MonthView({ cursor, byDay, todayKey, onSelect }) {
   );
 }
 
-function MonthChip({ ev, onSelect }) {
+function MonthChip({ ev, onSelect, dnd }) {
   const isDue = ev.type === 'due';
+  const draggable = !ev.cls.archivedAt;
+  const isDragging = dnd.draggingId === ev.id;
   return (
     <button
       type="button"
+      draggable={draggable}
+      onDragStart={dnd.startDrag(ev)}
+      onDragEnd={dnd.endDrag}
       onClick={() => onSelect(ev)}
       title={`${ev.a.title} — ${ev.cls.name} (${isDue ? 'due' : 'planned'}, ${PRIORITY_LABEL[ev.a.priority || 'none']} priority)`}
-      className="flex w-full items-center gap-1 truncate rounded-lg px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-sm transition hover:brightness-105"
-      style={{ backgroundImage: ev.gradient, opacity: isDue ? 1 : 0.42 }}
+      className={`flex w-full items-center gap-1 truncate rounded-lg px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-sm transition hover:brightness-105 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 ring-2 ring-white/70' : ''}`}
+      style={{ backgroundImage: ev.gradient, opacity: isDragging ? 0.4 : isDue ? 1 : 0.42 }}
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-white/70 ${PRIORITY_DOT[ev.a.priority || 'none']}`} />
       <span className="truncate">{ev.a.title}</span>
@@ -254,7 +359,7 @@ function MonthChip({ ev, onSelect }) {
 }
 
 /* ---- Week -------------------------------------------------------------- */
-function WeekView({ cursor, byDay, todayKey, onSelect }) {
+function WeekView({ cursor, byDay, todayKey, onSelect, dnd }) {
   const ws = startOfWeek(cursor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
   return (
@@ -263,9 +368,15 @@ function WeekView({ cursor, byDay, todayKey, onSelect }) {
         {days.map((d) => {
           const key = localKey(d);
           const isToday = key === todayKey;
+          const isOver = dnd.dragOverKey === key;
           const evs = sortEvents(byDay.get(key) || []);
           return (
-            <div key={key} className="min-h-[24rem] border-r border-white/30 last:border-r-0">
+            <div
+              key={key}
+              onDragOver={dnd.overDate(key)}
+              onDrop={dnd.dropDate(key)}
+              className={`min-h-[24rem] border-r border-white/30 transition last:border-r-0 ${isOver ? 'bg-brand-50/60 shadow-[inset_0_0_0_2px_rgba(63,161,166,0.6)]' : ''}`}
+            >
               <div className="border-b border-white/40 px-2 py-2 text-center">
                 <div className="text-[11px] font-medium text-muted">{DOW[d.getDay()]}</div>
                 <div
@@ -279,7 +390,7 @@ function WeekView({ cursor, byDay, todayKey, onSelect }) {
                 {evs.length === 0 ? (
                   <p className="px-1 py-2 text-center text-[10px] text-muted/60">—</p>
                 ) : (
-                  evs.map((ev, i) => <EventRow key={i} ev={ev} onSelect={onSelect} />)
+                  evs.map((ev) => <EventRow key={ev.id} ev={ev} onSelect={onSelect} dnd={dnd} />)
                 )}
               </div>
             </div>
@@ -290,13 +401,18 @@ function WeekView({ cursor, byDay, todayKey, onSelect }) {
   );
 }
 
-function EventRow({ ev, onSelect }) {
+function EventRow({ ev, onSelect, dnd }) {
   const isDue = ev.type === 'due';
+  const draggable = !ev.cls.archivedAt;
+  const isDragging = dnd.draggingId === ev.id;
   return (
     <button
       type="button"
+      draggable={draggable}
+      onDragStart={dnd.startDrag(ev)}
+      onDragEnd={dnd.endDrag}
       onClick={() => onSelect(ev)}
-      className="flex w-full items-center gap-2 rounded-lg border border-white/50 bg-white/45 px-2 py-1.5 text-left transition hover:bg-white/75"
+      className={`flex w-full items-center gap-2 rounded-lg border border-white/50 bg-white/45 px-2 py-1.5 text-left transition hover:bg-white/75 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 shadow-lg ring-2 ring-brand-400/50' : ''}`}
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[ev.a.priority || 'none']}`} />
       <span className="min-w-0 flex-1">
@@ -322,8 +438,8 @@ function DayView({ cursor, byDay, onSelect }) {
   }
   return (
     <div className="glass-card space-y-2 p-4">
-      {evs.map((ev, i) => (
-        <DayRow key={i} ev={ev} onSelect={onSelect} />
+      {evs.map((ev) => (
+        <DayRow key={ev.id} ev={ev} onSelect={onSelect} />
       ))}
     </div>
   );
