@@ -6,8 +6,17 @@ const base = (size, p) => ({ width: size, height: size, viewBox: '0 0 24 24', xm
 
 export const FireIcon = ({ size = 20, ...p }) => (
   <svg {...base(size, p)}>
-    <path d="M12 2 C 10 6, 8 10, 8 14 C 8 18, 10 20, 12 20 C 14 20, 16 18, 16 14 C 16 10, 14 6, 12 2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M12 10 C 11 11, 10 12, 10 14 C 10 16, 11 17, 12 17 C 13 17, 14 16, 14 14 C 14 12, 13 11, 12 10" fill="currentColor" opacity="0.3" />
+    {/* Outer flame silhouette (classic flame shape). */}
+    <path
+      d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"
+      fill="currentColor"
+    />
+    {/* Inner flame highlight for depth. */}
+    <path
+      d="M12 14.5c1.5 0 2.5-1 2.5-2.4 0-1.1-.7-1.9-1.4-2.6-.3.8-.9 1.1-1.4 1.2.4-1.3-.2-2.5-1-3.4-.4 1.8-1.7 2.6-1.7 4.2 0 1.7 1.2 3 2 3z"
+      fill="#fff"
+      opacity="0.35"
+    />
   </svg>
 );
 
