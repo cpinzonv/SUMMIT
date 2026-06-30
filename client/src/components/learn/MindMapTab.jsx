@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import { Spinner, ErrorBanner, EmptyState } from '../ui';
+import { exportSvg } from '../../lib/learnExport';
 
 /** Mind maps: list, generate (premium), and view as a pan/zoomable SVG graph. */
 export function MindMapTab({ classId, flash }) {
@@ -103,6 +104,7 @@ function MindMapViewer({ mindmapId, onExit }) {
   const [error, setError] = useState('');
   const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
   const drag = useRef(null);
+  const svgRef = useRef(null);
 
   useEffect(() => {
     (async () => {
@@ -133,10 +135,11 @@ function MindMapViewer({ mindmapId, onExit }) {
           <button className="btn btn-soft !px-2 !py-1" onClick={() => zoom(-0.2)} aria-label="Zoom out">−</button>
           <button className="btn btn-soft !px-2 !py-1" onClick={() => zoom(0.2)} aria-label="Zoom in">+</button>
           <button className="btn btn-soft !px-2 !py-1" onClick={() => setView({ scale: 1, x: 0, y: 0 })}>Reset</button>
+          <button className="btn btn-soft !px-2 !py-1" onClick={() => exportSvg(svgRef.current, (map.centralTopic || map.title || 'mindmap').replace(/[^a-z0-9]+/gi, '_').toLowerCase(), 'png')}>⬇ PNG</button>
         </div>
       </div>
       <div className="glass-panel overflow-hidden p-0">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}
+        <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full cursor-grab active:cursor-grabbing" style={{ touchAction: 'none' }}
           onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}>
           <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`} style={{ transformOrigin: 'center' }}>
             {map.edges.map((e, i) => {

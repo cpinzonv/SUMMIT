@@ -9,6 +9,7 @@ import { PodcastTab } from '../components/learn/PodcastTab';
 import { GuideTab } from '../components/learn/GuideTab';
 import { MindMapTab } from '../components/learn/MindMapTab';
 import { StatsTab } from '../components/learn/StatsTab';
+import { LearnAnalytics } from '../components/learn/LearnAnalytics';
 
 /**
  * Learn tab — multi-format study hub. Flashcards are free; quizzes, podcasts,
@@ -79,7 +80,14 @@ export default function LearnPage() {
   const locked = activeTab?.premium && !isPro;
 
   const renderTab = () => {
-    if (tab === 'stats') return <StatsTab stats={stats} />;
+    if (tab === 'stats') {
+      return (
+        <div className="space-y-6">
+          <StatsTab stats={stats} />
+          <LearnAnalytics classId={classId} />
+        </div>
+      );
+    }
     if (!classId) return <EmptyState title="No classes yet">Add a class first to start studying.</EmptyState>;
     if (locked) return <UpgradePanel feature={activeTab.label} />;
     const props = { classId, className: selectedClass?.name, flash, refreshStats };
@@ -113,22 +121,23 @@ export default function LearnPage() {
         <EmptyState title="No classes yet">Add a class first — then study it with flashcards and more.</EmptyState>
       ) : (
         <>
-          <div className="glass-panel flex flex-wrap items-center gap-3 p-3">
-            <label className="flex items-center gap-2 text-sm font-semibold text-ink">
+          <div className="glass-panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+            <label className="flex shrink-0 items-center gap-2 text-sm font-semibold text-ink">
               Class
               <select value={classId} onChange={(e) => setClassId(e.target.value)} className="field !w-auto !py-1.5">
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </label>
 
-            <nav className="ml-auto flex flex-wrap gap-1">
+            {/* Horizontal-scrolling tab bar — keeps tabs on one swipeable row on phones. */}
+            <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 sm:ml-auto sm:overflow-visible">
               {TABS.map((t) => {
                 const tabLocked = t.premium && !isPro;
                 return (
                   <button
                     key={t.key}
                     onClick={() => setTab(t.key)}
-                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition ${
+                    className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold transition ${
                       tab === t.key ? 'bg-white/70 text-brand-700 shadow-sm' : 'text-muted hover:bg-white/50 hover:text-ink'
                     }`}
                   >

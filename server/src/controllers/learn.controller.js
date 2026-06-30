@@ -5,6 +5,7 @@ import * as quizzes from '../services/quiz.service.js';
 import * as guides from '../services/studyGuide.service.js';
 import * as mindmaps from '../services/mindMap.service.js';
 import * as podcasts from '../services/podcast.service.js';
+import * as analytics from '../services/learnAnalytics.service.js';
 
 const difficulty = z.enum(['easy', 'medium', 'hard']);
 const sourceType = z.enum(['note', 'file', 'transcript']);
@@ -193,6 +194,18 @@ export async function listPodcasts(req, res) {
 }
 export async function listenPodcast(req, res) {
   res.json(await podcasts.recordListen(req.user.id, req.params.podcastId, req.body.completionPercent));
+}
+
+// ---- detailed analytics ----
+export const analyticsQuery = z.object({
+  classId: z.string().uuid().optional(),
+  timeRange: z.enum(['7days', '30days', 'alltime']).optional(),
+});
+export async function analyticsUser(req, res) {
+  res.json(await analytics.calculateDetailedAnalytics(req.user.id, req.query));
+}
+export async function analyticsTrending(req, res) {
+  res.json(await analytics.getTrends(req.user.id, req.query));
 }
 
 // ---- generate-all (orchestrate the premium formats in one call) ----

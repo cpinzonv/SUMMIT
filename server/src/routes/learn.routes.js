@@ -62,6 +62,10 @@ router.post(
 router.get('/due', validate(learn.dueQuery, 'query'), asyncHandler(learn.due));
 router.get('/stats', asyncHandler(learn.overview));
 
+// Detailed per-format / topic / time / trend analytics (free — about your own usage).
+router.get('/analytics/user', validate(learn.analyticsQuery, 'query'), asyncHandler(learn.analyticsUser));
+router.get('/analytics/trending', validate(learn.analyticsQuery, 'query'), asyncHandler(learn.analyticsTrending));
+
 router.post('/sessions', validate(learn.startSessionSchema), asyncHandler(learn.startSession));
 router.patch(
   '/sessions/:sessionId',

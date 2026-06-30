@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import { Modal, Spinner, ErrorBanner, EmptyState } from '../ui';
 import { Labeled } from './common';
+import { exportDeck } from '../../lib/learnExport';
 
 /** Flashcards: manage a class's cards and run spaced-repetition review sessions. */
 
@@ -69,6 +70,15 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
         </button>
         <button className="btn btn-soft" onClick={() => setGenerating(true)}>✦ Generate with AI</button>
         <button className="btn btn-soft" onClick={() => setEditorCard(null)}>+ Add card</button>
+        {cards.length > 0 && (
+          <details className="relative">
+            <summary className="btn btn-soft cursor-pointer list-none">⬇ Export</summary>
+            <div className="glass-panel absolute right-0 z-10 mt-1 w-44 p-1 text-sm">
+              <button className="menu-item" onClick={() => exportDeck(cards, className, 'tsv')}>Anki deck (.txt)</button>
+              <button className="menu-item" onClick={() => exportDeck(cards, className, 'csv')}>CSV spreadsheet</button>
+            </div>
+          </details>
+        )}
       </div>
 
       {error && <ErrorBanner message={error} />}
@@ -130,13 +140,13 @@ function CardTile({ card, onEdit, onDelete }) {
   const m = MASTERY[card.mastery?.status || 'new'];
   const pct = card.mastery?.masteryPercent ?? 0;
   return (
-    <div className="glass-panel flex flex-col gap-2 p-4">
+    <div className="glass-panel flex flex-col gap-2 p-4" onDoubleClick={onEdit} title="Double-click to edit">
       <div className="flex items-start justify-between gap-2">
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m.cls}`}>{m.label}</span>
-        <div className="flex items-center gap-2 text-xs">
-          <span className={`font-bold uppercase ${DIFFICULTY[card.difficulty]}`}>{card.difficulty}</span>
-          <button onClick={onEdit} className="text-muted hover:text-ink" aria-label="Edit card">✎</button>
-          <button onClick={onDelete} className="text-muted hover:text-rose-500" aria-label="Delete card">🗑</button>
+        <div className="flex items-center gap-1 text-xs">
+          <span className={`mr-1 font-bold uppercase ${DIFFICULTY[card.difficulty]}`}>{card.difficulty}</span>
+          <button onClick={onEdit} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-white/50 hover:text-ink" aria-label="Edit card">✎</button>
+          <button onClick={onDelete} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-white/50 hover:text-rose-500" aria-label="Delete card">🗑</button>
         </div>
       </div>
       <button onClick={() => setFlipped((f) => !f)} className="text-left">
@@ -323,13 +333,22 @@ function ReviewSession({ classId, className, onClose }) {
 
   const finish = async () => { await endSession(); onClose(); };
 
+  // Swipe left/right toggles the answer (mobile affordance).
+  const touchX = useRef(null);
+  const onTouchStart = (e) => { touchX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e) => {
+    if (touchX.current == null) return;
+    if (Math.abs(touchX.current - e.changedTouches[0].clientX) > 50) setRevealed((r) => !r);
+    touchX.current = null;
+  };
+
   const total = queue?.length ?? 0;
   const done = queue !== null && idx >= total;
   const card = queue && idx < total ? queue[idx] : null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col items-center bg-slate-900/40 p-4 backdrop-blur-sm">
-      <div className="glass-panel mt-10 flex w-full max-w-xl flex-col gap-4 p-6">
+    <div className="fixed inset-0 z-[60] flex flex-col items-center bg-slate-900/40 p-3 backdrop-blur-sm sm:p-4">
+      <div className="glass-panel mt-6 flex w-full max-w-xl flex-col gap-4 p-5 sm:mt-10 sm:p-6">
         <div className="flex items-center justify-between text-sm">
           <span className="font-semibold text-muted">{className} · Study session</span>
           <button onClick={finish} className="text-2xl leading-none text-muted hover:text-ink" aria-label="End session">×</button>
@@ -352,24 +371,30 @@ function ReviewSession({ classId, className, onClose }) {
               <div className="h-full rounded-full transition-all" style={{ width: `${(idx / total) * 100}%`, background: 'var(--grad-teal-purple)' }} />
             </div>
             <p className="text-center text-xs font-medium text-muted">Card {idx + 1} of {total}</p>
-            <div className="min-h-[8rem] rounded-2xl bg-white/50 p-5 text-center">
-              <p className="text-lg font-semibold text-ink">{card.question}</p>
-              {revealed && (
-                <div className="mt-3 border-t border-white/50 pt-3">
-                  <p className="text-ink">{card.answer}</p>
-                  {card.explanation && <p className="mt-2 text-sm text-muted">{card.explanation}</p>}
-                </div>
-              )}
+            <div
+              className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-white/50 p-5 text-center sm:min-h-[8rem]"
+              onTouchStart={onTouchStart}
+              onTouchEnd={onTouchEnd}
+            >
+              <div>
+                <p className="text-xl font-semibold text-ink sm:text-lg">{card.question}</p>
+                {revealed && (
+                  <div className="mt-3 border-t border-white/50 pt-3">
+                    <p className="text-lg text-ink sm:text-base">{card.answer}</p>
+                    {card.explanation && <p className="mt-2 text-sm text-muted">{card.explanation}</p>}
+                  </div>
+                )}
+              </div>
             </div>
             {!revealed ? (
-              <button className="btn btn-primary w-full" onClick={() => setRevealed(true)}>Show answer</button>
+              <button className="btn btn-primary min-h-[3rem] w-full" onClick={() => setRevealed(true)}>Show answer</button>
             ) : (
               <div>
                 <p className="mb-2 text-center text-xs font-medium text-muted">How well did you know it?</p>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                   {CONFIDENCE.map((c) => (
                     <button key={c.v} disabled={submitting} onClick={() => rate(c.v)}
-                      className={`flex flex-col items-center rounded-xl border bg-white/60 py-2 text-xs font-semibold transition disabled:opacity-50 ${c.cls}`}>
+                      className={`flex min-h-[3rem] flex-col items-center justify-center rounded-xl border bg-white/60 py-2 text-xs font-semibold transition disabled:opacity-50 ${c.cls}`}>
                       <span className="text-base">{c.v}</span>{c.label}
                     </button>
                   ))}

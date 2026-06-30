@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import { Modal, Spinner, ErrorBanner, EmptyState } from '../ui';
 import { Labeled } from './common';
+import { printHtml } from '../../lib/learnExport';
 
 /** Quizzes: list, generate (premium), take, and review results. */
 export function QuizTab({ classId, flash }) {
@@ -118,6 +119,15 @@ function QuizRunner({ quizId, onExit }) {
   if (results) {
     const gradeColor = results.score >= 80 ? 'text-emerald-500' : results.score >= 60 ? 'text-amber-500' : 'text-rose-500';
     const byId = Object.fromEntries(results.feedback.map((f) => [f.questionId, f]));
+    const exportResults = () => {
+      const rows = quiz.questions.map((q, i) => {
+        const f = byId[q.id];
+        return `<div class="q">${i + 1}. ${q.question}</div>
+          <div class="${f.correct ? 'correct' : 'wrong'}">Your answer: ${f.chosen ?? '—'} ${f.correct ? '✓' : `✗ (correct: ${f.correctAnswer})`}</div>
+          ${f.explanation ? `<div>${f.explanation}</div>` : ''}`;
+      }).join('<hr>');
+      printHtml(quiz.title, `<h1>${quiz.title}</h1><h2>Score: ${results.score}% · Grade ${results.grade} (${results.correctCount}/${results.total})</h2>${rows}`);
+    };
     return (
       <div className="space-y-4">
         <div className="glass-panel p-6 text-center">
@@ -149,6 +159,7 @@ function QuizRunner({ quizId, onExit }) {
         </div>
         <div className="flex gap-2">
           <button className="btn btn-soft" onClick={onExit}>← Back to quizzes</button>
+          <button className="btn btn-soft" onClick={exportResults}>⬇ Export results</button>
         </div>
       </div>
     );
