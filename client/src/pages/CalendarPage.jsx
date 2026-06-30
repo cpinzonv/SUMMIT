@@ -7,6 +7,7 @@ import {
   ErrorBanner,
   EmptyState,
   classGradient,
+  isGlassColor,
   Modal,
   gradeColor,
 } from '../components/ui';
@@ -104,13 +105,14 @@ export default function CalendarPage() {
       const evs = [];
       lists.forEach(({ cls, assignments }, i) => {
         const gradient = classGradient(cls, i);
+        const glass = isGlassColor(cls.color); // "Clear" classes get frosted chips
         assignments.forEach((a) => {
           if (a.dueDate)
-            evs.push({ id: `${a.id}:due`, date: new Date(a.dueDate), type: 'due', a, cls, gradient });
+            evs.push({ id: `${a.id}:due`, date: new Date(a.dueDate), type: 'due', a, cls, gradient, glass });
           // Once an assignment is completed/graded the planned-date indicator is
           // no longer useful — drop it so it disappears from every calendar view.
           if (a.plannedDate && !isDone(a))
-            evs.push({ id: `${a.id}:planned`, date: new Date(a.plannedDate), type: 'planned', a, cls, gradient });
+            evs.push({ id: `${a.id}:planned`, date: new Date(a.plannedDate), type: 'planned', a, cls, gradient, glass });
         });
       });
       setEvents(evs);
@@ -490,10 +492,18 @@ function MonthChip({ ev, act, dnd }) {
       onClick={() => act.open(ev)}
       onDoubleClick={() => act.edit(ev)}
       title={`${ev.a.title} — ${ev.cls.name} (${isDue ? 'due' : 'planned'}, ${PRIORITY_LABEL[ev.a.priority || 'none']} priority) · double-click to edit`}
-      className={`flex w-full items-center gap-1 truncate rounded-lg px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-sm transition hover:brightness-105 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 ring-2 ring-white/70' : ''}`}
-      style={{ backgroundImage: ev.gradient, opacity: isDragging ? 0.4 : isDue ? 1 : 0.42 }}
+      className={`flex w-full items-center gap-1 truncate rounded-lg px-1.5 py-0.5 text-left text-[11px] font-semibold shadow-sm transition hover:brightness-105 ${
+        ev.glass
+          ? 'border border-white/60 bg-white/65 text-ink backdrop-blur'
+          : 'text-white'
+      } ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 ring-2 ring-white/70' : ''}`}
+      style={
+        ev.glass
+          ? { opacity: isDragging ? 0.4 : isDue ? 1 : 0.6 }
+          : { backgroundImage: ev.gradient, opacity: isDragging ? 0.4 : isDue ? 1 : 0.42 }
+      }
     >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-white/70 ${eventDot(ev)}`} />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ev.glass ? '' : 'ring-1 ring-white/70'} ${eventDot(ev)}`} />
       <span className="truncate">{ev.a.title}</span>
     </button>
   );

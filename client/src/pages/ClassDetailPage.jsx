@@ -10,6 +10,7 @@ import {
   LmsBadge,
   gradeColor,
   classGradient,
+  isGlassColor,
   CLASS_COLOR_PRESETS,
 } from '../components/ui';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
@@ -1052,10 +1053,24 @@ function Input({ label, ...props }) {
 /** Class color picker: preset swatches + a custom color well, with a clear option. */
 function ColorPicker({ value, onChange }) {
   const current = value || '';
+  const glassSelected = isGlassColor(current);
   return (
     <div className="block">
       <span className="mb-1 block text-xs font-semibold text-ink">Color</span>
       <div className="flex flex-wrap items-center gap-2">
+        {/* Glass / Clear — the default: no solid fill, frosted glass look. */}
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Glass (clear, no color)"
+          title="Glass — frosted, no solid color"
+          className={`relative grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-white/40 ring-offset-1 backdrop-blur transition ${
+            glassSelected ? 'ring-2 ring-ink' : 'ring-1 ring-white/70 hover:ring-ink/40'
+          }`}
+        >
+          {/* diagonal slash signals "no fill" */}
+          <span className="absolute h-[1.5px] w-9 -rotate-45 bg-muted/60" />
+        </button>
         {CLASS_COLOR_PRESETS.map((c) => (
           <button
             key={c}
@@ -1081,12 +1096,10 @@ function ColorPicker({ value, onChange }) {
             className="sr-only"
           />
         </label>
-        {current && (
-          <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-muted hover:text-ink">
-            Clear
-          </button>
-        )}
       </div>
+      <span className="mt-1 block text-[11px] text-muted">
+        {glassSelected ? 'Glass — frosted, no solid color (default).' : 'Solid color accent.'}
+      </span>
     </div>
   );
 }

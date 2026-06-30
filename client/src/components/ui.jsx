@@ -181,18 +181,36 @@ function lighten(hex, amt = 0.22) {
   return `#${[mix(r), mix(g), mix(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 }
 
-/** A class's accent gradient. When the user has set a custom color, derive a
- *  two-stop gradient from it; otherwise cycle the default vivid gradients. */
+// A faint neutral wash used for "Glass / Clear" classes — lets the frosted
+// glass-card show through with only a subtle accent, no solid color.
+export const GLASS_GRADIENT =
+  'linear-gradient(135deg, rgba(150,140,170,0.38) 0%, rgba(150,140,170,0.12) 100%)';
+
+/** True when a class has no solid color — the "Glass / Clear" look (default). */
+export function isGlassColor(color) {
+  return !color || ['transparent', 'clear', 'glass'].includes(String(color).toLowerCase());
+}
+
+/**
+ * A class's accent gradient.
+ *  - Decorative callers pass no class (`cls == null`) → vivid palette gradient,
+ *    used for non-class UI (stat glows, planner/archive term accents).
+ *  - A class with a hex color → a two-stop gradient derived from it.
+ *  - A "Glass / Clear" class (no/​transparent color, the default) → a faint
+ *    neutral so the card reads as frosted glass with just a subtle accent.
+ */
 export function classGradient(cls, index = 0) {
-  if (cls?.color && /^#?[0-9a-f]{6}$/i.test(cls.color)) {
+  if (cls == null) return GRADIENTS[index % GRADIENTS.length];
+  if (cls.color && /^#?[0-9a-f]{6}$/i.test(cls.color)) {
     const c = cls.color.startsWith('#') ? cls.color : `#${cls.color}`;
     return `linear-gradient(135deg, ${c} 0%, ${lighten(c, 0.28)} 100%)`;
   }
-  return GRADIENTS[index % GRADIENTS.length];
+  return GLASS_GRADIENT;
 }
 
 export function classColor(cls, index = 0) {
-  return cls?.color || PALETTE[index % PALETTE.length];
+  if (isGlassColor(cls?.color)) return cls == null ? PALETTE[index % PALETTE.length] : null;
+  return cls.color;
 }
 
 // Letter grade → 4.0-scale grade points (A+ capped at 4.0).
