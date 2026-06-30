@@ -1,18 +1,18 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { SettingsMenu } from './SettingsMenu';
 
+// Settings now lives in the top-right gear menu (see SettingsMenu), not the nav.
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/schedule', label: 'Schedule' },
   { to: '/calendar', label: 'Calendar' },
   { to: '/planner', label: 'Planner' },
   { to: '/learn', label: 'Learn' },
-  { to: '/settings', label: 'Settings' },
 ];
 
 export function Layout() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Admins get an extra nav link. Never shown to regular users; the route and
   // the backend are independently gated too.
@@ -20,11 +20,6 @@ export function Layout() {
     user?.role === 'admin'
       ? [...navItems, { to: '/admin', label: 'Admin' }]
       : navItems;
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
 
   return (
     <div className="min-h-screen">
@@ -60,9 +55,7 @@ export function Layout() {
             <span className="hidden font-medium text-muted sm:inline">
               {user?.fullName}
             </span>
-            <button onClick={handleLogout} className="btn btn-soft">
-              Log out
-            </button>
+            <SettingsMenu />
           </div>
         </div>
       </header>

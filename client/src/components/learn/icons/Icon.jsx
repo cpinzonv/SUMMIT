@@ -1,4 +1,4 @@
-import { FireIcon, BrainIcon, QuestionIcon, HeadphonesIcon, BookIcon, NetworkIcon, ChartIcon } from './LearnIcons';
+import { FireIcon, BrainIcon, QuestionIcon, HeadphonesIcon, BookIcon, NetworkIcon, ChartIcon, SettingsIcon } from './LearnIcons';
 
 const MAP = {
   fire: FireIcon,
@@ -8,6 +8,7 @@ const MAP = {
   book: BookIcon,
   network: NetworkIcon,
   chart: ChartIcon,
+  settings: SettingsIcon,
 };
 
 /** Render a named Learn icon. Color comes from `color` (or inherited currentColor). */

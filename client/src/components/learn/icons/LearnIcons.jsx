@@ -65,3 +65,15 @@ export const ChartIcon = ({ size = 20, ...p }) => (
     <rect x="16.5" y="5" width="3.5" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
   </svg>
 );
+
+// Gear: a toothed ring + center hub, drawn as a single stroked path so it scales
+// cleanly and inherits currentColor.
+export const SettingsIcon = ({ size = 20, ...p }) => (
+  <svg {...base(size, p)}>
+    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
+    <path
+      d="M12 1.8 l1.6 2.7 a8.2 8.2 0 0 1 2.2 0.9 l3-0.8 1.6 2.8 -2 2.3 a8.2 8.2 0 0 1 0 2.6 l2 2.3 -1.6 2.8 -3-0.8 a8.2 8.2 0 0 1-2.2 0.9 L12 22.2 l-1.6-2.7 a8.2 8.2 0 0 1-2.2-0.9 l-3 0.8 -1.6-2.8 2-2.3 a8.2 8.2 0 0 1 0-2.6 l-2-2.3 1.6-2.8 3 0.8 a8.2 8.2 0 0 1 2.2-0.9 Z"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"
+    />
+  </svg>
+);

@@ -411,6 +411,22 @@
   .animate-float {
     animation: float 7s ease-in-out infinite;
   }
+
+  /* Dropdown open animation (header settings menu, etc.). */
+  .animate-menu-pop {
+    animation: menu-pop 0.15s ease-out;
+    transform-origin: top right;
+  }
+  @keyframes menu-pop {
+    from {
+      opacity: 0;
+      transform: translateY(-8px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
   @keyframes float {
     0%,
     100% {
