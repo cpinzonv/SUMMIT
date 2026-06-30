@@ -29,6 +29,7 @@ import * as canvas from './canvas.js';
 import * as blackboard from './blackboard.js';
 import * as googleClassroom from './googleClassroom.js';
 import * as brightspace from './brightspace.js';
+import * as moodle from './moodle.js';
 import { mockProvider } from './mock.js';
 
 // Providers are registered here one at a time. Everything downstream (status,
@@ -39,6 +40,7 @@ const PROVIDERS = {
   blackboard,
   google_classroom: googleClassroom,
   brightspace,
+  moodle,
 };
 
 export const DEFAULT_PROVIDER = 'canvas';
