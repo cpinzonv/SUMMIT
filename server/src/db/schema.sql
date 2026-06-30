@@ -124,6 +124,9 @@ BEGIN
     CREATE TYPE assignment_status AS ENUM
       ('not_started', 'in_progress', 'submitted', 'graded');
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_priority') THEN
+    CREATE TYPE assignment_priority AS ENUM ('none', 'low', 'medium', 'high');
+  END IF;
 END$$;
 
 CREATE TABLE IF NOT EXISTS assignments (
@@ -139,6 +142,10 @@ CREATE TABLE IF NOT EXISTS assignments (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Priority for calendar sorting/indicators (added later).
+ALTER TABLE assignments
+  ADD COLUMN IF NOT EXISTS priority assignment_priority NOT NULL DEFAULT 'none';
 
 CREATE INDEX IF NOT EXISTS idx_assignments_class_id ON assignments(class_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_due_date ON assignments(due_date);

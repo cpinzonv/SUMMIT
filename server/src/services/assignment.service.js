@@ -13,6 +13,7 @@ function toPublicAssignment(row) {
     plannedDate: row.planned_date,
     pointValue: row.point_value == null ? null : Number(row.point_value),
     status: row.status,
+    priority: row.priority ?? 'none',
     grade:
       row.grade_id == null
         ? null
@@ -65,9 +66,10 @@ export async function createAssignment(userId, classId, input) {
   const { rows } = await query(
     `INSERT INTO assignments
        (class_id, title, description, category, due_date, planned_date,
-        point_value, status)
+        point_value, status, priority)
      VALUES ($1,$2,$3,$4,$5,$6,$7,
-             COALESCE($8::assignment_status, 'not_started'))
+             COALESCE($8::assignment_status, 'not_started'),
+             COALESCE($9::assignment_priority, 'none'))
      RETURNING id`,
     [
       classId,
@@ -78,6 +80,7 @@ export async function createAssignment(userId, classId, input) {
       input.plannedDate ?? null,
       input.pointValue ?? null,
       input.status ?? null,
+      input.priority ?? null,
     ],
   );
   return fetchPublicAssignment(rows[0].id);
@@ -92,7 +95,11 @@ const UPDATABLE = {
   plannedDate: 'planned_date',
   pointValue: 'point_value',
   status: 'status',
+  priority: 'priority',
 };
+
+// Enum columns need a cast on the placeholder so a text value type-checks.
+const ENUM_CAST = { status: 'assignment_status', priority: 'assignment_priority' };
 
 /** Partially update an assignment the user owns. Only provided fields change. */
 export async function updateAssignment(userId, assignmentId, input) {
@@ -103,8 +110,9 @@ export async function updateAssignment(userId, assignmentId, input) {
   let i = 1;
   for (const [field, column] of Object.entries(UPDATABLE)) {
     if (field in input) {
-      // status is an enum; cast the placeholder so a text value type-checks.
-      sets.push(field === 'status' ? `status = $${i}::assignment_status` : `${column} = $${i}`);
+      sets.push(
+        ENUM_CAST[field] ? `${column} = $${i}::${ENUM_CAST[field]}` : `${column} = $${i}`,
+      );
       values.push(input[field] ?? null);
       i++;
     }

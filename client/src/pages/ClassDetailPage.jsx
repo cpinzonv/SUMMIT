@@ -300,6 +300,7 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
     dueDate: toDateInput(assignment?.dueDate),
     plannedDate: toDateInput(assignment?.plannedDate),
     pointValue: assignment?.pointValue ?? '',
+    priority: assignment?.priority ?? 'none',
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -319,6 +320,7 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
       dueDate: form.dueDate ? dateInputToISO(form.dueDate) : blank,
       plannedDate: form.plannedDate ? dateInputToISO(form.plannedDate) : blank,
       pointValue: form.pointValue === '' ? blank : Number(form.pointValue),
+      priority: form.priority,
     };
     try {
       if (isEdit) {
@@ -343,7 +345,18 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
           <Input label="Due date" type="date" value={form.dueDate} onChange={update('dueDate')} />
           <Input label="Planned date" type="date" value={form.plannedDate} onChange={update('plannedDate')} />
         </div>
-        <Input label="Point value" type="number" value={form.pointValue} onChange={update('pointValue')} />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Point value" type="number" value={form.pointValue} onChange={update('pointValue')} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-ink">Priority</span>
+            <select value={form.priority} onChange={update('priority')} className="field">
+              <option value="none">None</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
+          </label>
+        </div>
         <ModalActions saving={saving} disabled={!form.title} onClose={onClose} label={isEdit ? 'Save changes' : 'Add assignment'} />
       </form>
     </Modal>

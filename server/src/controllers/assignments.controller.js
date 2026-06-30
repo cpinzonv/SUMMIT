@@ -12,6 +12,8 @@ const statusEnum = z.enum([
   'graded',
 ]);
 
+const priorityEnum = z.enum(['none', 'low', 'medium', 'high']);
+
 export const createAssignmentSchema = z.object({
   title: z.string().min(1, 'title is required'),
   description: z.string().optional(),
@@ -20,6 +22,7 @@ export const createAssignmentSchema = z.object({
   plannedDate: timestamp.optional(),
   pointValue: z.number().nonnegative().optional(),
   status: statusEnum.optional(),
+  priority: priorityEnum.optional(),
 });
 
 // All fields optional for PATCH. Nullable date/value fields so the client can
@@ -33,6 +36,7 @@ export const updateAssignmentSchema = z
     plannedDate: timestamp.nullable().optional(),
     pointValue: z.number().nonnegative().nullable().optional(),
     status: statusEnum.optional(),
+    priority: priorityEnum.optional(),
   })
   .refine((obj) => Object.keys(obj).length > 0, {
     message: 'Provide at least one field to update',
