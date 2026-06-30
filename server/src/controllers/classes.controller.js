@@ -85,3 +85,13 @@ export async function archive(req, res) {
   const result = await classService.archiveClass(req.user.id, req.params.id);
   res.json(result);
 }
+
+export async function remove(req, res) {
+  await classService.deleteClass(req.user.id, req.params.id);
+  res.status(204).end();
+}
+
+export async function autoArchive(req, res) {
+  const archived = await classService.autoArchiveExpired(req.user.id);
+  res.json({ archived, count: archived.length });
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import {
@@ -51,14 +51,14 @@ export default function ClassDetailPage() {
     load();
   }, [load]);
 
-  const handleArchive = async () => {
-    if (!confirm('Archive this class? It will move to your Archives.')) return;
-    try {
-      await api.put(`/api/classes/${id}/archive`);
-      navigate('/');
-    } catch (err) {
-      setError(errorMessage(err));
-    }
+  const doArchive = async () => {
+    await api.put(`/api/classes/${id}/archive`);
+    navigate('/');
+  };
+
+  const doDelete = async () => {
+    await api.delete(`/api/classes/${id}`);
+    navigate('/');
   };
 
   const handleDelete = async (assignment) => {
@@ -82,54 +82,62 @@ export default function ClassDetailPage() {
         ← Back to dashboard
       </Link>
 
-      <div className="glass-card relative mt-3 overflow-hidden p-6">
-        <span
-          className="pointer-events-none absolute inset-0 opacity-[0.12]"
-          style={{ backgroundImage: gradient }}
-        />
-        <span
-          className="pointer-events-none absolute -right-12 -top-14 h-44 w-44 rounded-full opacity-60 blur-2xl"
-          style={{ backgroundImage: gradient }}
-        />
-        <div className="relative flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <span
-              className="mt-1 h-14 w-1.5 rounded-full"
-              style={{ backgroundImage: gradient }}
-            />
-            <div>
-              <h1 className="text-2xl font-extrabold">{cls?.name || 'Class'}</h1>
-              <p className="text-sm text-muted">
-                {[cls?.code, cls?.term].filter(Boolean).join(' · ')}
-              </p>
-              {cls?.description && (
-                <p className="mt-2 max-w-prose whitespace-pre-line text-sm text-slate-600">
-                  {cls.description}
+      {/* Outer wrapper is the positioning context for the ⋮ menu, which lives
+          OUTSIDE the overflow-hidden card so its dropdown isn't clipped. */}
+      <div className="relative mt-3">
+        <div className="glass-card relative overflow-hidden p-6">
+          <span
+            className="pointer-events-none absolute inset-0 opacity-[0.12]"
+            style={{ backgroundImage: gradient }}
+          />
+          <span
+            className="pointer-events-none absolute -right-12 -top-14 h-44 w-44 rounded-full opacity-60 blur-2xl"
+            style={{ backgroundImage: gradient }}
+          />
+          <div className="relative flex items-start justify-between gap-4 pr-10">
+            <div className="flex items-start gap-3">
+              <span
+                className="mt-1 h-14 w-1.5 rounded-full"
+                style={{ backgroundImage: gradient }}
+              />
+              <div>
+                <h1 className="text-2xl font-extrabold">{cls?.name || 'Class'}</h1>
+                <p className="text-sm text-muted">
+                  {[cls?.code, cls?.term].filter(Boolean).join(' · ')}
                 </p>
+                {cls?.description && (
+                  <p className="mt-2 max-w-prose whitespace-pre-line text-sm text-slate-600">
+                    {cls.description}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-5">
+              <div className="text-right">
+                <div className={`text-3xl font-extrabold ${gradeColor(grade?.percentage)}`}>
+                  {grade?.percentage != null ? `${grade.percentage}%` : '—'}
+                </div>
+                <div className="text-xs font-medium text-muted">
+                  Grade {grade?.letter ? `(${grade.letter})` : ''}
+                </div>
+              </div>
+              {cls?.attendanceRate != null && (
+                <div className="text-right">
+                  <div className={`text-3xl font-extrabold ${gradeColor(cls.attendanceRate)}`}>
+                    {cls.attendanceRate}%
+                  </div>
+                  <div className="text-xs font-medium text-muted">Attendance</div>
+                </div>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-5">
-            <div className="text-right">
-              <div className={`text-3xl font-extrabold ${gradeColor(grade?.percentage)}`}>
-                {grade?.percentage != null ? `${grade.percentage}%` : '—'}
-              </div>
-              <div className="text-xs font-medium text-muted">
-                Grade {grade?.letter ? `(${grade.letter})` : ''}
-              </div>
-            </div>
-            {cls?.attendanceRate != null && (
-              <div className="text-right">
-                <div className={`text-3xl font-extrabold ${gradeColor(cls.attendanceRate)}`}>
-                  {cls.attendanceRate}%
-                </div>
-                <div className="text-xs font-medium text-muted">Attendance</div>
-              </div>
-            )}
-            <button onClick={handleArchive} className="btn btn-soft">
-              Archive
-            </button>
-          </div>
+        </div>
+        <div className="absolute right-3 top-3 z-30">
+          <ClassMenu
+            onEdit={() => setModal({ type: 'editClass' })}
+            onArchive={() => setModal({ type: 'confirmArchive' })}
+            onDelete={() => setModal({ type: 'confirmDelete' })}
+          />
         </div>
       </div>
 
@@ -265,7 +273,201 @@ export default function ClassDetailPage() {
           }}
         />
       )}
+      {modal?.type === 'editClass' && (
+        <ClassEditModal
+          cls={cls}
+          onClose={() => setModal(null)}
+          onSaved={async () => {
+            setModal(null);
+            await load();
+          }}
+        />
+      )}
+      {modal?.type === 'confirmArchive' && (
+        <ConfirmDialog
+          title="Archive this class?"
+          body={`“${cls?.name}” will move to your Archives. You can still view it there, but it leaves your active dashboard.`}
+          confirmLabel="Archive"
+          onConfirm={doArchive}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.type === 'confirmDelete' && (
+        <ConfirmDialog
+          danger
+          title="Delete this class?"
+          body={`This permanently deletes “${cls?.name}” and all of its assignments, grades, notes, and attendance. This can't be undone.`}
+          confirmLabel="Delete forever"
+          onConfirm={doDelete}
+          onClose={() => setModal(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** Top-right ⋮ menu on the class header: Edit / Archive / Delete. */
+function ClassMenu({ onEdit, onArchive, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const pick = (fn) => () => {
+    setOpen(false);
+    fn();
+  };
+
+  return (
+    <div ref={ref} className="relative self-start">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Class options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="grid h-9 w-9 place-items-center rounded-full text-xl leading-none text-muted transition hover:bg-white/60 hover:text-ink"
+      >
+        ⋮
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="glass-panel absolute right-0 z-20 mt-1 w-44 overflow-hidden p-1.5 text-sm shadow-xl"
+        >
+          <button type="button" role="menuitem" onClick={pick(onEdit)} className="menu-item">
+            <span>✎</span> Edit class
+          </button>
+          <button type="button" role="menuitem" onClick={pick(onArchive)} className="menu-item">
+            <span>🗄</span> Archive class
+          </button>
+          <div className="my-1 border-t border-white/50" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={pick(onDelete)}
+            className="menu-item text-rose-600 hover:bg-rose-50/70"
+          >
+            <span>🗑</span> Delete class
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Lightweight confirmation dialog matching the Summit glass aesthetic. */
+function ConfirmDialog({ title, body, confirmLabel, onConfirm, onClose, danger = false }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const run = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await onConfirm();
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal title={title} onClose={onClose}>
+      <p className="text-sm text-slate-600">{body}</p>
+      {error && <p className="mt-2 text-xs font-semibold text-rose-600">{error}</p>}
+      <div className="mt-5 flex justify-end gap-2">
+        <button type="button" onClick={onClose} className="btn btn-soft">
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={run}
+          disabled={busy}
+          className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
+        >
+          {busy ? 'Working…' : confirmLabel}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Edit a class's basic fields (name, code, term, description, color, dates). */
+function ClassEditModal({ cls, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    name: cls?.name ?? '',
+    code: cls?.code ?? '',
+    term: cls?.term ?? '',
+    description: cls?.description ?? '',
+    color: cls?.color ?? '',
+    startDate: toDateInput(cls?.startDate),
+    endDate: toDateInput(cls?.endDate),
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await api.patch(`/api/classes/${cls.id}`, {
+        name: form.name.trim(),
+        code: form.code.trim() || null,
+        term: form.term.trim() || null,
+        description: form.description.trim() || null,
+        color: form.color.trim() || null,
+        startDate: form.startDate ? dateInputToISO(form.startDate) : null,
+        endDate: form.endDate ? dateInputToISO(form.endDate) : null,
+      });
+      await onSaved();
+    } catch (err) {
+      setError(errorMessage(err));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Edit class" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <Input label="Name" value={form.name} onChange={update('name')} required />
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Code" value={form.code} onChange={update('code')} placeholder="CS 250" />
+          <Input label="Term" value={form.term} onChange={update('term')} placeholder="Fall 2026" />
+        </div>
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-ink">Description</span>
+          <textarea
+            value={form.description}
+            onChange={update('description')}
+            rows={3}
+            className="field"
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="Start date" type="date" value={form.startDate} onChange={update('startDate')} />
+          <Input label="End date" type="date" value={form.endDate} onChange={update('endDate')} />
+        </div>
+        {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
+        <ModalActions saving={saving} onClose={onClose} label="Save changes" />
+      </form>
+    </Modal>
   );
 }
 

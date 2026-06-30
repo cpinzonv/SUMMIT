@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -16,18 +16,46 @@ export default function DashboardPage() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [archivedNotice, setArchivedNotice] = useState(0);
+  // Auto-archive runs once per dashboard load. Holding the in-flight promise in
+  // a ref makes both React StrictMode mounts await the SAME archive call, so the
+  // class list is always loaded AFTER expired classes are archived (no stale
+  // rows) and the "semester ended" notice fires exactly once.
+  const archivePromise = useRef(null);
 
   useEffect(() => {
     let active = true;
-    api
-      .get('/api/classes')
-      .then((res) => active && setClasses(res.data.classes))
-      .catch((err) => active && setError(errorMessage(err)))
-      .finally(() => active && setLoading(false));
+    (async () => {
+      if (!archivePromise.current) {
+        archivePromise.current = (async () => {
+          try {
+            const { data: aa } = await api.post('/api/classes/auto-archive');
+            if (aa.count > 0) setArchivedNotice(aa.count);
+          } catch {
+            // Non-fatal — fall through and still load the dashboard.
+          }
+        })();
+      }
+      await archivePromise.current;
+      try {
+        const res = await api.get('/api/classes');
+        if (active) setClasses(res.data.classes);
+      } catch (err) {
+        if (active) setError(errorMessage(err));
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
     return () => {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!archivedNotice) return undefined;
+    const t = setTimeout(() => setArchivedNotice(0), 6000);
+    return () => clearTimeout(t);
+  }, [archivedNotice]);
 
   const graded = classes.filter((c) => c.currentGrade?.percentage != null);
   const average =
@@ -53,6 +81,20 @@ export default function DashboardPage() {
           + New class
         </Link>
       </div>
+
+      {archivedNotice > 0 && (
+        <div className="mb-6 flex items-center gap-3 rounded-2xl border border-white/60 bg-white/55 px-4 py-3 text-sm backdrop-blur">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-white" style={{ backgroundImage: 'var(--grad-teal-purple)' }}>
+            🗄
+          </span>
+          <span className="font-medium text-ink">
+            {archivedNotice} {archivedNotice === 1 ? 'class' : 'classes'} archived as the semester ended.
+          </span>
+          <Link to="/archives" className="ml-auto text-xs font-semibold text-brand-600 hover:underline">
+            View archives →
+          </Link>
+        </div>
+      )}
 
       {loading ? (
         <Spinner label="Loading classes…" />

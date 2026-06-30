@@ -203,3 +203,27 @@ export async function archiveClass(userId, classId) {
     return { class: toPublicClass(archivedClass), archive: archiveRows[0] };
   });
 }
+
+/** Permanently delete a class the user owns (assignments/grades/notes/attendance cascade). */
+export async function deleteClass(userId, classId) {
+  await getOwnedClass(userId, classId); // 404s if not owned
+  await query('DELETE FROM classes WHERE id = $1', [classId]);
+}
+
+/**
+ * Archive every active class whose end_date is in the past. Returns the list of
+ * classes that were archived (id + name), for a "semester ended" notice.
+ */
+export async function autoArchiveExpired(userId) {
+  const { rows } = await query(
+    `SELECT id, name FROM classes
+     WHERE user_id = $1 AND archived_at IS NULL
+       AND end_date IS NOT NULL AND end_date < CURRENT_DATE
+     ORDER BY end_date`,
+    [userId],
+  );
+  for (const row of rows) {
+    await archiveClass(userId, row.id);
+  }
+  return rows.map((r) => ({ id: r.id, name: r.name }));
+}

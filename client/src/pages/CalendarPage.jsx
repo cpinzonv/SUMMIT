@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -38,6 +38,15 @@ const addDays = (d, n) => {
 };
 const startOfWeek = (d) => addDays(d, -d.getDay());
 
+const toDateInput = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
+};
+const dateInputToISO = (v) => new Date(`${v}T00:00:00`).toISOString();
+
 // Sort by priority (High → Medium → Low → None), then by date ascending.
 function sortEvents(evs) {
   return [...evs].sort((a, b) => {
@@ -52,7 +61,8 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [view, setView] = useState(() => preferences.defaultCalendarView || 'month');
-  const [selected, setSelected] = useState(null);
+  const [selected, setSelected] = useState(null); // details modal (single click)
+  const [editing, setEditing] = useState(null); // edit modal (double click)
   const [toast, setToast] = useState(null);
   const [cursor, setCursor] = useState(() => {
     const n = new Date();
@@ -65,40 +75,51 @@ export default function CalendarPage() {
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const { data } = await api.get('/api/classes');
-        const lists = await Promise.all(
-          data.classes.map((c) =>
-            api
-              .get(`/api/classes/${c.id}/assignments`)
-              .then((r) => ({ cls: c, assignments: r.data.assignments })),
-          ),
-        );
-        if (!active) return;
-        const evs = [];
-        lists.forEach(({ cls, assignments }, i) => {
-          const gradient = classGradient(cls, i);
-          assignments.forEach((a) => {
-            if (a.dueDate)
-              evs.push({ id: `${a.id}:due`, date: new Date(a.dueDate), type: 'due', a, cls, gradient });
-            if (a.plannedDate)
-              evs.push({ id: `${a.id}:planned`, date: new Date(a.plannedDate), type: 'planned', a, cls, gradient });
-          });
+  const loadEvents = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/classes');
+      const lists = await Promise.all(
+        data.classes.map((c) =>
+          api
+            .get(`/api/classes/${c.id}/assignments`)
+            .then((r) => ({ cls: c, assignments: r.data.assignments })),
+        ),
+      );
+      const evs = [];
+      lists.forEach(({ cls, assignments }, i) => {
+        const gradient = classGradient(cls, i);
+        assignments.forEach((a) => {
+          if (a.dueDate)
+            evs.push({ id: `${a.id}:due`, date: new Date(a.dueDate), type: 'due', a, cls, gradient });
+          if (a.plannedDate)
+            evs.push({ id: `${a.id}:planned`, date: new Date(a.plannedDate), type: 'planned', a, cls, gradient });
         });
-        setEvents(evs);
-      } catch (err) {
-        if (active) setError(errorMessage(err));
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
+      });
+      setEvents(evs);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
+
+  // Single click → details; double click → edit. Debounce so a double click
+  // doesn't briefly flash the details modal.
+  const clickTimer = useRef(null);
+  const act = {
+    open: (ev) => {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = setTimeout(() => setSelected(ev), 220);
+    },
+    edit: (ev) => {
+      clearTimeout(clickTimer.current);
+      setEditing(ev);
+    },
+  };
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -253,14 +274,25 @@ export default function CalendarPage() {
       ) : error ? (
         <ErrorBanner message={error} />
       ) : view === 'month' ? (
-        <MonthView cursor={cursor} byDay={byDay} todayKey={todayKey} onSelect={setSelected} dnd={dnd} />
+        <MonthView cursor={cursor} byDay={byDay} todayKey={todayKey} act={act} dnd={dnd} />
       ) : view === 'week' ? (
-        <WeekView cursor={cursor} byDay={byDay} todayKey={todayKey} onSelect={setSelected} dnd={dnd} />
+        <WeekView cursor={cursor} byDay={byDay} todayKey={todayKey} act={act} dnd={dnd} />
       ) : (
-        <DayView cursor={cursor} byDay={byDay} onSelect={setSelected} />
+        <DayView cursor={cursor} byDay={byDay} act={act} />
       )}
 
       {selected && <EventModal ev={selected} onClose={() => setSelected(null)} />}
+      {editing && (
+        <AssignmentEditModal
+          ev={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(msg) => {
+            setEditing(null);
+            setToast({ type: 'success', msg });
+            loadEvents();
+          }}
+        />
+      )}
       {toast && <Toast toast={toast} />}
     </div>
   );
@@ -287,7 +319,7 @@ function Dot({ p }) {
 }
 
 /* ---- Month ------------------------------------------------------------- */
-function MonthView({ cursor, byDay, todayKey, onSelect, dnd }) {
+function MonthView({ cursor, byDay, todayKey, act, dnd }) {
   const cells = useMemo(() => {
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     start.setDate(1 - start.getDay());
@@ -325,7 +357,7 @@ function MonthView({ cursor, byDay, todayKey, onSelect, dnd }) {
               </div>
               <div className="space-y-1">
                 {evs.slice(0, 3).map((ev) => (
-                  <MonthChip key={ev.id} ev={ev} onSelect={onSelect} dnd={dnd} />
+                  <MonthChip key={ev.id} ev={ev} act={act} dnd={dnd} />
                 ))}
                 {evs.length > 3 && <div className="text-[10px] text-muted">+{evs.length - 3} more</div>}
               </div>
@@ -337,7 +369,7 @@ function MonthView({ cursor, byDay, todayKey, onSelect, dnd }) {
   );
 }
 
-function MonthChip({ ev, onSelect, dnd }) {
+function MonthChip({ ev, act, dnd }) {
   const isDue = ev.type === 'due';
   const draggable = !ev.cls.archivedAt;
   const isDragging = dnd.draggingId === ev.id;
@@ -347,8 +379,9 @@ function MonthChip({ ev, onSelect, dnd }) {
       draggable={draggable}
       onDragStart={dnd.startDrag(ev)}
       onDragEnd={dnd.endDrag}
-      onClick={() => onSelect(ev)}
-      title={`${ev.a.title} — ${ev.cls.name} (${isDue ? 'due' : 'planned'}, ${PRIORITY_LABEL[ev.a.priority || 'none']} priority)`}
+      onClick={() => act.open(ev)}
+      onDoubleClick={() => act.edit(ev)}
+      title={`${ev.a.title} — ${ev.cls.name} (${isDue ? 'due' : 'planned'}, ${PRIORITY_LABEL[ev.a.priority || 'none']} priority) · double-click to edit`}
       className={`flex w-full items-center gap-1 truncate rounded-lg px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-sm transition hover:brightness-105 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 ring-2 ring-white/70' : ''}`}
       style={{ backgroundImage: ev.gradient, opacity: isDragging ? 0.4 : isDue ? 1 : 0.42 }}
     >
@@ -359,7 +392,7 @@ function MonthChip({ ev, onSelect, dnd }) {
 }
 
 /* ---- Week -------------------------------------------------------------- */
-function WeekView({ cursor, byDay, todayKey, onSelect, dnd }) {
+function WeekView({ cursor, byDay, todayKey, act, dnd }) {
   const ws = startOfWeek(cursor);
   const days = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
   return (
@@ -390,7 +423,7 @@ function WeekView({ cursor, byDay, todayKey, onSelect, dnd }) {
                 {evs.length === 0 ? (
                   <p className="px-1 py-2 text-center text-[10px] text-muted/60">—</p>
                 ) : (
-                  evs.map((ev) => <EventRow key={ev.id} ev={ev} onSelect={onSelect} dnd={dnd} />)
+                  evs.map((ev) => <EventRow key={ev.id} ev={ev} act={act} dnd={dnd} />)
                 )}
               </div>
             </div>
@@ -401,7 +434,7 @@ function WeekView({ cursor, byDay, todayKey, onSelect, dnd }) {
   );
 }
 
-function EventRow({ ev, onSelect, dnd }) {
+function EventRow({ ev, act, dnd }) {
   const isDue = ev.type === 'due';
   const draggable = !ev.cls.archivedAt;
   const isDragging = dnd.draggingId === ev.id;
@@ -411,7 +444,8 @@ function EventRow({ ev, onSelect, dnd }) {
       draggable={draggable}
       onDragStart={dnd.startDrag(ev)}
       onDragEnd={dnd.endDrag}
-      onClick={() => onSelect(ev)}
+      onClick={() => act.open(ev)}
+      onDoubleClick={() => act.edit(ev)}
       className={`flex w-full items-center gap-2 rounded-lg border border-white/50 bg-white/45 px-2 py-1.5 text-left transition hover:bg-white/75 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 shadow-lg ring-2 ring-brand-400/50' : ''}`}
     >
       <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[ev.a.priority || 'none']}`} />
@@ -427,7 +461,7 @@ function EventRow({ ev, onSelect, dnd }) {
 }
 
 /* ---- Day --------------------------------------------------------------- */
-function DayView({ cursor, byDay, onSelect }) {
+function DayView({ cursor, byDay, act }) {
   const evs = sortEvents(byDay.get(localKey(cursor)) || []);
   if (evs.length === 0) {
     return (
@@ -439,19 +473,20 @@ function DayView({ cursor, byDay, onSelect }) {
   return (
     <div className="glass-card space-y-2 p-4">
       {evs.map((ev) => (
-        <DayRow key={ev.id} ev={ev} onSelect={onSelect} />
+        <DayRow key={ev.id} ev={ev} act={act} />
       ))}
     </div>
   );
 }
 
-function DayRow({ ev, onSelect }) {
+function DayRow({ ev, act }) {
   const isDue = ev.type === 'due';
   const p = ev.a.priority || 'none';
   return (
     <button
       type="button"
-      onClick={() => onSelect(ev)}
+      onClick={() => act.open(ev)}
+      onDoubleClick={() => act.edit(ev)}
       className="flex w-full items-center gap-3 rounded-xl border border-white/50 bg-white/45 px-4 py-3 text-left transition hover:bg-white/75"
     >
       <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_DOT[p]}`} />
@@ -541,5 +576,120 @@ function DetailRow({ label, value }) {
       <span className="text-muted">{label}</span>
       <span className="font-semibold text-ink">{value}</span>
     </div>
+  );
+}
+
+/* ---- Quick edit (double-click) ----------------------------------------- */
+function AssignmentEditModal({ ev, onClose, onSaved }) {
+  const { a, cls } = ev;
+  const [form, setForm] = useState({
+    description: a.description || '',
+    dueDate: toDateInput(a.dueDate),
+    plannedDate: toDateInput(a.plannedDate),
+    pointsEarned: a.grade?.pointsEarned ?? '',
+    pointsPossible: a.grade?.pointsPossible ?? a.pointValue ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    setErr('');
+    try {
+      // Patch the assignment fields. Send null to clear a previously-set date.
+      await api.patch(`/api/assignments/${a.id}`, {
+        description: form.description.trim() || null,
+        dueDate: form.dueDate ? dateInputToISO(form.dueDate) : null,
+        plannedDate: form.plannedDate ? dateInputToISO(form.plannedDate) : null,
+      });
+      // Optionally record/update a grade if a score was entered.
+      if (form.pointsEarned !== '' && form.pointsEarned !== null) {
+        const pointsEarned = Number(form.pointsEarned);
+        const pointsPossible = form.pointsPossible === '' ? undefined : Number(form.pointsPossible);
+        if (Number.isNaN(pointsEarned)) throw new Error('Grade must be a number');
+        await api.post('/api/grades', {
+          assignmentId: a.id,
+          pointsEarned,
+          ...(pointsPossible !== undefined ? { pointsPossible } : {}),
+        });
+      }
+      onSaved(`Saved “${a.title}”`);
+    } catch (e2) {
+      setErr(errorMessage(e2, 'Could not save changes'));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={a.title} onClose={onClose}>
+      <form onSubmit={save} className="space-y-4 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="h-3 w-3 rounded-full" style={{ backgroundImage: ev.gradient }} />
+          <span className="font-semibold text-ink">{cls.name}</span>
+          {cls.code && <span className="text-muted">· {cls.code}</span>}
+        </div>
+
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-ink">Description</span>
+          <textarea
+            value={form.description}
+            onChange={set('description')}
+            rows={3}
+            placeholder="Add notes or details…"
+            className="field"
+          />
+        </label>
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-ink">Due date</span>
+            <input type="date" value={form.dueDate} onChange={set('dueDate')} className="field" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-ink">Planned date</span>
+            <input type="date" value={form.plannedDate} onChange={set('plannedDate')} className="field" />
+          </label>
+        </div>
+
+        <div>
+          <span className="mb-1 block text-xs font-semibold text-ink">Grade</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={form.pointsEarned}
+              onChange={set('pointsEarned')}
+              placeholder="Earned"
+              className="field"
+            />
+            <span className="text-muted">/</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={form.pointsPossible}
+              onChange={set('pointsPossible')}
+              placeholder="Possible"
+              className="field"
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-muted">Leave blank to skip grading.</p>
+        </div>
+
+        {err && <p className="text-xs font-semibold text-rose-600">{err}</p>}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="btn btn-soft">
+            Close
+          </button>
+          <button type="submit" disabled={saving} className="btn btn-primary">
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }

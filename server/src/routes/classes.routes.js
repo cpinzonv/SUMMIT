@@ -40,6 +40,9 @@ router.post(
   asyncHandler(syllabus.extractSyllabus),
 );
 
+// Archive all classes whose end_date has passed (called on dashboard load).
+router.post('/auto-archive', asyncHandler(classes.autoArchive));
+
 router.post('/', validate(classes.createClassSchema), asyncHandler(classes.create));
 router.get('/', asyncHandler(classes.list));
 
@@ -48,6 +51,12 @@ router.patch(
   validate(classes.classIdParam, 'params'),
   validate(classes.updateClassSchema),
   asyncHandler(classes.update),
+);
+
+router.delete(
+  '/:id',
+  validate(classes.classIdParam, 'params'),
+  asyncHandler(classes.remove),
 );
 
 router.put(
