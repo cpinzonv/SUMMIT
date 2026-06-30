@@ -37,7 +37,9 @@ function StatChip({ label, value, accent }) {
 
 export default function LearnPage() {
   const { user } = useAuth();
-  const isPro = user?.plan === 'pro' || user?.role === 'admin';
+  // Premium access is computed server-side (admin/demo/is_premium/active pro).
+  const isPro = Boolean(user?.premium);
+  const [billingEnabled, setBillingEnabled] = useState(false);
 
   const [classes, setClasses] = useState([]);
   const [stats, setStats] = useState(null);
@@ -72,6 +74,8 @@ export default function LearnPage() {
         setLoading(false);
       }
     })();
+    // Whether the paywall can sell subscriptions yet (drives the upgrade CTA).
+    api.get('/api/features/status').then((r) => setBillingEnabled(Boolean(r.data.billingEnabled))).catch(() => {});
   }, [refreshStats]);
 
   if (loading) return <Spinner label="Loading your study hub…" />;
@@ -90,7 +94,7 @@ export default function LearnPage() {
       );
     }
     if (!classId) return <EmptyState title="No classes yet">Add a class first to start studying.</EmptyState>;
-    if (locked) return <UpgradePanel feature={activeTab.label} />;
+    if (locked) return <UpgradePanel feature={activeTab.label} billingEnabled={billingEnabled} />;
     const props = { classId, className: selectedClass?.name, flash, refreshStats };
     switch (tab) {
       case 'study': return <FlashcardsTab {...props} />;

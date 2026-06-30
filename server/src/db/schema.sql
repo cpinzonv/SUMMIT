@@ -49,6 +49,18 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 -- UPDATE users SET plan='pro' ...; admins are treated as pro by premiumGate.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
 
+-- Feature gating / subscriptions. role may also be 'demo' (full access, like
+-- admin). is_premium is a manual override; subscription_* + stripe_* back the
+-- real billing flow (BILLING_ENABLED). Premium access = role admin/demo OR
+-- is_premium OR an active pro tier (see featureGating.service.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_premium             BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_tier      TEXT NOT NULL DEFAULT 'free';   -- free | pro | none
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status    TEXT NOT NULL DEFAULT 'none';   -- active | cancelled | expired | none
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id     TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_price_id        TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_start_date TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_end_date   TIMESTAMPTZ;
+
 -- OAuth social login (Google / Apple / GitHub). A user may sign up with email
 -- OR a provider, and may LINK additional providers to one account (matched by
 -- verified email). auth_method records how the account was first created.

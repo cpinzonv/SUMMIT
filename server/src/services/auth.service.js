@@ -9,6 +9,7 @@ import {
   verifyTwoFactorChallenge,
 } from '../utils/jwt.js';
 import { verifyLoginCode } from './twofa.service.js';
+import { hasPremiumAccess } from './featureGating.service.js';
 
 const SALT_ROUNDS = 12;
 
@@ -23,6 +24,12 @@ function toPublicUser(row) {
     preferences: row.preferences ?? {},
     role: row.role || 'user',
     plan: row.plan || 'free',
+    // Feature gating: `premium` is the computed access flag (admin/demo/is_premium/
+    // active pro); the rest expose the raw subscription state for the Settings/paywall UI.
+    premium: hasPremiumAccess(row),
+    isPremium: Boolean(row.is_premium),
+    subscriptionTier: row.subscription_tier || 'free',
+    subscriptionStatus: row.subscription_status || 'none',
     twoFactorEnabled: Boolean(row.totp_enabled),
     // How the account was first created, whether it can log in with a password,
     // and which social providers are linked (drives the Settings UI / future

@@ -12,10 +12,12 @@ async function main() {
   await withTransaction(async (client) => {
     const passwordHash = await bcrypt.hash('password123', 12);
 
+    // The demo account is role 'demo' so it has full access to premium Learn
+    // features (the showcase account bypasses the paywall, like admins do).
     const { rows: userRows } = await client.query(
-      `INSERT INTO users (email, password_hash, full_name, school)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name
+      `INSERT INTO users (email, password_hash, full_name, school, role)
+       VALUES ($1, $2, $3, $4, 'demo')
+       ON CONFLICT (email) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'demo'
        RETURNING id`,
       [DEMO_EMAIL, passwordHash, 'Demo Student', 'Example University'],
     );

@@ -61,6 +61,11 @@ export const env = {
   // One-time token for the first-admin bootstrap endpoint. Unset = disabled.
   adminSetupToken: optional('SETUP_TOKEN', ''),
 
+  // Billing master switch. false = premium features are gated and the paywall is
+  // "coming soon" (no checkout yet); true = subscriptions can be sold (Stripe,
+  // future). The access gate itself is always enforced (admin/demo/premium bypass).
+  billingEnabled: optional('BILLING_ENABLED', 'false') === 'true',
+
   // OAuth social login. Each provider is OPTIONAL — its button/endpoint only
   // activates when its credentials are present (same optional-feature pattern as
   // ANTHROPIC_API_KEY / the LMS providers). isOAuthProviderConfigured() below
