@@ -246,14 +246,9 @@ export default function ClassDetailPage() {
       <section className="mt-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">Assignments</h2>
-          <div className="flex gap-2">
-            <button onClick={() => setModal({ type: 'gradeSim' })} className="btn btn-soft">
-              🎯 What if?
-            </button>
-            <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
-              + Add assignment
-            </button>
-          </div>
+          <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
+            + Add assignment
+          </button>
         </div>
 
         {assignments.length === 0 ? (
@@ -261,6 +256,7 @@ export default function ClassDetailPage() {
             Use “Add assignment” to create your first one.
           </EmptyState>
         ) : (
+          <>
           <div className="glass-card overflow-hidden">
             <table className="w-full text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted">
@@ -341,6 +337,12 @@ export default function ClassDetailPage() {
               </tbody>
             </table>
           </div>
+          <div className="mt-3 flex justify-end">
+            <button onClick={() => setModal({ type: 'gradeSim' })} className="btn btn-soft">
+              What if?
+            </button>
+          </div>
+          </>
         )}
       </section>
       )}
