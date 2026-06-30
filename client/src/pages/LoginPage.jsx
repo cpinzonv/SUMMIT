@@ -12,7 +12,13 @@ export default function LoginPage() {
   const from = location.state?.from?.pathname || '/';
 
   const [mode, setMode] = useState('login'); // 'login' | 'register'
-  const [form, setForm] = useState({ email: 'demo@student.app', password: 'password123', fullName: '' });
+  const [form, setForm] = useState({
+    email: 'demo@student.app',
+    password: 'password123',
+    fullName: '',
+    referralSource: '',
+    referralSourceDetail: '',
+  });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -34,6 +40,10 @@ export default function LoginPage() {
           email: form.email,
           password: form.password,
           fullName: form.fullName,
+          ...(form.referralSource ? { referralSource: form.referralSource } : {}),
+          ...(form.referralSource === 'other' && form.referralSourceDetail
+            ? { referralSourceDetail: form.referralSourceDetail }
+            : {}),
         });
       }
       navigate(from, { replace: true });
@@ -87,6 +97,32 @@ export default function LoginPage() {
           )}
           <Field label="Email" type="email" value={form.email} onChange={update('email')} required />
           <Field label="Password" type="password" value={form.password} onChange={update('password')} required />
+
+          {mode === 'register' && (
+            <>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-ink">How'd you hear about us?</span>
+                <select value={form.referralSource} onChange={update('referralSource')} className="field">
+                  <option value="">Select one (optional)</option>
+                  <option value="friend">Friend / Referral</option>
+                  <option value="google_search">Google Search</option>
+                  <option value="social_media">Social Media</option>
+                  <option value="school">School / Campus</option>
+                  <option value="app_store">App Store</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              {form.referralSource === 'other' && (
+                <Field
+                  label="Tell us more"
+                  value={form.referralSourceDetail}
+                  onChange={update('referralSourceDetail')}
+                  placeholder="Where did you find Summit?"
+                  maxLength={200}
+                />
+              )}
+            </>
+          )}
 
           <button type="submit" disabled={submitting} className="btn btn-primary w-full">
             {submitting

@@ -52,7 +52,24 @@ async function issueTokens(userId) {
   return { accessToken, refreshToken: raw };
 }
 
-export async function register({ email, password, fullName, school, timezone }) {
+/** Signup attribution: count of users by referral_source (nulls grouped as 'unknown'). */
+export async function referralSourceCounts() {
+  const { rows } = await query(
+    `SELECT COALESCE(referral_source, 'unknown') AS source, count(*)::int AS count
+     FROM users GROUP BY COALESCE(referral_source, 'unknown') ORDER BY count DESC`,
+  );
+  return rows;
+}
+
+export async function register({
+  email,
+  password,
+  fullName,
+  school,
+  timezone,
+  referralSource,
+  referralSourceDetail,
+}) {
   const existing = await query('SELECT 1 FROM users WHERE email = $1', [email]);
   if (existing.rowCount > 0) {
     throw AppError.conflict('An account with that email already exists');
@@ -60,10 +77,18 @@ export async function register({ email, password, fullName, school, timezone }) 
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const { rows } = await query(
-    `INSERT INTO users (email, password_hash, full_name, school, timezone)
-     VALUES ($1, $2, $3, $4, COALESCE($5, 'UTC'))
+    `INSERT INTO users (email, password_hash, full_name, school, timezone, referral_source, referral_source_detail)
+     VALUES ($1, $2, $3, $4, COALESCE($5, 'UTC'), $6, $7)
      RETURNING *`,
-    [email, passwordHash, fullName, school ?? null, timezone ?? null],
+    [
+      email,
+      passwordHash,
+      fullName,
+      school ?? null,
+      timezone ?? null,
+      referralSource ?? null,
+      referralSource === 'other' ? referralSourceDetail ?? null : null,
+    ],
   );
 
   const user = rows[0];

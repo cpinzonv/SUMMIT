@@ -8,6 +8,7 @@ import notesRoutes from './notes.routes.js';
 import attendanceRoutes from './attendance.routes.js';
 import planRoutes from './plan.routes.js';
 import userRoutes from './user.routes.js';
+import adminRoutes from './admin.routes.js';
 import lmsRoutes from './lms.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -18,6 +19,7 @@ const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/user', userRoutes);
+router.use('/admin', adminRoutes);
 
 // LMS integrations. The same provider-scoped router is mounted once per provider
 // (Canvas, Blackboard, Google Classroom, Brightspace, Moodle, Sakai). A small

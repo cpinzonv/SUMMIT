@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS users (
 -- User settings (theme, color scheme, font size, default views, etc.).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- How the user discovered Summit (signup attribution). One of a small enum set;
+-- 'other' may carry a free-text detail in referral_source_detail.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_source TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_source_detail TEXT;
+
 -- LMS integration (Canvas today; Blackboard/Brightspace/Moodle reuse the same
 -- columns — see services/lms/). Tokens are stored ENCRYPTED (AES-256-GCM); the
 -- app never persists them in plaintext. lms_domain is the per-institution host
