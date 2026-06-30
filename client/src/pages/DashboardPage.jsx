@@ -12,6 +12,7 @@ import {
   computeGpa,
 } from '../components/ui';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
+import { dueStatus, countdownTone } from '../lib/dueDate';
 
 export default function DashboardPage() {
   const { preferences, refreshUser } = useAuth();
@@ -312,6 +313,11 @@ function ClassCard({ cls, index, animating = false, onArchive }) {
                 {cls.overdueCount} overdue
               </span>
             )}
+            {cls.nextDueDate && (
+              <p className={`mt-1 text-[11px] font-semibold ${countdownTone(dueStatus(cls.nextDueDate))}`}>
+                Next due: {dueStatus(cls.nextDueDate).countdownLabel}
+              </p>
+            )}
           </div>
         </div>
         <div className="text-right">
@@ -356,6 +362,11 @@ function ClassRow({ cls, index, animating = false, onArchive }) {
         </div>
         <div className="truncate text-xs text-muted">
           {[cls.code, cls.term].filter(Boolean).join(' · ') || 'No code'}
+          {cls.nextDueDate && (
+            <span className={`ml-2 font-semibold ${countdownTone(dueStatus(cls.nextDueDate))}`}>
+              · {dueStatus(cls.nextDueDate).countdownLabel}
+            </span>
+          )}
         </div>
       </div>
       {cls.attendanceRate != null && (

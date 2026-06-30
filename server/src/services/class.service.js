@@ -137,6 +137,7 @@ export async function listCurrentClasses(userId) {
     rows.map(async (row) => {
       const currentGrade = await computeClassGrade(row.id);
       const overdueCount = await countOverdueAssignments(row.id);
+      const nextDueDate = await nextUpcomingDue(row.id);
       return {
         ...toPublicClass(row),
         currentGrade,
@@ -144,6 +145,8 @@ export async function listCurrentClasses(userId) {
         attendanceRate: currentGrade.attendancePercentage,
         // Past-due work not yet submitted/graded — drives the dashboard warning.
         overdueCount,
+        // Soonest upcoming deadline — drives the dashboard "due in N days" hint.
+        nextDueDate,
       };
     }),
   );
@@ -158,6 +161,18 @@ async function countOverdueAssignments(classId) {
     [classId],
   );
   return rows[0]?.n ?? 0;
+}
+
+/** The soonest upcoming due date for a class (not yet submitted/graded), or null. */
+async function nextUpcomingDue(classId) {
+  const { rows } = await query(
+    `SELECT due_date FROM assignments
+     WHERE class_id = $1 AND due_date IS NOT NULL AND due_date >= now()
+       AND status NOT IN ('submitted', 'graded')
+     ORDER BY due_date ASC LIMIT 1`,
+    [classId],
+  );
+  return rows[0]?.due_date ?? null;
 }
 
 /**

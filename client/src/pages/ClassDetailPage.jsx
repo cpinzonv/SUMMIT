@@ -12,7 +12,7 @@ import {
   classGradient,
 } from '../components/ui';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
-import { dueStatus, isDone } from '../lib/dueDate';
+import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
 import { ClassNotes } from '../components/ClassNotes';
 import { ClassAttendance } from '../components/ClassAttendance';
 
@@ -274,7 +274,12 @@ export default function ClassDetailPage() {
                         {a.category || a.status?.replace('_', ' ')}
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-slate-600">{fmtDate(a.dueDate)}</td>
+                    <td className="px-5 py-3 text-slate-600">
+                      {fmtDate(a.dueDate)}
+                      {st.hasDue && !isDone(a) && !overdue && (
+                        <div className={`text-[11px] font-semibold ${countdownTone(st)}`}>{st.countdownLabel}</div>
+                      )}
+                    </td>
                     <td className="px-5 py-3 text-muted">{fmtDate(a.plannedDate)}</td>
                     <td className="px-5 py-3 text-muted">{a.pointValue ?? '—'}</td>
                     <td className="px-5 py-3">

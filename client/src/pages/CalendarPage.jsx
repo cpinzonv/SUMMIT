@@ -556,7 +556,23 @@ function EventModal({ ev, onClose }) {
         />
         <DetailRow label="Category" value={a.category || '—'} />
         <DetailRow label="Status" value={a.status?.replace('_', ' ')} />
-        <DetailRow label="Due date" value={fmtDateTime(a.dueDate)} />
+        <DetailRow
+          label="Due date"
+          value={
+            <span className="flex items-center gap-2">
+              {fmtDateTime(a.dueDate)}
+              {(() => {
+                const st = dueStatus(a.dueDate);
+                if (!st.hasDue || isDone(a)) return null;
+                return (
+                  <span className={`text-xs font-bold ${st.isPastDue ? 'text-rose-600' : 'text-muted'}`}>
+                    ({st.isPastDue ? st.lateLabel : st.countdownLabel})
+                  </span>
+                );
+              })()}
+            </span>
+          }
+        />
         <DetailRow label="Planned date" value={fmtDateTime(a.plannedDate)} />
         <DetailRow label="Point value" value={a.pointValue ?? '—'} />
         <DetailRow
