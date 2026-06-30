@@ -23,6 +23,16 @@ function toPublicUser(row) {
     preferences: row.preferences ?? {},
     role: row.role || 'user',
     twoFactorEnabled: Boolean(row.totp_enabled),
+    // How the account was first created, whether it can log in with a password,
+    // and which social providers are linked (drives the Settings UI / future
+    // account-linking). Provider tokens/ids are never exposed beyond these flags.
+    authMethod: row.auth_method || 'email',
+    hasPassword: Boolean(row.password_hash),
+    linkedProviders: {
+      google: Boolean(row.google_id),
+      apple: Boolean(row.apple_id),
+      github: Boolean(row.github_id),
+    },
     // LMS connection status only — tokens are never exposed.
     lms: {
       connected: Boolean(row.lms_connected),
@@ -55,6 +65,14 @@ async function issueTokens(userId) {
     [userId, hash, expiresAt],
   );
   return { accessToken, refreshToken: raw };
+}
+
+/**
+ * Issue a fresh access + refresh token pair for an already-authenticated user.
+ * Used by the OAuth flow, where the provider (not a password) proved identity.
+ */
+export async function issueTokensForUser(userId) {
+  return issueTokens(userId);
 }
 
 /** Signup attribution: count of users by referral_source (nulls grouped as 'unknown'). */
@@ -106,12 +124,13 @@ export async function login({ email, password }) {
   const user = rows[0];
 
   // Always run a hash comparison to avoid leaking whether the email exists via
-  // response timing.
-  const ok = user
+  // response timing. OAuth-only accounts have no password_hash — compare against
+  // a dummy so they fall through to the same generic error (no password login).
+  const ok = user?.password_hash
     ? await bcrypt.compare(password, user.password_hash)
     : await bcrypt.compare(password, '$2a$12$invalidinvalidinvalidinvalidinv');
 
-  if (!user || !ok) {
+  if (!user || !user.password_hash || !ok) {
     throw AppError.unauthorized('Invalid email or password');
   }
 

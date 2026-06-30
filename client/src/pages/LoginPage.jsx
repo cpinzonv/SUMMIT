@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { errorMessage } from '../api/client';
 import { ErrorBanner } from '../components/ui';
 import { MountainMark } from '../components/MountainMark';
+import { SocialAuthButtons } from '../components/SocialAuthButtons';
 
 export default function LoginPage() {
   const { user, login, completeTwoFactor, register, loading } = useAuth();
@@ -19,7 +20,8 @@ export default function LoginPage() {
     referralSource: '',
     referralSourceDetail: '',
   });
-  const [error, setError] = useState('');
+  // An OAuth attempt that failed bounces back to /login with a message in state.
+  const [error, setError] = useState(location.state?.oauthError || '');
   const [submitting, setSubmitting] = useState(false);
   const [twoFactor, setTwoFactor] = useState(null); // { challengeToken } when 2FA prompt is shown
   const [code, setCode] = useState('');
@@ -140,6 +142,8 @@ export default function LoginPage() {
         ) : (
         <form onSubmit={handleSubmit} className="glass-panel space-y-4 p-6">
           <ErrorBanner message={error} />
+
+          <SocialAuthButtons />
 
           {mode === 'register' && (
             <Field label="Full name" value={form.fullName} onChange={update('fullName')} required />

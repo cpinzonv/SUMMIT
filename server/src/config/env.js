@@ -29,6 +29,13 @@ export const env = {
     .map((o) => o.trim())
     .filter(Boolean),
 
+  // Public base URL of THIS server (used to build OAuth callback URLs that the
+  // provider redirects back to, e.g. `${serverUrl}/api/auth/google/callback`).
+  serverUrl: optional('SERVER_URL', `http://localhost:${optional('PORT', '4000')}`),
+  // Where the SPA lives — OAuth finishes by redirecting the browser here with
+  // tokens in the URL fragment (see routes/oauth.routes.js).
+  clientUrl: optional('CLIENT_URL', 'http://localhost:5173'),
+
   databaseUrl: required('DATABASE_URL'),
   databaseSsl: optional('DATABASE_SSL', 'false') === 'true',
 
@@ -45,6 +52,30 @@ export const env = {
 
   // One-time token for the first-admin bootstrap endpoint. Unset = disabled.
   adminSetupToken: optional('SETUP_TOKEN', ''),
+
+  // OAuth social login. Each provider is OPTIONAL — its button/endpoint only
+  // activates when its credentials are present (same optional-feature pattern as
+  // ANTHROPIC_API_KEY / the LMS providers). isOAuthProviderConfigured() below
+  // reports which are live so the client can show only those buttons.
+  oauth: {
+    google: {
+      clientId: optional('GOOGLE_OAUTH_CLIENT_ID', ''),
+      clientSecret: optional('GOOGLE_OAUTH_CLIENT_SECRET', ''),
+    },
+    github: {
+      clientId: optional('GITHUB_OAUTH_CLIENT_ID', ''),
+      clientSecret: optional('GITHUB_OAUTH_CLIENT_SECRET', ''),
+    },
+    apple: {
+      // Apple's "Service ID" is the OAuth client_id; the client secret is an
+      // ES256 JWT signed from the .p8 key (passport-apple builds it for us).
+      clientId: optional('APPLE_OAUTH_CLIENT_ID', ''),
+      teamId: optional('APPLE_OAUTH_TEAM_ID', ''),
+      keyId: optional('APPLE_OAUTH_KEY_ID', ''),
+      // The .p8 private key contents. Newlines may be escaped as \n in the env.
+      privateKey: optional('APPLE_OAUTH_PRIVATE_KEY', '').replace(/\\n/g, '\n'),
+    },
+  },
 
   // Symmetric key (64 hex chars) for encrypting secrets at rest — LMS OAuth
   // tokens AND 2FA secrets/backup codes. Prefers APP_ENCRYPTION_KEY, falling
@@ -104,6 +135,21 @@ env.lms.canvas = env.lms.providers.canvas;
 /** True when the named provider should use the in-memory mock. */
 export function providerUsesMock(key) {
   return env.lms.useMock || Boolean(env.lms.providers[key]?.mock);
+}
+
+/** True when an OAuth social-login provider has the credentials it needs. */
+export function isOAuthProviderConfigured(provider) {
+  const c = env.oauth[provider];
+  if (!c) return false;
+  if (provider === 'apple') {
+    return Boolean(c.clientId && c.teamId && c.keyId && c.privateKey);
+  }
+  return Boolean(c.clientId && c.clientSecret);
+}
+
+/** The list of OAuth providers that are currently live (credentials present). */
+export function configuredOAuthProviders() {
+  return ['google', 'apple', 'github'].filter(isOAuthProviderConfigured);
 }
 
 export const isProd = env.nodeEnv === 'production';

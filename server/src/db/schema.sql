@@ -44,6 +44,23 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{
 -- Role for admin-only features (analytics). Everyone defaults to 'user'.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 
+-- OAuth social login (Google / Apple / GitHub). A user may sign up with email
+-- OR a provider, and may LINK additional providers to one account (matched by
+-- verified email). auth_method records how the account was first created.
+-- password_hash is nullable: OAuth-only accounts have no password until they
+-- set one. Each provider id is globally unique (partial index, NULLs allowed).
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_method     TEXT NOT NULL DEFAULT 'email';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id       TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_email    TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_id        TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_email     TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS github_id       TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS github_username TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_key ON users (google_id) WHERE google_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS users_apple_id_key  ON users (apple_id)  WHERE apple_id  IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS users_github_id_key ON users (github_id) WHERE github_id IS NOT NULL;
+
 -- Two-factor auth (TOTP). Secret + backup codes are stored ENCRYPTED at rest.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret  TEXT;     -- encrypted base32 secret
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;

@@ -94,6 +94,18 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  /**
+   * Finish an OAuth social login: the provider flow handed the SPA a fresh
+   * access + refresh token pair (via the callback page), so store them and load
+   * the profile. No password ever touches the client.
+   */
+  const loginWithTokens = useCallback(async ({ accessToken, refreshToken }) => {
+    setTokens({ accessToken, refreshToken });
+    const { data } = await api.get('/api/auth/me');
+    setUser(data.user);
+    return data.user;
+  }, []);
+
   const register = useCallback(async (payload) => {
     const { data } = await api.post('/api/auth/register', payload);
     setTokens(data);
@@ -140,7 +152,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, preferences, login, completeTwoFactor, register, logout, savePreferences, refreshUser }}
+      value={{ user, loading, preferences, login, completeTwoFactor, loginWithTokens, register, logout, savePreferences, refreshUser }}
     >
       {children}
     </AuthContext.Provider>

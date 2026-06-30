@@ -209,6 +209,47 @@
     cursor: default;
   }
 
+  /* OAuth social-login buttons — full-width, ~48px, provider-branded. */
+  .oauth-btn {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    height: 2.85rem;
+    border-radius: 0.95rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease,
+      filter 0.18s ease;
+  }
+  .oauth-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.02);
+    box-shadow: 0 10px 24px -12px rgba(40, 40, 60, 0.45);
+  }
+  /* Google — white card with a subtle border (per brand guidance). */
+  .oauth-google {
+    background: #fff;
+    color: #3c4043;
+    border: 1px solid rgba(60, 64, 67, 0.2);
+  }
+  /* Apple — black with white text. */
+  .oauth-apple {
+    background: #000;
+    color: #fff;
+    border: 1px solid #000;
+  }
+  /* GitHub — dark slate. */
+  .oauth-github {
+    background: #1f2328;
+    color: #fff;
+    border: 1px solid #1f2328;
+  }
+
   /* Dropdown menu item (e.g. class ⋮ menu) */
   .menu-item {
     display: flex;

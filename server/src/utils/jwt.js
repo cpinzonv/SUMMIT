@@ -30,6 +30,22 @@ export function verifyTwoFactorChallenge(token) {
 }
 
 /**
+ * Signed CSRF `state` for the OAuth redirect flow. Because Summit is stateless
+ * (no server session), the state itself is a short-lived signed token: we put it
+ * in the provider's `state` param and verify the value round-tripped on the
+ * callback. May carry a `link` userId for Settings → "link account".
+ */
+export function signOAuthState(payload = {}) {
+  return jwt.sign({ ...payload, typ: 'oauth_state' }, env.jwt.accessSecret, { expiresIn: '10m' });
+}
+
+export function verifyOAuthState(token) {
+  const payload = jwt.verify(token, env.jwt.accessSecret);
+  if (payload.typ !== 'oauth_state') throw new Error('Not an OAuth state token');
+  return payload;
+}
+
+/**
  * Generate a refresh token. We return the raw token (sent to the client) and a
  * SHA-256 hash (stored in the DB) so a database leak does not expose usable
  * tokens. Refresh tokens are opaque random strings, not JWTs.

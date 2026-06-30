@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes.js';
+import oauthRoutes from './oauth.routes.js';
 import classesRoutes from './classes.routes.js';
 import assignmentsRoutes from './assignments.routes.js';
 import gradesRoutes from './grades.routes.js';
@@ -22,6 +23,7 @@ import { PROVIDER_KEYS } from '../services/lms/index.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/auth', oauthRoutes); // OAuth social login (Google/Apple/GitHub)
 router.use('/user', userRoutes);
 router.use('/admin', adminRoutes);
 

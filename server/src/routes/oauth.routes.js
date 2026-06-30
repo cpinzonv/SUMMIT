@@ -1,0 +1,99 @@
+/**
+ * OAuth social-login routes (Google / Apple / GitHub).
+ *
+ * Flow (redirect style — see PART 7):
+ *   GET  /api/auth/:provider          → redirect to the provider with a signed
+ *                                        `state` (CSRF) param.
+ *   GET  /api/auth/:provider/callback → provider redirects back; passport
+ *   POST /api/auth/apple/callback        exchanges the code + gives us a profile;
+ *                                        we verify state, issue Summit JWTs, and
+ *                                        bounce the browser to the SPA with the
+ *                                        tokens in the URL FRAGMENT (never the
+ *                                        query string — fragments aren't logged
+ *                                        or sent to servers).
+ *
+ * Un-configured providers (no credentials) have no passport strategy; their
+ * routes redirect back to the login page with an error instead of 500ing.
+ */
+import { Router } from 'express';
+import { passport } from '../config/passport.js';
+import { env, configuredOAuthProviders, isOAuthProviderConfigured } from '../config/env.js';
+import { signOAuthState, verifyOAuthState } from '../utils/jwt.js';
+import { issueTokensForUser } from '../services/auth.service.js';
+
+const router = Router();
+
+const PROVIDERS = ['google', 'apple', 'github'];
+
+// Per-provider scopes (also set on the strategy; passed here so the redirect
+// carries them too). Apple requires `response_mode=form_post` when name/email
+// scopes are requested — passport-apple sets that for us.
+const SCOPES = {
+  google: ['profile', 'email'],
+  github: ['user:email'],
+  apple: ['name', 'email'],
+};
+
+/** Tells the client which social buttons to show (only configured providers). */
+router.get('/providers', (req, res) => {
+  res.json({ providers: configuredOAuthProviders() });
+});
+
+/** Send the browser to the SPA login page with a short error code in the hash. */
+function redirectError(res, code) {
+  res.redirect(`${env.clientUrl}/login#error=${encodeURIComponent(code)}`);
+}
+
+/** Send the browser to the SPA callback page with fresh tokens in the hash. */
+function redirectSuccess(res, { accessToken, refreshToken }) {
+  const params = new URLSearchParams({ accessToken, refreshToken });
+  res.redirect(`${env.clientUrl}/auth/callback#${params.toString()}`);
+}
+
+for (const provider of PROVIDERS) {
+  // --- Step 1: initiate -----------------------------------------------------
+  router.get(`/${provider}`, (req, res, next) => {
+    if (!isOAuthProviderConfigured(provider)) return redirectError(res, 'provider_unavailable');
+    const state = signOAuthState();
+    passport.authenticate(provider, {
+      session: false,
+      state,
+      scope: SCOPES[provider],
+    })(req, res, next);
+  });
+
+  // --- Step 2: callback -----------------------------------------------------
+  // GitHub/Google redirect with GET; Apple POSTs (form_post). Register both so
+  // a single handler covers every provider.
+  const handleCallback = (req, res, next) => {
+    if (!isOAuthProviderConfigured(provider)) return redirectError(res, 'provider_unavailable');
+
+    // Verify the CSRF state we issued in step 1 round-tripped intact.
+    const state = req.query.state || req.body?.state;
+    try {
+      verifyOAuthState(state);
+    } catch {
+      return redirectError(res, 'invalid_state');
+    }
+
+    passport.authenticate(provider, { session: false }, async (err, user) => {
+      // User denied consent, provider error, or no email to create an account.
+      if (err) {
+        const code = err.statusCode === 400 ? 'no_email' : 'oauth_failed';
+        return redirectError(res, code);
+      }
+      if (!user) return redirectError(res, 'access_denied');
+      try {
+        const tokens = await issueTokensForUser(user.id);
+        return redirectSuccess(res, tokens);
+      } catch {
+        return redirectError(res, 'token_error');
+      }
+    })(req, res, next);
+  };
+
+  router.get(`/${provider}/callback`, handleCallback);
+  if (provider === 'apple') router.post(`/${provider}/callback`, handleCallback);
+}
+
+export default router;
