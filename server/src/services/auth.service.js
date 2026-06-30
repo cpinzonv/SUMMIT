@@ -17,8 +17,21 @@ function toPublicUser(row) {
     fullName: row.full_name,
     school: row.school,
     timezone: row.timezone,
+    preferences: row.preferences ?? {},
     createdAt: row.created_at,
   };
+}
+
+/** Change a user's password after verifying the current one (bcrypt). */
+export async function changePassword(userId, currentPassword, newPassword) {
+  const { rows } = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+  if (!rows[0]) throw AppError.notFound('User not found');
+
+  const ok = await bcrypt.compare(currentPassword, rows[0].password_hash);
+  if (!ok) throw AppError.badRequest('Current password is incorrect');
+
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
 }
 
 async function issueTokens(userId) {

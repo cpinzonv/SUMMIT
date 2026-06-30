@@ -32,4 +32,11 @@ router.post(
 
 router.get('/me', requireAuth, asyncHandler(authController.me));
 
+router.patch(
+  '/password',
+  requireAuth,
+  validate(authController.changePasswordSchema),
+  asyncHandler(authController.changePassword),
+);
+
 export default router;

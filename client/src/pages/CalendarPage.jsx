@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import {
   Spinner,
   ErrorBanner,
@@ -46,10 +47,11 @@ function sortEvents(evs) {
 }
 
 export default function CalendarPage() {
+  const { preferences } = useAuth();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [view, setView] = useState('month');
+  const [view, setView] = useState(() => preferences.defaultCalendarView || 'month');
   const [cursor, setCursor] = useState(() => {
     const n = new Date();
     n.setHours(0, 0, 0, 0);

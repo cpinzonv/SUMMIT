@@ -276,3 +276,56 @@
     }
   }
 }
+
+/* ============================================================================
+   User-preference theming (set on <html> by AuthContext)
+   ============================================================================ */
+
+/* Font size — scales every rem-based size in the app. */
+html { font-size: 16px; }
+html[data-font='small'] { font-size: 14.5px; }
+html[data-font='large'] { font-size: 18px; }
+
+/* Compact mode — tighter spacing across the UI. */
+html[data-compact='true'] main { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+html[data-compact='true'] .glass-card { padding: 0.85rem; }
+html[data-compact='true'] .glass-panel { padding: 1rem; }
+html[data-compact='true'] .btn { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+html[data-compact='true'] .field { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+
+/* Dark theme — functional baseline (overrides the design tokens + glass). */
+html[data-theme='dark'] {
+  --color-cream: #1b1922;
+  --color-ink: #ece9f1;
+  --color-muted: #9a93a6;
+}
+html[data-theme='dark'] body {
+  background-color: #14121a;
+  background-image: radial-gradient(46rem 46rem at 4% -8%, rgba(255, 150, 70, 0.22), transparent 56%),
+    radial-gradient(48rem 48rem at 96% 4%, rgba(74, 150, 214, 0.2), transparent 58%),
+    radial-gradient(52rem 52rem at 78% 92%, rgba(255, 110, 110, 0.18), transparent 60%),
+    radial-gradient(46rem 46rem at 10% 96%, rgba(58, 190, 184, 0.18), transparent 60%);
+}
+html[data-theme='dark'] .glass-card,
+html[data-theme='dark'] .glass-panel {
+  background: rgba(40, 36, 50, 0.55);
+  box-shadow:
+    0 20px 54px -22px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+html[data-theme='dark'] .glass-card::after,
+html[data-theme='dark'] .glass-panel::after {
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.06) 40%, rgba(255, 160, 120, 0.3) 75%, rgba(90, 169, 214, 0.32) 100%);
+}
+html[data-theme='dark'] .field {
+  background: rgba(40, 36, 50, 0.6);
+  border-color: rgba(255, 160, 120, 0.25);
+}
+html[data-theme='dark'] .btn-soft {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--color-ink);
+}
+html[data-theme='dark'] header.bg-white\/45 {
+  background: rgba(28, 25, 36, 0.6);
+}

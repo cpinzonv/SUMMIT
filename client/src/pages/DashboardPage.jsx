@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import {
   Spinner,
   ErrorBanner,
@@ -11,6 +12,7 @@ import {
 } from '../components/ui';
 
 export default function DashboardPage() {
+  const { preferences } = useAuth();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,6 +83,12 @@ export default function DashboardPage() {
                 Create your first class
               </Link>
             </EmptyState>
+          ) : preferences.defaultDashboardView === 'list' ? (
+            <div className="glass-card divide-y divide-white/40 overflow-hidden">
+              {classes.map((cls, i) => (
+                <ClassRow key={cls.id} cls={cls} index={i} />
+              ))}
+            </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2">
               {classes.map((cls, i) => (
@@ -169,6 +177,33 @@ function ClassCard({ cls, index }) {
           <span>· {cls.attendanceRate}% attendance</span>
         )}
       </p>
+    </Link>
+  );
+}
+
+function ClassRow({ cls, index }) {
+  const grade = cls.currentGrade;
+  return (
+    <Link
+      to={`/classes/${cls.id}`}
+      className="flex items-center gap-4 px-5 py-3.5 transition hover:bg-white/40"
+    >
+      <span className="h-9 w-1.5 rounded-full" style={{ backgroundImage: classGradient(cls, index) }} />
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-semibold text-ink">{cls.name}</div>
+        <div className="truncate text-xs text-muted">
+          {[cls.code, cls.term].filter(Boolean).join(' · ') || 'No code'}
+        </div>
+      </div>
+      {cls.attendanceRate != null && (
+        <span className="hidden text-xs text-muted sm:inline">{cls.attendanceRate}% att.</span>
+      )}
+      <div className="text-right">
+        <div className={`text-lg font-extrabold ${gradeColor(grade?.percentage)}`}>
+          {grade?.percentage != null ? `${grade.percentage}%` : '—'}
+        </div>
+        <div className="text-[10px] font-medium text-muted">{grade?.letter || 'No grades'}</div>
+      </div>
     </Link>
   );
 }

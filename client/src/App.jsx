@@ -8,6 +8,7 @@ import CalendarPage from './pages/CalendarPage';
 import CreateClassPage from './pages/CreateClassPage';
 import ArchivePage from './pages/ArchivePage';
 import PlannerPage from './pages/PlannerPage';
+import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/planner" element={<PlannerPage />} />
         <Route path="/archives" element={<ArchivePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -18,6 +18,11 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'refreshToken is required'),
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
 export async function register(req, res) {
   const result = await authService.register(req.body);
   res.status(201).json(result);
@@ -41,4 +46,13 @@ export async function logout(req, res) {
 export async function me(req, res) {
   const user = await authService.getCurrentUser(req.user.id);
   res.json({ user });
+}
+
+export async function changePassword(req, res) {
+  await authService.changePassword(
+    req.user.id,
+    req.body.currentPassword,
+    req.body.newPassword,
+  );
+  res.json({ ok: true });
 }
