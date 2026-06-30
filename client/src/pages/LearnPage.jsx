@@ -10,6 +10,7 @@ import { GuideTab } from '../components/learn/GuideTab';
 import { MindMapTab } from '../components/learn/MindMapTab';
 import { StatsTab } from '../components/learn/StatsTab';
 import { LearnAnalytics } from '../components/learn/LearnAnalytics';
+import { Icon } from '../components/learn/icons/Icon';
 
 /**
  * Learn tab — multi-format study hub. Flashcards are free; quizzes, podcasts,
@@ -17,12 +18,12 @@ import { LearnAnalytics } from '../components/learn/LearnAnalytics';
  * sit above a tab bar; each tab renders its own content for the selected class.
  */
 const TABS = [
-  { key: 'study', label: 'Study', icon: '🃏', premium: false },
-  { key: 'quizzes', label: 'Quizzes', icon: '❓', premium: true },
-  { key: 'podcasts', label: 'Podcasts', icon: '🎧', premium: true },
-  { key: 'guides', label: 'Guides', icon: '📖', premium: true },
-  { key: 'mindmaps', label: 'Mind Maps', icon: '🧠', premium: true },
-  { key: 'stats', label: 'Stats', icon: '📊', premium: false },
+  { key: 'study', label: 'Study', icon: 'brain', color: '#4FC3DC', premium: false },
+  { key: 'quizzes', label: 'Quizzes', icon: 'question', color: '#1B4C5C', premium: true },
+  { key: 'podcasts', label: 'Podcasts', icon: 'headphones', color: '#FFB4A2', premium: true },
+  { key: 'guides', label: 'Guides', icon: 'book', color: '#FF6B4A', premium: true },
+  { key: 'mindmaps', label: 'Mind Maps', icon: 'network', color: '#4FC3DC', premium: true },
+  { key: 'stats', label: 'Stats', icon: 'chart', color: '#4FC3DC', premium: false },
 ];
 
 function StatChip({ label, value, accent }) {
@@ -109,7 +110,15 @@ export default function LearnPage() {
           <p className="text-sm text-muted">Study your way — flashcards, quizzes, podcasts, guides & mind maps</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <StatChip label="Day streak" value={`🔥 ${stats?.currentStreak ?? 0}`} />
+          <StatChip
+            label="Day streak"
+            value={
+              <span className="flex items-center gap-1.5">
+                <Icon name="fire" size={22} color="#FF6B4A" />
+                {stats?.currentStreak ?? 0}
+              </span>
+            }
+          />
           <StatChip label="Due today" value={stats?.dueToday ?? 0} accent={stats?.dueToday ? '#ff7a52' : undefined} />
           <StatChip label="Mastered" value={`${stats?.masteredCards ?? 0}/${stats?.totalCards ?? 0}`} />
         </div>
@@ -141,9 +150,14 @@ export default function LearnPage() {
                       tab === t.key ? 'bg-white/70 text-brand-700 shadow-sm' : 'text-muted hover:bg-white/50 hover:text-ink'
                     }`}
                   >
-                    <span aria-hidden>{t.icon}</span>
+                    <Icon name={t.icon} size={18} color={tab === t.key ? t.color : undefined} />
                     {t.label}
-                    {tabLocked && <span title="Pro feature" className="text-xs">🔒</span>}
+                    {tabLocked && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" aria-label="Pro feature" className="text-muted">
+                        <rect x="5" y="11" width="14" height="9" rx="2" fill="none" stroke="currentColor" strokeWidth="2" />
+                        <path d="M8 11 V8 a4 4 0 0 1 8 0 V11" fill="none" stroke="currentColor" strokeWidth="2" />
+                      </svg>
+                    )}
                   </button>
                 );
               })}

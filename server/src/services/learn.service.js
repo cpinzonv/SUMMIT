@@ -10,49 +10,88 @@ import { query, withTransaction } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedCard } from './flashcard.service.js';
 
-// ---- SM-2 ------------------------------------------------------------------
+// ---- Anki-style 3-phase scheduler ------------------------------------------
+// Ratings: 1=Again, 2=Hard, 3=Good, 4=Easy. Cards move learning → review, lapse
+// to relearning on "Again" in review, then graduate back. Learning/relearning
+// steps are in MINUTES (sub-day), review intervals in DAYS.
 
 const DEFAULT_EASE = 2.5;
 const MIN_EASE = 1.3;
+const LEARNING_STEPS = [1, 10]; // minutes
+const RELEARNING_STEPS = [10]; // minutes
+const EASY_BONUS = 1.3;
+const EASY_GRAD_DAYS = 4; // "Easy" graduates straight to a 4-day interval
+
+const clampEase = (e) => Math.max(MIN_EASE, Math.round(e * 100) / 100);
 
 /**
- * Compute the next SM-2 schedule from the previous state and a 1–5 confidence.
- * Confidence maps directly to SM-2 quality q; q < 3 is a lapse (relearn at 1d).
- * @returns {{ intervalDays:number, easeFactor:number, correct:boolean }}
+ * Compute the next schedule from the previous state + a 1-4 rating.
+ * @returns {{ phase, learningStep, lapses, intervalDays, minutes, easeFactor, correct, graduatedToReview }}
  */
-export function computeSm2({ confidence, prevInterval = 0, prevEase = DEFAULT_EASE }) {
-  const q = Math.max(0, Math.min(5, confidence));
-  const correct = q >= 3;
+export function scheduleCard({ rating, phase = 'learning', step = 0, lapses = 0, prevInterval = 0, prevEase = DEFAULT_EASE }) {
+  const r = Math.max(1, Math.min(4, rating));
+  const correct = r >= 3;
+  const ease = prevEase || DEFAULT_EASE;
+  const wasReview = phase === 'review';
+  const out = { phase, learningStep: step, lapses, intervalDays: prevInterval || 0, minutes: 0, easeFactor: ease, correct, graduatedToReview: false };
 
-  // Ease update (standard SM-2 formula), floored at 1.3.
-  let ease = prevEase + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-  ease = Math.max(MIN_EASE, Math.round(ease * 100) / 100);
-
-  let intervalDays;
-  if (!correct) {
-    intervalDays = 1; // lapsed → relearn tomorrow
-  } else if (prevInterval <= 0) {
-    intervalDays = 1; // first successful review
-  } else if (prevInterval === 1) {
-    intervalDays = 6; // second
-  } else {
-    intervalDays = Math.round(prevInterval * ease);
+  if (phase === 'learning' || phase === 'relearning') {
+    const steps = phase === 'learning' ? LEARNING_STEPS : RELEARNING_STEPS;
+    if (r === 1) {
+      // Again — back to the first step.
+      return { ...out, learningStep: 0, minutes: steps[0], intervalDays: 0 };
+    }
+    if (r === 2) {
+      // Hard — repeat the current step.
+      const s = Math.min(step, steps.length - 1);
+      return { ...out, learningStep: s, minutes: steps[s], intervalDays: 0 };
+    }
+    // Good (3) / Easy (4) — advance, or graduate to review.
+    const graduate = r === 4 || step >= steps.length - 1;
+    if (graduate) {
+      const intervalDays = phase === 'relearning' ? Math.max(1, prevInterval || 1) : r === 4 ? EASY_GRAD_DAYS : 1;
+      return { ...out, phase: 'review', learningStep: 0, intervalDays, minutes: 0, easeFactor: clampEase(ease), graduatedToReview: true };
+    }
+    const next = step + 1;
+    return { ...out, learningStep: next, minutes: steps[next], intervalDays: 0 };
   }
-  return { intervalDays, easeFactor: ease, correct };
+
+  // Review phase.
+  const interval = prevInterval || 1;
+  if (r === 1) {
+    // Lapse → relearning; drop ease, halve the interval for when it graduates back.
+    return {
+      phase: 'relearning', learningStep: 0, lapses: lapses + 1,
+      intervalDays: Math.max(1, Math.round(interval * 0.5)), minutes: RELEARNING_STEPS[0],
+      easeFactor: clampEase(ease - 0.2), correct: false, graduatedToReview: false,
+    };
+  }
+  let newEase = ease;
+  let intervalDays;
+  if (r === 2) {
+    newEase = clampEase(ease - 0.15);
+    intervalDays = Math.max(interval + 1, Math.round(interval * 1.2));
+  } else if (r === 3) {
+    intervalDays = Math.max(interval + 1, Math.round(interval * ease));
+  } else {
+    newEase = Math.min(DEFAULT_EASE, clampEase(ease + 0.15));
+    intervalDays = Math.max(interval + 1, Math.round(interval * ease * EASY_BONUS));
+  }
+  void wasReview;
+  return { phase: 'review', learningStep: 0, lapses, intervalDays, minutes: 0, easeFactor: newEase, correct: true, graduatedToReview: false };
 }
 
-/** Derive a card's mastery status + a 0–100 progress percent. */
-function deriveMastery({ correctCount, intervalDays, confidenceAverage }) {
+/** Derive a card's mastery status + a 0–100 progress percent from its phase. */
+function deriveMastery({ phase, intervalDays, totalReviews }) {
   let status;
-  if (correctCount === 0) status = 'new';
-  else if (correctCount < 3) status = 'learning';
-  else if (intervalDays >= 21 && (confidenceAverage ?? 0) >= 4) status = 'mastered';
-  else status = 'review';
-
-  // Interval contributes up to 60, average confidence up to 40.
-  const intervalPart = Math.min(intervalDays, 21) / 21 * 60;
-  const confPart = confidenceAverage ? (confidenceAverage / 5) * 40 : 0;
-  const masteryPercent = status === 'new' ? 0 : Math.min(100, Math.round(intervalPart + confPart));
+  if (totalReviews === 0) status = 'new';
+  else if (phase === 'review') status = intervalDays >= 21 ? 'mastered' : 'review';
+  else status = 'learning'; // learning or relearning
+  const masteryPercent =
+    status === 'new' ? 0
+      : status === 'learning' ? 30
+        : status === 'mastered' ? 100
+          : Math.min(95, 55 + Math.round((Math.min(intervalDays, 30) / 30) * 40));
   return { status, masteryPercent };
 }
 
@@ -108,30 +147,35 @@ async function bumpStreak(client, userId, classId) {
  * Record a review of a card: compute the SM-2 schedule, log it, and update the
  * card's mastery, the user's streaks, and (optionally) the active session.
  */
-export async function reviewCard(userId, cardId, { confidence, timeSpentSeconds, sessionId }) {
+export async function reviewCard(userId, cardId, { rating, timeSpentSeconds, sessionId }) {
   const card = await getOwnedCard(userId, cardId); // 404s if not owned
 
   return withTransaction(async (client) => {
-    // Previous schedule = latest review for this card.
+    // Previous schedule = latest review for this card (defaults = a new card in learning).
     const { rows: prevRows } = await client.query(
-      `SELECT interval_days, ease_factor FROM card_reviews
+      `SELECT phase, learning_step, lapses, interval_days, ease_factor FROM card_reviews
         WHERE card_id = $1 ORDER BY reviewed_at DESC LIMIT 1`,
       [cardId],
     );
     const prev = prevRows[0];
-    const { intervalDays, easeFactor, correct } = computeSm2({
-      confidence,
+    const sched = scheduleCard({
+      rating,
+      phase: prev?.phase ?? 'learning',
+      step: prev?.learning_step ?? 0,
+      lapses: prev?.lapses ?? 0,
       prevInterval: prev?.interval_days ?? 0,
       prevEase: prev?.ease_factor != null ? Number(prev.ease_factor) : DEFAULT_EASE,
     });
+    const { phase, learningStep, lapses, intervalDays, minutes, easeFactor, correct, graduatedToReview } = sched;
 
+    // next_review_at: minutes for learning/relearning, days for review.
     const { rows: reviewRows } = await client.query(
       `INSERT INTO card_reviews
          (user_id, card_id, time_spent_seconds, confidence, correct,
-          interval_days, ease_factor, next_review_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7, now() + make_interval(days => $6))
+          phase, learning_step, lapses, interval_days, ease_factor, next_review_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now() + make_interval(days => $9, mins => $11))
        RETURNING *`,
-      [userId, cardId, timeSpentSeconds ?? null, confidence, correct, intervalDays, easeFactor],
+      [userId, cardId, timeSpentSeconds ?? null, rating, correct, phase, learningStep, lapses, intervalDays, easeFactor, minutes],
     );
     const review = reviewRows[0];
 
@@ -146,9 +190,9 @@ export async function reviewCard(userId, cardId, { confidence, timeSpentSeconds,
     const prevAvg = m?.confidence_average != null ? Number(m.confidence_average) : null;
     const confidenceAverage =
       prevAvg == null
-        ? confidence
-        : Math.round(((prevAvg * (totalReviews - 1) + confidence) / totalReviews) * 100) / 100;
-    const { status, masteryPercent } = deriveMastery({ correctCount, intervalDays, confidenceAverage });
+        ? rating
+        : Math.round(((prevAvg * (totalReviews - 1) + rating) / totalReviews) * 100) / 100;
+    const { status, masteryPercent } = deriveMastery({ phase, intervalDays, totalReviews });
 
     if (m) {
       await client.query(
@@ -186,12 +230,16 @@ export async function reviewCard(userId, cardId, { confidence, timeSpentSeconds,
       review: {
         id: review.id,
         cardId,
-        confidence,
+        rating,
         correct,
+        phase,
+        learningStep,
+        lapses,
         intervalDays,
         easeFactor: Number(easeFactor),
         nextReviewAt: review.next_review_at,
       },
+      graduatedToReview,
       mastery: { status, masteryPercent, totalReviews, correctCount },
     };
   });
@@ -210,13 +258,13 @@ export async function getDueCards(userId, { classId = null, limit = 50 } = {}) {
   params.push(Math.min(Math.max(limit, 1), 200));
   const { rows } = await query(
     `SELECT f.*, c.name AS class_name,
-            lr.next_review_at,
+            lr.next_review_at, lr.phase, lr.learning_step, lr.lapses,
             m.status AS mastery_status, m.mastery_percent, m.total_reviews
        FROM flashcards f
        JOIN classes c ON c.id = f.class_id
        LEFT JOIN mastery_levels m ON m.card_id = f.id AND m.user_id = f.user_id
        LEFT JOIN LATERAL (
-         SELECT next_review_at FROM card_reviews r
+         SELECT next_review_at, phase, learning_step, lapses FROM card_reviews r
           WHERE r.card_id = f.id ORDER BY reviewed_at DESC LIMIT 1
        ) lr ON true
       WHERE f.user_id = $1 ${classFilter}
@@ -225,7 +273,8 @@ export async function getDueCards(userId, { classId = null, limit = 50 } = {}) {
       LIMIT $${params.length}`,
     params,
   );
-  return rows;
+  // New cards (no review row) default to the learning phase, step 0.
+  return rows.map((r) => ({ ...r, phase: r.phase ?? 'learning', learning_step: r.learning_step ?? 0, lapses: r.lapses ?? 0 }));
 }
 
 // ---- Sessions --------------------------------------------------------------

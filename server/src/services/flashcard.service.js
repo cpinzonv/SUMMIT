@@ -48,6 +48,12 @@ export function toPublicCard(row) {
     // Originals kept so the editor can show "reset to generated".
     originalQuestion: row.question,
     originalAnswer: row.answer,
+    // Card type + type-specific payloads (cloze/image/math).
+    cardType: row.card_type || 'basic',
+    clozeParts: row.cloze_parts ?? null,
+    imageUrl: row.image_url ?? null,
+    occlusionShapes: row.occlusion_shapes ?? null,
+    latexContent: row.latex_content ?? null,
     sourceType: row.source_type ?? null,
     sourceId: row.source_id ?? null,
     generatedBy: row.generated_by,
@@ -110,26 +116,35 @@ export async function listClassCards(userId, classId, { tag, difficulty } = {}) 
   return rows.map(toPublicCard);
 }
 
-/** Manually author a card. */
+/** Manually author a card (any of the 4 types). */
 export async function createCard(userId, classId, input) {
   await getOwnedClass(userId, classId);
   const { question, answer, explanation, tags, difficulty, sourceType, sourceId } = input;
+  const cardType = input.cardType || 'basic';
   const { rows } = await query(
     `INSERT INTO flashcards
        (class_id, user_id, question, answer, explanation, tags, difficulty,
-        source_type, source_id, generated_by)
-     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::card_difficulty,'medium'),$8::flashcard_source,$9,'user')
+        source_type, source_id, generated_by,
+        card_type, cloze_parts, image_url, occlusion_shapes, latex_content)
+     VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7::card_difficulty,'medium'),$8::flashcard_source,$9,'user',
+        $10,$11::jsonb,$12,$13::jsonb,$14)
      RETURNING *`,
     [
       classId,
       userId,
       question,
-      answer,
+      // Cloze/image cards may have no separate answer.
+      answer ?? (cardType === 'cloze' || cardType === 'image' ? '' : answer),
       explanation ?? null,
       tags ?? [],
       difficulty ?? null,
       sourceType ?? null,
       sourceId ?? null,
+      cardType,
+      input.clozeParts ? JSON.stringify(input.clozeParts) : null,
+      input.imageUrl ?? null,
+      input.occlusionShapes ? JSON.stringify(input.occlusionShapes) : null,
+      input.latexContent ?? null,
     ],
   );
   return toPublicCard(rows[0]);
@@ -184,6 +199,9 @@ export async function deleteCard(userId, cardId) {
 
 const MAX_CONTEXT_CHARS = 60000;
 
+// Multi-format generation. Cloze cards put {{c1::hidden}} markers in `question`
+// (answer may be empty); math cards use $$LaTeX$$; image cards carry a `prompt`
+// describing what to occlude (the user supplies the image later).
 const cardsSchema = {
   type: 'object',
   additionalProperties: false,
@@ -194,25 +212,22 @@ const cardsSchema = {
         type: 'object',
         additionalProperties: false,
         properties: {
-          question: { type: 'string', description: 'A clear, single-concept question' },
-          answer: { type: 'string', description: 'A concise, correct answer' },
-          explanation: {
-            type: ['string', 'null'],
-            description: 'Optional 1-2 sentence deeper explanation, or null',
-          },
+          cardType: { type: 'string', enum: ['basic', 'cloze', 'math', 'image'] },
+          question: { type: 'string', description: 'Q&A question, cloze sentence with {{c1::..}}, $$LaTeX$$ problem, or image prompt' },
+          answer: { type: ['string', 'null'], description: 'Answer (basic/math); null for cloze/image' },
+          explanation: { type: ['string', 'null'] },
           difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
-          tags: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Short topic tags, e.g. ["vocabulary"], ["formula"]',
-          },
+          tags: { type: 'array', items: { type: 'string' } },
         },
-        required: ['question', 'answer', 'explanation', 'difficulty', 'tags'],
+        required: ['cardType', 'question', 'answer', 'explanation', 'difficulty', 'tags'],
       },
     },
   },
   required: ['cards'],
 };
+
+const CLOZE_RE = /\{\{c\d+::.+?\}\}/;
+const LATEX_RE = /\$\$|\\[a-zA-Z]+|\\\(|\\\[/;
 
 /** Collect a class's study material text for generation, by source type. */
 async function gatherContext(userId, classId, sourceType) {
@@ -263,11 +278,14 @@ export async function generateCards(userId, classId, { count = 15, sourceType = 
 
   const n = Math.min(Math.max(count, 1), 40);
   const system =
-    `You are creating study flashcards for a student's "${cls.name}" class. ` +
-    `Using ONLY the material below, write up to ${n} high-quality flashcards that test ` +
-    `understanding of the most important concepts, definitions, and relationships. ` +
-    `Prefer atomic, single-idea cards. Do not invent facts not present in the material.\n\n` +
-    `Material:\n"""\n${context}\n"""`;
+    `You are an expert flashcard author for a student's "${cls.name}" class. Using ONLY the ` +
+    `material below, write up to ${n} high-quality cards in a MIX of formats:\n` +
+    `- basic: a clear question + concise answer.\n` +
+    `- cloze: a full sentence with 1-3 {{c1::hidden}} {{c2::..}} deletions (answer null).\n` +
+    `- math: a $$LaTeX$$ problem in question and $$LaTeX$$ solution in answer (for STEM topics).\n` +
+    `- image: only the "prompt" describing a diagram to occlude (answer null) — use sparingly.\n` +
+    `Favor cloze + math for technical material. Every card needs 1-3 lowercase tags and a difficulty. ` +
+    `Do not invent facts. Material:\n"""\n${context}\n"""`;
 
   let message;
   try {
@@ -276,7 +294,7 @@ export async function generateCards(userId, classId, { count = 15, sourceType = 
       max_tokens: 4096,
       output_config: { format: { type: 'json_schema', schema: cardsSchema } },
       system,
-      messages: [{ role: 'user', content: `Generate the flashcards now (max ${n}).` }],
+      messages: [{ role: 'user', content: `Generate the cards now (max ${n}), mixing formats appropriately.` }],
     });
   } catch (err) {
     if (err instanceof AppError) throw err;
@@ -296,25 +314,29 @@ export async function generateCards(userId, classId, { count = 15, sourceType = 
   const cards = Array.isArray(parsed.cards) ? parsed.cards.slice(0, n) : [];
   if (!cards.length) throw new AppError(502, 'No cards were generated. Try again.');
 
-  // Bulk insert.
   const created = [];
   for (const c of cards) {
-    if (!c.question?.trim() || !c.answer?.trim()) continue;
+    const q = c.question?.trim();
+    if (!q) continue;
+    // Normalize/validate the card type against its payload.
+    let type = ['basic', 'cloze', 'math', 'image'].includes(c.cardType) ? c.cardType : 'basic';
+    if (type === 'cloze' && !CLOZE_RE.test(q)) type = 'basic'; // missing markers → treat as basic
+    if (type === 'math' && !LATEX_RE.test(`${q}${c.answer || ''}`)) type = 'basic';
+    const answer = type === 'cloze' || type === 'image' ? (c.answer || '') : (c.answer?.trim() || '');
+    if (type === 'basic' && !answer) continue; // basic needs an answer
+    const latex = type === 'math' ? (c.answer || q) : null;
+
     const { rows } = await query(
       `INSERT INTO flashcards
          (class_id, user_id, question, answer, explanation, tags, difficulty,
-          source_type, generated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7::card_difficulty,$8::flashcard_source,'claude')
+          source_type, generated_by, card_type, latex_content)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::card_difficulty,$8::flashcard_source,'claude',$9,$10)
        RETURNING *`,
       [
-        classId,
-        userId,
-        c.question.trim(),
-        c.answer.trim(),
-        c.explanation || null,
+        classId, userId, q, answer, c.explanation || null,
         Array.isArray(c.tags) ? c.tags.slice(0, 8) : [],
         ['easy', 'medium', 'hard'].includes(c.difficulty) ? c.difficulty : 'medium',
-        sourceType,
+        sourceType, type, latex,
       ],
     );
     created.push(toPublicCard(rows[0]));

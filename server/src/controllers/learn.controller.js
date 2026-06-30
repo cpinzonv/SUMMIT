@@ -20,15 +20,26 @@ export const listQuery = z.object({
   difficulty: difficulty.optional(),
 });
 
-export const createCardSchema = z.object({
-  question: z.string().min(1, 'Question is required').max(2000),
-  answer: z.string().min(1, 'Answer is required').max(4000),
-  explanation: z.string().max(4000).optional(),
-  tags: z.array(z.string().max(40)).max(8).optional(),
-  difficulty: difficulty.optional(),
-  sourceType: sourceType.optional(),
-  sourceId: z.string().uuid().optional(),
-});
+const cardType = z.enum(['basic', 'cloze', 'image', 'math']);
+export const createCardSchema = z
+  .object({
+    question: z.string().min(1, 'Question is required').max(2000),
+    answer: z.string().max(4000).optional(), // optional for cloze/image cards
+    explanation: z.string().max(4000).optional(),
+    tags: z.array(z.string().max(40)).max(8).optional(),
+    difficulty: difficulty.optional(),
+    cardType: cardType.optional(),
+    clozeParts: z.array(z.object({ id: z.string(), text: z.string() }).passthrough()).optional(),
+    imageUrl: z.string().max(2000).optional(),
+    occlusionShapes: z.array(z.object({}).passthrough()).optional(),
+    latexContent: z.string().max(4000).optional(),
+    sourceType: sourceType.optional(),
+    sourceId: z.string().uuid().optional(),
+  })
+  .refine((o) => (o.cardType && o.cardType !== 'basic') || (o.answer && o.answer.length > 0), {
+    message: 'Answer is required for basic cards',
+    path: ['answer'],
+  });
 
 export const updateCardSchema = z
   .object({
@@ -46,7 +57,8 @@ export const generateSchema = z.object({
 });
 
 export const reviewSchema = z.object({
-  confidence: z.number().int().min(1).max(5),
+  // 1=Again, 2=Hard, 3=Good, 4=Easy (Anki-style).
+  rating: z.number().int().min(1).max(4),
   timeSpentSeconds: z.number().int().min(0).max(3600).optional(),
   sessionId: z.string().uuid().optional(),
 });
@@ -95,8 +107,17 @@ export async function due(req, res) {
     classId: req.query.classId,
     limit: req.query.limit,
   });
-  // Reuse the public card shape (rows carry the joined columns).
-  res.json({ cards: rows.map((r) => ({ ...flashcards.toPublicCard(r), className: r.class_name })) });
+  // Reuse the public card shape (rows carry the joined columns), adding the
+  // current scheduling phase so the review UI knows which badges to show.
+  res.json({
+    cards: rows.map((r) => ({
+      ...flashcards.toPublicCard(r),
+      className: r.class_name,
+      phase: r.phase,
+      learningStep: r.learning_step,
+      lapses: r.lapses,
+    })),
+  });
 }
 
 export async function review(req, res) {

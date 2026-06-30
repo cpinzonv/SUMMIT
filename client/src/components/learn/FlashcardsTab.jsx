@@ -3,6 +3,7 @@ import { api, errorMessage } from '../../api/client';
 import { Modal, Spinner, ErrorBanner, EmptyState } from '../ui';
 import { Labeled } from './common';
 import { exportDeck } from '../../lib/learnExport';
+import { CardFace, CardTypeBadge } from './CardTypes';
 
 /** Flashcards: manage a class's cards and run spaced-repetition review sessions. */
 
@@ -13,13 +14,23 @@ const MASTERY = {
   mastered: { label: 'Mastered', cls: 'bg-emerald-400/15 text-emerald-600' },
 };
 const DIFFICULTY = { easy: 'text-emerald-500', medium: 'text-amber-500', hard: 'text-rose-500' };
-const CONFIDENCE = [
-  { v: 1, label: 'Forgot', cls: 'border-rose-300 text-rose-600 hover:bg-rose-50' },
+// Anki-style 4-button rating: 1=Again, 2=Hard, 3=Good, 4=Easy.
+const RATINGS = [
+  { v: 1, label: 'Again', cls: 'border-rose-300 text-rose-600 hover:bg-rose-50' },
   { v: 2, label: 'Hard', cls: 'border-orange-300 text-orange-600 hover:bg-orange-50' },
-  { v: 3, label: 'OK', cls: 'border-amber-300 text-amber-600 hover:bg-amber-50' },
-  { v: 4, label: 'Good', cls: 'border-sky-300 text-sky-600 hover:bg-sky-50' },
-  { v: 5, label: 'Easy', cls: 'border-emerald-300 text-emerald-600 hover:bg-emerald-50' },
+  { v: 3, label: 'Good', cls: 'border-sky-300 text-sky-600 hover:bg-sky-50' },
+  { v: 4, label: 'Easy', cls: 'border-emerald-300 text-emerald-600 hover:bg-emerald-50' },
 ];
+
+const PHASE_LABEL = { learning: 'Learning', review: 'Review', relearning: 'Relearning' };
+function PhaseBadge({ phase, step }) {
+  if (!phase) return null;
+  return (
+    <span className="rounded-full bg-white/60 px-2 py-0.5 text-[10px] font-bold text-brand-700">
+      {PHASE_LABEL[phase] || phase}{(phase === 'learning' || phase === 'relearning') && step != null ? ` · step ${step + 1}` : ''}
+    </span>
+  );
+}
 
 const isDue = (card) =>
   !card.mastery || !card.mastery.nextReviewAt || new Date(card.mastery.nextReviewAt) <= new Date();
@@ -142,17 +153,19 @@ function CardTile({ card, onEdit, onDelete }) {
   return (
     <div className="glass-panel flex flex-col gap-2 p-4" onDoubleClick={onEdit} title="Double-click to edit">
       <div className="flex items-start justify-between gap-2">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m.cls}`}>{m.label}</span>
+        <span className="flex items-center gap-1.5">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m.cls}`}>{m.label}</span>
+          <CardTypeBadge type={card.cardType} />
+        </span>
         <div className="flex items-center gap-1 text-xs">
           <span className={`mr-1 font-bold uppercase ${DIFFICULTY[card.difficulty]}`}>{card.difficulty}</span>
           <button onClick={onEdit} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-white/50 hover:text-ink" aria-label="Edit card">✎</button>
           <button onClick={onDelete} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-white/50 hover:text-rose-500" aria-label="Delete card">🗑</button>
         </div>
       </div>
-      <button onClick={() => setFlipped((f) => !f)} className="text-left">
-        <p className="font-semibold text-ink">{card.question}</p>
-        {flipped && <p className="mt-2 border-t border-white/40 pt-2 text-sm text-muted">{card.answer}</p>}
-        {!flipped && <p className="mt-1 text-xs text-muted/70">Click to reveal answer</p>}
+      <button onClick={() => setFlipped((f) => !f)} className="text-left text-sm">
+        <CardFace card={card} revealed={flipped} />
+        {!flipped && <p className="mt-1 text-xs text-muted/70">Click to reveal</p>}
       </button>
       {card.tags?.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -170,6 +183,8 @@ function CardTile({ card, onEdit, onDelete }) {
 
 function CardEditorModal({ classId, card, onClose, onSaved }) {
   const editing = Boolean(card);
+  // Card type can only be chosen on create (editing keeps the existing type).
+  const [cardType, setCardType] = useState(card?.cardType || 'basic');
   const [form, setForm] = useState({
     question: card?.question || '',
     answer: card?.answer || '',
@@ -181,15 +196,21 @@ function CardEditorModal({ classId, card, onClose, onSaved }) {
   const [err, setErr] = useState('');
   const upd = (f) => (e) => setForm((s) => ({ ...s, [f]: e.target.value }));
 
+  const isCloze = cardType === 'cloze';
+  const isMath = cardType === 'math';
+  const needsAnswer = cardType === 'basic' || cardType === 'math';
+  const qLabel = isCloze ? 'Cloze text — wrap blanks like {{c1::answer}}' : isMath ? 'Question (use $$LaTeX$$)' : 'Question';
+
   const save = async () => {
     setSaving(true);
     setErr('');
     const payload = {
       question: form.question.trim(),
-      answer: form.answer.trim(),
+      answer: form.answer.trim() || undefined,
       explanation: form.explanation.trim() || undefined,
       difficulty: form.difficulty,
       tags: form.tags.split(',').map((t) => t.trim()).filter(Boolean).slice(0, 8),
+      ...(editing ? {} : { cardType, ...(isMath ? { latexContent: form.answer.trim() || form.question.trim() } : {}) }),
     };
     try {
       if (editing) await api.patch(`/api/learn/cards/${card.id}`, payload);
@@ -201,12 +222,31 @@ function CardEditorModal({ classId, card, onClose, onSaved }) {
     }
   };
 
+  const canSave = form.question.trim() && (!needsAnswer || form.answer.trim());
+
   return (
     <Modal title={editing ? 'Edit card' : 'New card'} onClose={onClose} wide>
       <div className="space-y-3">
         {err && <ErrorBanner message={err} />}
-        <Labeled label="Question"><textarea className="field min-h-[3rem]" value={form.question} onChange={upd('question')} autoFocus /></Labeled>
-        <Labeled label="Answer"><textarea className="field min-h-[3rem]" value={form.answer} onChange={upd('answer')} /></Labeled>
+        {!editing && (
+          <Labeled label="Card type">
+            <select className="field" value={cardType} onChange={(e) => setCardType(e.target.value)}>
+              <option value="basic">Basic (Q&amp;A)</option>
+              <option value="cloze">Cloze deletion</option>
+              <option value="math">Math (LaTeX)</option>
+            </select>
+          </Labeled>
+        )}
+        <Labeled label={qLabel}>
+          <textarea className="field min-h-[3rem]" value={form.question} onChange={upd('question')} autoFocus
+            placeholder={isCloze ? 'The {{c1::mitochondria}} is the powerhouse of the cell' : isMath ? 'Solve $$\\int x^2 dx$$' : ''} />
+        </Labeled>
+        {needsAnswer && (
+          <Labeled label={isMath ? 'Answer (use $$LaTeX$$)' : 'Answer'}>
+            <textarea className="field min-h-[3rem]" value={form.answer} onChange={upd('answer')}
+              placeholder={isMath ? '$$\\frac{x^3}{3} + C$$' : ''} />
+          </Labeled>
+        )}
         <Labeled label="Explanation (optional)"><textarea className="field min-h-[2.5rem]" value={form.explanation} onChange={upd('explanation')} /></Labeled>
         <div className="flex gap-3">
           <Labeled label="Difficulty">
@@ -220,7 +260,7 @@ function CardEditorModal({ classId, card, onClose, onSaved }) {
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <button className="btn btn-soft" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={saving || !form.question.trim() || !form.answer.trim()} onClick={save}>
+          <button className="btn btn-primary" disabled={saving || !canSave} onClick={save}>
             {saving ? 'Saving…' : editing ? 'Save' : 'Add card'}
           </button>
         </div>
@@ -312,15 +352,15 @@ function ReviewSession({ classId, className, onClose }) {
     } catch { /* best-effort */ }
   }, [sessionId]);
 
-  const rate = async (confidence) => {
+  const rate = async (rating) => {
     const card = queue[idx];
     setSubmitting(true);
     const timeSpentSeconds = Math.round((Date.now() - startedAt.current) / 1000);
     try {
       await api.post(`/api/learn/cards/${card.id}/review`, {
-        confidence, timeSpentSeconds, ...(sessionId ? { sessionId } : {}),
+        rating, timeSpentSeconds, ...(sessionId ? { sessionId } : {}),
       });
-      confidences.current.push(confidence);
+      confidences.current.push(rating);
       setRevealed(false);
       startedAt.current = Date.now();
       setIdx((i) => i + 1);
@@ -350,7 +390,10 @@ function ReviewSession({ classId, className, onClose }) {
     <div className="fixed inset-0 z-[60] flex flex-col items-center bg-slate-900/40 p-3 backdrop-blur-sm sm:p-4">
       <div className="glass-panel mt-6 flex w-full max-w-xl flex-col gap-4 p-5 sm:mt-10 sm:p-6">
         <div className="flex items-center justify-between text-sm">
-          <span className="font-semibold text-muted">{className} · Study session</span>
+          <span className="flex items-center gap-2 font-semibold text-muted">
+            {className} · Study
+            {card && <PhaseBadge phase={card.phase} step={card.learningStep} />}
+          </span>
           <button onClick={finish} className="text-2xl leading-none text-muted hover:text-ink" aria-label="End session">×</button>
         </div>
         {err && <ErrorBanner message={err} />}
@@ -376,26 +419,18 @@ function ReviewSession({ classId, className, onClose }) {
               onTouchStart={onTouchStart}
               onTouchEnd={onTouchEnd}
             >
-              <div>
-                <p className="text-xl font-semibold text-ink sm:text-lg">{card.question}</p>
-                {revealed && (
-                  <div className="mt-3 border-t border-white/50 pt-3">
-                    <p className="text-lg text-ink sm:text-base">{card.answer}</p>
-                    {card.explanation && <p className="mt-2 text-sm text-muted">{card.explanation}</p>}
-                  </div>
-                )}
-              </div>
+              <CardFace card={card} revealed={revealed} />
             </div>
             {!revealed ? (
               <button className="btn btn-primary min-h-[3rem] w-full" onClick={() => setRevealed(true)}>Show answer</button>
             ) : (
               <div>
                 <p className="mb-2 text-center text-xs font-medium text-muted">How well did you know it?</p>
-                <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
-                  {CONFIDENCE.map((c) => (
+                <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                  {RATINGS.map((c) => (
                     <button key={c.v} disabled={submitting} onClick={() => rate(c.v)}
                       className={`flex min-h-[3rem] flex-col items-center justify-center rounded-xl border bg-white/60 py-2 text-xs font-semibold transition disabled:opacity-50 ${c.cls}`}>
-                      <span className="text-base">{c.v}</span>{c.label}
+                      {c.label}
                     </button>
                   ))}
                 </div>

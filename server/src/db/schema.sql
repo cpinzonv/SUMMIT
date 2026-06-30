@@ -740,3 +740,23 @@ DROP TRIGGER IF EXISTS trg_user_learning_stats_updated_at ON user_learning_stats
 CREATE TRIGGER trg_user_learning_stats_updated_at
   BEFORE UPDATE ON user_learning_stats
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- Flashcard overhaul: Anki-style 3-phase scheduling + 4 card types.
+-- card_reviews gains phase/learning_step/lapses (the `confidence` column now
+-- stores the 1-4 rating: 1=Again 2=Hard 3=Good 4=Easy). flashcards gains a
+-- card_type plus type-specific payloads (cloze parts, image + occlusion masks,
+-- LaTeX). All nullable/defaulted so existing rows keep working.
+-- ----------------------------------------------------------------------------
+ALTER TABLE card_reviews ADD COLUMN IF NOT EXISTS phase TEXT NOT NULL DEFAULT 'review'
+  CHECK (phase IN ('learning', 'review', 'relearning'));
+ALTER TABLE card_reviews ADD COLUMN IF NOT EXISTS learning_step SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE card_reviews ADD COLUMN IF NOT EXISTS lapses SMALLINT NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_card_reviews_phase_user ON card_reviews(user_id, phase, next_review_at);
+
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS card_type TEXT NOT NULL DEFAULT 'basic'
+  CHECK (card_type IN ('basic', 'cloze', 'image', 'math'));
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS cloze_parts      JSONB;
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS image_url        TEXT;
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS occlusion_shapes JSONB;
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS latex_content    TEXT;
