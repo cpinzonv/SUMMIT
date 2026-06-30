@@ -107,7 +107,9 @@ export default function CalendarPage() {
         assignments.forEach((a) => {
           if (a.dueDate)
             evs.push({ id: `${a.id}:due`, date: new Date(a.dueDate), type: 'due', a, cls, gradient });
-          if (a.plannedDate)
+          // Once an assignment is completed/graded the planned-date indicator is
+          // no longer useful — drop it so it disappears from every calendar view.
+          if (a.plannedDate && !isDone(a))
             evs.push({ id: `${a.id}:planned`, date: new Date(a.plannedDate), type: 'planned', a, cls, gradient });
         });
       });
