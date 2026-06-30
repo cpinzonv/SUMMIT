@@ -59,6 +59,51 @@ CREATE TRIGGER trg_users_updated_at
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ----------------------------------------------------------------------------
+-- lms_connections — one row per (user, LMS provider) the student has linked.
+--
+-- The original Canvas integration stored a single connection in the users.lms_*
+-- columns above. To let a student connect MORE THAN ONE LMS at once (e.g. some
+-- classes in Canvas, others in Blackboard) every connection now lives here,
+-- keyed by provider. `domain` is the per-institution host / instance URL
+-- (NULL for single-tenant providers like Google Classroom). Tokens are stored
+-- ENCRYPTED (AES-256-GCM) exactly as before — never in plaintext.
+--
+-- The users.lms_* columns are kept for backward compatibility and are backfilled
+-- into this table below; the app reads/writes lms_connections going forward.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS lms_connections (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider         TEXT NOT NULL,              -- 'canvas' | 'blackboard' | 'google_classroom' | ...
+  domain           TEXT,                       -- institution host / instance URL (NULL if single-tenant)
+  access_token     TEXT,                       -- encrypted
+  refresh_token    TEXT,                       -- encrypted
+  token_expires_at TIMESTAMPTZ,
+  connected        BOOLEAN NOT NULL DEFAULT false,
+  synced_at        TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, provider)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lms_connections_user_id ON lms_connections(user_id);
+
+DROP TRIGGER IF EXISTS trg_lms_connections_updated_at ON lms_connections;
+CREATE TRIGGER trg_lms_connections_updated_at
+  BEFORE UPDATE ON lms_connections
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Backfill: migrate any existing single-connection (Canvas) link from the legacy
+-- users.lms_* columns into lms_connections. Idempotent — safe to re-run.
+INSERT INTO lms_connections
+  (user_id, provider, domain, access_token, refresh_token, token_expires_at, connected, synced_at)
+SELECT id, lms_provider, lms_domain, lms_access_token, lms_refresh_token,
+       lms_token_expires_at, lms_connected, lms_synced_at
+FROM users
+WHERE lms_provider IS NOT NULL AND lms_access_token IS NOT NULL
+ON CONFLICT (user_id, provider) DO NOTHING;
+
+-- ----------------------------------------------------------------------------
 -- refresh_tokens — server-side record of issued refresh tokens (rotation +
 -- revocation). Access tokens stay stateless JWTs; refresh tokens are tracked.
 -- ----------------------------------------------------------------------------

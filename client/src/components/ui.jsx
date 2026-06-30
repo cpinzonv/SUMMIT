@@ -104,16 +104,33 @@ export function Toast({ toast }) {
   );
 }
 
-/** Small "Canvas" provenance badge for assignments synced from an LMS. */
-export function CanvasBadge({ className = '' }) {
+/** Display metadata for the LMS provenance badge, keyed by external_source. */
+const LMS_BADGES = {
+  canvas: { label: 'Canvas', color: '#e2410b', text: '#c8401a' },
+  blackboard: { label: 'Blackboard', color: '#262626', text: '#262626' },
+  google_classroom: { label: 'Classroom', color: '#1a73e8', text: '#1558b0' },
+  brightspace: { label: 'Brightspace', color: '#ff6b00', text: '#c85400' },
+  moodle: { label: 'Moodle', color: '#f98012', text: '#c8650b' },
+  sakai: { label: 'Sakai', color: '#1d6fb8', text: '#175a96' },
+};
+
+/** Small provenance badge for assignments synced from an LMS. */
+export function LmsBadge({ source, className = '' }) {
+  const b = LMS_BADGES[source] || { label: source, color: '#6366f1', text: '#4f46e5' };
   return (
     <span
-      title="Synced from Canvas"
-      className={`inline-flex items-center gap-1 rounded-full bg-[#e2410b]/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#c8401a] ${className}`}
+      title={`Synced from ${b.label}`}
+      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${className}`}
+      style={{ backgroundColor: `${b.color}1a`, color: b.text }}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-[#e2410b]" /> Canvas
+      <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: b.color }} /> {b.label}
     </span>
   );
+}
+
+/** Back-compat alias — older imports referenced CanvasBadge. */
+export function CanvasBadge(props) {
+  return <LmsBadge source="canvas" {...props} />;
 }
 
 export function EmptyState({ title, children }) {

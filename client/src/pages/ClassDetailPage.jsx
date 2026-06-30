@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import { useAuth } from '../context/AuthContext';
 import {
   Spinner,
   ErrorBanner,
   EmptyState,
   Modal,
   Toast,
-  CanvasBadge,
+  LmsBadge,
   gradeColor,
   classGradient,
 } from '../components/ui';
-import { canvasApi, summarizeSync } from '../lib/canvas';
+import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
 import { ClassNotes } from '../components/ClassNotes';
 import { ClassAttendance } from '../components/ClassAttendance';
 
@@ -35,8 +34,18 @@ export default function ClassDetailPage() {
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('assignments');
   const [toast, setToast] = useState(null);
-  const { user } = useAuth();
-  const canvasConnected = Boolean(user?.lms?.connected);
+  // All registered LMS providers + their connection state (drives the ⋮ menu).
+  const [lmsProviders, setLmsProviders] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    lmsStatusAll()
+      .then((providers) => active && setLmsProviders(providers))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!toast || toast.loading) return undefined;
@@ -84,21 +93,23 @@ export default function ClassDetailPage() {
     }
   };
 
-  // "Sync Canvas assignments" for this class = import every assignment of its
-  // matched Canvas course (upserts, so it also picks up due-date/point changes).
-  const syncClassCanvas = async () => {
-    setToast({ loading: true, msg: 'Syncing from Canvas…' });
+  // "Sync <LMS> assignments" for this class = import every assignment of its
+  // matched course on that provider (upserts, so it also picks up due-date/point
+  // changes).
+  const syncClassProvider = async (provider) => {
+    const label = lmsLabel(provider);
+    setToast({ loading: true, msg: `Syncing from ${label}…` });
     try {
-      const { assignments: list } = await canvasApi.listCourseAssignments(id);
+      const { assignments: list } = await lmsApi(provider).listCourseAssignments(id);
       if (list.length === 0) {
-        setToast({ type: 'success', msg: 'No Canvas assignments for this course' });
+        setToast({ type: 'success', msg: `No ${label} assignments for this course` });
         return;
       }
-      const result = await canvasApi.import(id, list.map((a) => a.externalId));
+      const result = await lmsApi(provider).import(id, list.map((a) => a.externalId));
       await load();
-      setToast({ type: 'success', msg: summarizeSync(result) });
+      setToast({ type: 'success', msg: summarizeSync(result, provider) });
     } catch (err) {
-      setToast({ type: 'error', msg: errorMessage(err, 'Canvas sync failed') });
+      setToast({ type: 'error', msg: errorMessage(err, `${label} sync failed`) });
     }
   };
 
@@ -165,12 +176,12 @@ export default function ClassDetailPage() {
         </div>
         <div className="absolute right-3 top-3 z-30">
           <ClassMenu
-            canvasConnected={canvasConnected}
+            providers={lmsProviders}
             onEdit={() => setModal({ type: 'editClass' })}
             onArchive={() => setModal({ type: 'confirmArchive' })}
             onDelete={() => setModal({ type: 'confirmDelete' })}
-            onImportCanvas={() => setModal({ type: 'canvasImport' })}
-            onSyncCanvas={syncClassCanvas}
+            onImport={(provider) => setModal({ type: 'lmsImport', provider })}
+            onSync={syncClassProvider}
           />
         </div>
       </div>
@@ -237,7 +248,7 @@ export default function ClassDetailPage() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-ink">{a.title}</span>
-                        {a.externalSource === 'canvas' && <CanvasBadge />}
+                        {a.externalSource && <LmsBadge source={a.externalSource} />}
                       </div>
                       <div className="text-xs text-muted">
                         {a.category || a.status?.replace('_', ' ')}
@@ -339,15 +350,16 @@ export default function ClassDetailPage() {
           onClose={() => setModal(null)}
         />
       )}
-      {modal?.type === 'canvasImport' && (
-        <CanvasImportModal
+      {modal?.type === 'lmsImport' && (
+        <LmsImportModal
+          provider={modal.provider}
           classId={id}
           className={cls?.name}
           onClose={() => setModal(null)}
           onImported={async (result) => {
             setModal(null);
             await load();
-            setToast({ type: 'success', msg: summarizeSync(result) });
+            setToast({ type: 'success', msg: summarizeSync(result, modal.provider) });
           }}
         />
       )}
@@ -359,10 +371,11 @@ export default function ClassDetailPage() {
 
 /**
  * Top-right ⋮ menu on the class header. Class actions (Edit / Archive / Delete)
- * plus, below a divider, Canvas sync actions — disabled with a tooltip when
- * Canvas isn't connected.
+ * plus, below a divider, per-LMS import/sync actions. Each connected provider
+ * gets an "Import" and "Sync" entry; providers that aren't connected are shown
+ * disabled with a "Connect … in Settings first" tooltip.
  */
-function ClassMenu({ canvasConnected, onEdit, onArchive, onDelete, onImportCanvas, onSyncCanvas }) {
+function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -385,6 +398,9 @@ function ClassMenu({ canvasConnected, onEdit, onArchive, onDelete, onImportCanva
     fn();
   };
 
+  // Only surface providers the server can actually use (configured or mock).
+  const usable = (providers || []).filter((p) => p.available);
+
   return (
     <div ref={ref} className="relative self-start">
       <button
@@ -400,7 +416,7 @@ function ClassMenu({ canvasConnected, onEdit, onArchive, onDelete, onImportCanva
       {open && (
         <div
           role="menu"
-          className="glass-panel absolute right-0 z-20 mt-1 w-60 overflow-hidden p-1.5 text-sm shadow-xl"
+          className="glass-panel absolute right-0 z-20 mt-1 max-h-[28rem] w-64 overflow-y-auto p-1.5 text-sm shadow-xl"
         >
           <button type="button" role="menuitem" onClick={pick(onEdit)} className="menu-item">
             <span>✎</span> Edit class
@@ -417,28 +433,35 @@ function ClassMenu({ canvasConnected, onEdit, onArchive, onDelete, onImportCanva
             <span>🗑</span> Delete class
           </button>
 
-          {/* Canvas sync actions */}
-          <div className="my-1 border-t border-white/50" />
-          <button
-            type="button"
-            role="menuitem"
-            disabled={!canvasConnected}
-            onClick={canvasConnected ? pick(onImportCanvas) : undefined}
-            title={canvasConnected ? undefined : 'Connect Canvas in Settings first'}
-            className={`menu-item ${canvasConnected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/50 hover:bg-transparent'}`}
-          >
-            <span>⬇</span> Import assignments from Canvas
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            disabled={!canvasConnected}
-            onClick={canvasConnected ? pick(onSyncCanvas) : undefined}
-            title={canvasConnected ? undefined : 'Connect Canvas in Settings first'}
-            className={`menu-item ${canvasConnected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/50 hover:bg-transparent'}`}
-          >
-            <span>↻</span> Sync Canvas assignments
-          </button>
+          {/* Per-LMS import/sync actions */}
+          {usable.map((p) => (
+            <div key={p.provider}>
+              <div className="my-1 border-t border-white/50" />
+              <div className="px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wide text-muted">
+                {p.label}
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!p.connected}
+                onClick={p.connected ? pick(() => onImport(p.provider)) : undefined}
+                title={p.connected ? undefined : `Connect ${p.label} in Settings first`}
+                className={`menu-item ${p.connected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/50 hover:bg-transparent'}`}
+              >
+                <span>⬇</span> Import assignments from {p.label}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!p.connected}
+                onClick={p.connected ? pick(() => onSync(p.provider)) : undefined}
+                title={p.connected ? undefined : `Connect ${p.label} in Settings first`}
+                className={`menu-item ${p.connected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/50 hover:bg-transparent'}`}
+              >
+                <span>↻</span> Sync {p.label} assignments
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -548,8 +571,9 @@ function ClassEditModal({ cls, onClose, onSaved }) {
   );
 }
 
-/** Pick a subset of a class's Canvas assignments and import them. */
-function CanvasImportModal({ classId, className, onClose, onImported }) {
+/** Pick a subset of a class's assignments from one provider and import them. */
+function LmsImportModal({ provider, classId, className, onClose, onImported }) {
+  const label = lmsLabel(provider);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [items, setItems] = useState([]);
@@ -558,7 +582,7 @@ function CanvasImportModal({ classId, className, onClose, onImported }) {
 
   useEffect(() => {
     let active = true;
-    canvasApi
+    lmsApi(provider)
       .listCourseAssignments(classId)
       .then(({ assignments }) => {
         if (!active) return;
@@ -570,12 +594,12 @@ function CanvasImportModal({ classId, className, onClose, onImported }) {
         });
         setSelected(sel);
       })
-      .catch((err) => active && setError(errorMessage(err, 'Could not load Canvas assignments.')))
+      .catch((err) => active && setError(errorMessage(err, `Could not load ${label} assignments.`)))
       .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
-  }, [classId]);
+  }, [classId, provider, label]);
 
   const toggle = (id) => setSelected((s) => ({ ...s, [id]: !s[id] }));
   const chosenIds = items.filter((a) => selected[a.externalId]).map((a) => a.externalId);
@@ -585,7 +609,7 @@ function CanvasImportModal({ classId, className, onClose, onImported }) {
     setImporting(true);
     setError('');
     try {
-      const result = await canvasApi.import(classId, chosenIds);
+      const result = await lmsApi(provider).import(classId, chosenIds);
       onImported(result);
     } catch (err) {
       setError(errorMessage(err, 'Import failed'));
@@ -594,19 +618,19 @@ function CanvasImportModal({ classId, className, onClose, onImported }) {
   };
 
   return (
-    <Modal title="Import from Canvas" onClose={onClose} wide>
+    <Modal title={`Import from ${label}`} onClose={onClose} wide>
       <p className="mb-3 text-sm text-muted">
-        Assignments from Canvas for <span className="font-semibold text-ink">{className}</span>.
+        Assignments from {label} for <span className="font-semibold text-ink">{className}</span>.
         Already-imported ones are checked; uncheck anything you don’t want.
       </p>
 
       {loading ? (
-        <Spinner label="Loading Canvas assignments…" />
+        <Spinner label={`Loading ${label} assignments…`} />
       ) : error ? (
         <ErrorBanner message={error} />
       ) : items.length === 0 ? (
-        <EmptyState title="No Canvas assignments">
-          This Canvas course has no assignments to import.
+        <EmptyState title={`No ${label} assignments`}>
+          This {label} course has no assignments to import.
         </EmptyState>
       ) : (
         <>

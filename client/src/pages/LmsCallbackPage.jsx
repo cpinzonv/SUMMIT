@@ -3,17 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { errorMessage } from '../api/client';
 import { Spinner, ErrorBanner } from '../components/ui';
-import { canvasApi, readPendingConnect, clearPendingConnect } from '../lib/canvas';
+import { lmsApi, lmsLabel, readPendingConnect, clearPendingConnect } from '../lib/lms';
 
 /**
- * Canvas redirects here (LMS_REDIRECT_URI) with ?code & ?state after the user
- * grants access. We validate state, exchange the code for tokens via the
- * backend, then return to Settings.
+ * An LMS redirects here (LMS_REDIRECT_URI) with ?code & ?state after the user
+ * grants access. We recover which provider started the flow from the pending
+ * record, validate state, exchange the code for tokens via the backend, then
+ * return to Settings.
  */
 export default function LmsCallbackPage() {
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
   const [error, setError] = useState('');
+  const [label, setLabel] = useState('your LMS');
   const ran = useRef(false); // guard against StrictMode double-invoke
 
   useEffect(() => {
@@ -27,13 +29,17 @@ export default function LmsCallbackPage() {
     const pending = readPendingConnect();
     clearPendingConnect();
 
+    const provider = pending?.provider || 'canvas';
+    const providerLabel = lmsLabel(provider);
+    setLabel(providerLabel);
+
     (async () => {
       if (oauthError) {
-        setError(`Canvas authorization was cancelled or failed (${oauthError}).`);
+        setError(`${providerLabel} authorization was cancelled or failed (${oauthError}).`);
         return;
       }
       if (!code) {
-        setError('Missing authorization code from Canvas.');
+        setError(`Missing authorization code from ${providerLabel}.`);
         return;
       }
       if (!pending || (state && pending.state && state !== pending.state)) {
@@ -41,11 +47,11 @@ export default function LmsCallbackPage() {
         return;
       }
       try {
-        await canvasApi.connect({ domain: pending.domain, code, state });
+        await lmsApi(provider).connect({ domain: pending.domain, code, state });
         await refreshUser();
-        navigate('/settings?canvas=connected', { replace: true });
+        navigate(`/settings?lms=${provider}`, { replace: true });
       } catch (err) {
-        setError(errorMessage(err, 'Could not connect Canvas.'));
+        setError(errorMessage(err, `Could not connect ${providerLabel}.`));
       }
     })();
   }, [navigate, refreshUser]);
@@ -60,7 +66,7 @@ export default function LmsCallbackPage() {
           </button>
         </div>
       ) : (
-        <Spinner label="Connecting Canvas…" />
+        <Spinner label={`Connecting ${label}…`} />
       )}
     </div>
   );

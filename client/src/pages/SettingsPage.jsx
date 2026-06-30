@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Toast, Toggle, classGradient, gradeColor } from '../components/ui';
-import { canvasApi, beginConnect, summarizeSync } from '../lib/canvas';
+import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
 
 const TABS = [
   { key: 'account', label: 'Account' },
@@ -13,10 +13,12 @@ const TABS = [
 
 export default function SettingsPage() {
   const { user, preferences, savePreferences } = useAuth();
-  // Land on Preferences (where Canvas lives) when returning from the OAuth redirect.
-  const [tab, setTab] = useState(() =>
-    new URLSearchParams(window.location.search).has('canvas') ? 'preferences' : 'account',
-  );
+  // Land on Preferences (where the LMS connections live) when returning from the
+  // OAuth redirect (?lms=... ; ?canvas=... kept for backward-compatible links).
+  const [tab, setTab] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    return q.has('lms') || q.has('canvas') ? 'preferences' : 'account';
+  });
   const set = (key) => (value) => savePreferences({ [key]: value });
 
   return (
@@ -183,30 +185,20 @@ function PreferencesTab({ prefs, set }) {
         </Row>
       </Section>
 
-      <CanvasSection />
+      <LmsConnections />
     </>
   );
 }
 
-/* ---- Canvas integration ------------------------------------------------ */
-function CanvasSection() {
-  const { user, refreshUser } = useAuth();
-  const location = useLocation();
-  const [status, setStatus] = useState(user?.lms || { connected: false, available: true });
-  const [domain, setDomain] = useState(user?.lms?.domain || '');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+/* ---- LMS integrations (Canvas, Blackboard, Google Classroom, …) -------- */
+function LmsConnections() {
+  const [providers, setProviders] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Pull fresh status (includes server `available` flag) on mount.
+  const reload = () => lmsStatusAll().then(setProviders).catch(() => setProviders([]));
+
   useEffect(() => {
-    canvasApi
-      .status()
-      .then((s) => {
-        setStatus(s);
-        if (s.domain) setDomain(s.domain);
-      })
-      .catch(() => {});
+    reload();
   }, []);
 
   useEffect(() => {
@@ -215,30 +207,74 @@ function CanvasSection() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const justConnected = new URLSearchParams(location.search).get('canvas') === 'connected';
+  // Which provider, if any, just completed an OAuth redirect (?lms=<provider>).
+  const justConnected = new URLSearchParams(window.location.search).get('lms');
+
+  return (
+    <Section
+      title="Connected learning platforms"
+      description="Link an LMS to auto-import assignments, due dates, and grades."
+    >
+      <div className="space-y-4">
+        {providers === null ? (
+          <p className="text-sm text-muted">Loading…</p>
+        ) : (
+          providers.map((p) => (
+            <ProviderCard
+              key={p.provider}
+              status={p}
+              justConnected={justConnected === p.provider}
+              onChange={reload}
+              setToast={setToast}
+            />
+          ))
+        )}
+      </div>
+      <Toast toast={toast} />
+    </Section>
+  );
+}
+
+function ProviderCard({ status, justConnected, onChange, setToast }) {
+  const { refreshUser } = useAuth();
+  const provider = status.provider;
+  const meta = LMS_META[provider] || {};
+  const label = status.label || meta.label || provider;
+  const api = lmsApi(provider);
+
+  const [domain, setDomain] = useState(status.domain || '');
+  const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState('');
+
+  const lastSynced = status.syncedAt
+    ? new Date(status.syncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : 'never';
 
   const connect = async () => {
     setError('');
     const d = domain.trim();
-    if (!d) return setError("Enter your school's Canvas web address, e.g. school.instructure.com.");
+    if (status.needsDomain && !d) {
+      return setError(`Enter your school's ${meta.domainLabel || `${label} address`}.`);
+    }
     setBusy(true);
     try {
-      const { url, state } = await canvasApi.authUrl(d);
-      beginConnect({ url, state, domain: d }); // redirects to Canvas
+      const { url, state } = await api.authUrl(status.needsDomain ? d : undefined);
+      beginConnect({ provider, url, state, domain: status.needsDomain ? d : null });
     } catch (err) {
-      setError(errorMessage(err, 'Could not start the Canvas connection.'));
+      setError(errorMessage(err, `Could not start the ${label} connection.`));
       setBusy(false);
     }
   };
 
   const disconnect = async () => {
-    if (!confirm('Disconnect Canvas? Synced assignments stay, but syncing stops.')) return;
+    if (!confirm(`Disconnect ${label}? Synced assignments stay, but syncing stops.`)) return;
     setBusy(true);
     try {
-      const s = await canvasApi.disconnect();
-      setStatus(s);
+      await api.disconnect();
       await refreshUser();
-      setToast({ type: 'success', msg: 'Canvas disconnected' });
+      setToast({ type: 'success', msg: `${label} disconnected` });
+      onChange();
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -247,49 +283,51 @@ function CanvasSection() {
   };
 
   const sync = async () => {
-    setToast({ loading: true, msg: 'Syncing assignments…' });
+    setSyncing(true);
+    setToast({ loading: true, msg: `Syncing assignments from ${label}…` });
     try {
-      const result = await canvasApi.sync();
+      const result = await api.sync();
       await refreshUser();
-      const s = await canvasApi.status();
-      setStatus(s);
-      setToast({ type: 'success', msg: summarizeSync(result) });
+      setToast({ type: 'success', msg: summarizeSync(result, provider) });
+      onChange();
     } catch (err) {
-      setToast({ type: 'error', msg: errorMessage(err, 'Sync failed') });
+      setToast({ type: 'error', msg: errorMessage(err, `${label} sync failed`) });
+    } finally {
+      setSyncing(false);
     }
   };
 
-  const lastSynced = status.syncedAt
-    ? new Date(status.syncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-    : 'never';
-
   return (
-    <Section title="Canvas" description="Connect your Canvas account to auto-import assignments.">
+    <div className="rounded-2xl border border-white/50 bg-white/40 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: meta.accent || '#6366f1' }} />
+        <h3 className="font-display text-base font-bold text-ink">{label}</h3>
+        {status.connected && (
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-600">
+            ✓ Connected
+          </span>
+        )}
+      </div>
+
       {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
       {justConnected && status.connected && (
-        <div className="mb-3 rounded-2xl border border-emerald-300/50 bg-emerald-50/70 px-4 py-3 text-sm font-medium text-emerald-700">
-          Canvas connected — you can now sync assignments.
+        <div className="mb-3 rounded-2xl border border-emerald-300/50 bg-emerald-50/70 px-4 py-2.5 text-sm font-medium text-emerald-700">
+          {label} connected — you can now sync assignments.
         </div>
       )}
 
       {!status.available ? (
         <p className="text-sm text-muted">
-          Canvas isn’t configured on this server yet. An admin needs to set the Canvas
-          developer key and token encryption key.
+          {label} isn’t configured on this server yet. An admin needs to set the {label} client
+          credentials and the token encryption key.
         </p>
       ) : status.connected ? (
-        <div className="space-y-3">
-          <Row label="Status" hint={status.domain || undefined}>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-600">
-              ✓ Connected
-            </span>
-          </Row>
-          <Row label="Last synced" hint="Imports new and updated assignments.">
-            <span className="text-sm text-muted">{lastSynced}</span>
-          </Row>
+        <div className="space-y-2">
+          {status.domain && <p className="text-xs text-muted">{status.domain}</p>}
+          <p className="text-xs text-muted">Last synced: {lastSynced}</p>
           <div className="flex gap-2 pt-1">
-            <button onClick={sync} disabled={!!toast?.loading} className="btn btn-primary">
-              {toast?.loading ? 'Syncing…' : 'Sync now'}
+            <button onClick={sync} disabled={syncing} className="btn btn-primary">
+              {syncing ? 'Syncing…' : 'Sync now'}
             </button>
             <button onClick={disconnect} disabled={busy} className="btn btn-soft">
               Disconnect
@@ -298,27 +336,26 @@ function CanvasSection() {
         </div>
       ) : (
         <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-ink">Canvas web address</span>
-            <input
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-              placeholder="school.instructure.com"
-              className="field"
-              autoCapitalize="none"
-              autoCorrect="off"
-            />
-            <span className="mt-1 block text-xs text-muted">
-              The address you use to log into Canvas (e.g. <code>asu.instructure.com</code>).
-            </span>
-          </label>
+          {status.needsDomain && (
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-ink">{meta.domainLabel || `${label} web address`}</span>
+              <input
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder={meta.domainPlaceholder || ''}
+                className="field"
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+              {meta.domainHelp && <span className="mt-1 block text-xs text-muted">{meta.domainHelp}</span>}
+            </label>
+          )}
           <button onClick={connect} disabled={busy} className="btn btn-primary">
-            {busy ? 'Redirecting…' : 'Connect Canvas'}
+            {busy ? 'Redirecting…' : `Connect ${label}`}
           </button>
         </div>
       )}
-      <Toast toast={toast} />
-    </Section>
+    </div>
   );
 }
 

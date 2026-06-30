@@ -11,16 +11,18 @@ import {
   classGradient,
   computeGpa,
 } from '../components/ui';
-import { canvasApi, summarizeSync } from '../lib/canvas';
+import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 
 export default function DashboardPage() {
-  const { preferences, user, refreshUser } = useAuth();
+  const { preferences, refreshUser } = useAuth();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [archivedNotice, setArchivedNotice] = useState(0);
   const [toast, setToast] = useState(null);
-  const canvasConnected = Boolean(user?.lms?.connected);
+  const [syncingProvider, setSyncingProvider] = useState(null);
+  // Connected LMS providers (each gets its own "Sync" button).
+  const [connectedLms, setConnectedLms] = useState([]);
   // Auto-archive runs once per dashboard load. Holding the in-flight promise in
   // a ref makes both React StrictMode mounts await the SAME archive call, so the
   // class list is always loaded AFTER expired classes are archived (no stale
@@ -55,6 +57,19 @@ export default function DashboardPage() {
     };
   }, []);
 
+  // Load which LMS providers are connected so we can show per-provider sync.
+  useEffect(() => {
+    let active = true;
+    lmsStatusAll()
+      .then((providers) => {
+        if (active) setConnectedLms(providers.filter((p) => p.connected));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (!archivedNotice) return undefined;
     const t = setTimeout(() => setArchivedNotice(0), 6000);
@@ -67,16 +82,20 @@ export default function DashboardPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const syncCanvas = async () => {
-    setToast({ loading: true, msg: 'Syncing assignments…' });
+  const syncProvider = async (provider) => {
+    const label = lmsLabel(provider);
+    setSyncingProvider(provider);
+    setToast({ loading: true, msg: `Syncing assignments from ${label}…` });
     try {
-      const result = await canvasApi.sync();
+      const result = await lmsApi(provider).sync();
       const res = await api.get('/api/classes');
       setClasses(res.data.classes);
       await refreshUser();
-      setToast({ type: 'success', msg: summarizeSync(result) });
+      setToast({ type: 'success', msg: summarizeSync(result, provider) });
     } catch (err) {
-      setToast({ type: 'error', msg: errorMessage(err, 'Canvas sync failed') });
+      setToast({ type: 'error', msg: errorMessage(err, `${label} sync failed`) });
+    } finally {
+      setSyncingProvider(null);
     }
   };
 
@@ -101,11 +120,16 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {canvasConnected && (
-            <button onClick={syncCanvas} disabled={!!toast?.loading} className="btn btn-soft">
-              {toast?.loading ? 'Syncing…' : '↻ Sync with Canvas'}
+          {connectedLms.map((p) => (
+            <button
+              key={p.provider}
+              onClick={() => syncProvider(p.provider)}
+              disabled={!!syncingProvider}
+              className="btn btn-soft"
+            >
+              {syncingProvider === p.provider ? 'Syncing…' : `↻ Sync ${p.label}`}
             </button>
-          )}
+          ))}
           <Link to="/classes/new" className="btn btn-primary">
             + New class
           </Link>

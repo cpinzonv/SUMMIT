@@ -1,6 +1,10 @@
 /**
  * LMS sync service — provider-agnostic orchestration on top of services/lms/*.
  *
+ * Connections are stored one-per-(user, provider) in the lms_connections table,
+ * so a student can link several LMSs at once (Canvas + Blackboard + ...). Every
+ * public function therefore takes a `provider` key.
+ *
  * Responsibilities:
  *   - connection lifecycle: build auth URL, exchange code, store ENCRYPTED
  *     tokens, report status, disconnect
@@ -17,62 +21,92 @@ import crypto from 'node:crypto';
 import { query, withTransaction } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
-import { getProvider, DEFAULT_PROVIDER } from './lms/index.js';
+import { getProvider, DEFAULT_PROVIDER, PROVIDER_KEYS } from './lms/index.js';
+import { getProviderMeta } from './lms/providers.js';
 import { env } from '../config/env.js';
 
-/** Public connection status (safe to return to the client — no tokens). */
-export function toLmsStatus(row) {
+/* ---- Connection status -------------------------------------------------- */
+
+/** Public connection status for one provider (safe for the client — no tokens). */
+function toStatus(providerKey, row) {
+  const meta = getProviderMeta(providerKey);
   return {
-    connected: Boolean(row.lms_connected),
-    provider: row.lms_provider ?? null,
-    domain: row.lms_domain ?? null,
-    syncedAt: row.lms_synced_at ?? null,
-    // Whether the server is even able to do LMS work (key + provider configured).
-    available: env.lms.useMock || getProvider(row.lms_provider || DEFAULT_PROVIDER).isConfigured(),
+    provider: providerKey,
+    label: meta?.label ?? providerKey,
+    needsDomain: meta?.needsDomain ?? true,
+    connected: Boolean(row?.connected),
+    domain: row?.domain ?? null,
+    syncedAt: row?.synced_at ?? null,
+    // Whether the server can do LMS work for this provider (configured or mock).
+    available: getProvider(providerKey).isConfigured(),
   };
 }
 
-export async function getStatus(userId) {
+/** Status for a single provider. */
+export async function getStatus(userId, provider = DEFAULT_PROVIDER) {
+  assertKnownProvider(provider);
   const { rows } = await query(
-    `SELECT lms_connected, lms_provider, lms_domain, lms_synced_at FROM users WHERE id = $1`,
-    [userId],
+    `SELECT provider, domain, connected, synced_at
+       FROM lms_connections WHERE user_id = $1 AND provider = $2`,
+    [userId, provider],
   );
-  if (!rows[0]) throw AppError.notFound('User not found');
-  return toLmsStatus(rows[0]);
+  return toStatus(provider, rows[0]);
 }
 
+/** Status for every registered provider — what the Settings page renders. */
+export async function getStatuses(userId) {
+  const { rows } = await query(
+    `SELECT provider, domain, connected, synced_at FROM lms_connections WHERE user_id = $1`,
+    [userId],
+  );
+  const byProvider = Object.fromEntries(rows.map((r) => [r.provider, r]));
+  return PROVIDER_KEYS.map((key) => toStatus(key, byProvider[key]));
+}
+
+function assertKnownProvider(provider) {
+  if (!PROVIDER_KEYS.includes(provider)) {
+    throw AppError.badRequest(`Unsupported LMS provider: ${provider}`);
+  }
+}
+
+/* ---- Connect / disconnect ----------------------------------------------- */
+
 /** Build the provider authorize URL the client redirects the user to. */
-export function buildAuthUrl(userId, { provider = DEFAULT_PROVIDER, domain }) {
+export function buildAuthUrl(userId, provider, { domain } = {}) {
+  assertKnownProvider(provider);
   const p = getProvider(provider);
-  if (!p.isConfigured() && !env.lms.useMock) {
-    throw new AppError(503, `${provider} is not configured on the server.`);
+  if (!p.isConfigured()) {
+    throw new AppError(503, `${getProviderMeta(provider)?.label ?? provider} is not configured on the server.`);
   }
   // Opaque state for CSRF; the client echoes it back to the callback.
   const state = crypto.randomBytes(16).toString('hex');
   const url = p.buildAuthUrl({ domain, redirectUri: env.lms.redirectUri, state });
-  return { url, state, redirectUri: env.lms.redirectUri };
+  return { url, state, redirectUri: env.lms.redirectUri, provider };
 }
 
-/** Exchange the OAuth code for tokens and store them (encrypted). */
-export async function connect(userId, { provider = DEFAULT_PROVIDER, domain, code, redirectUri }) {
+/** Exchange the OAuth code for tokens and store them (encrypted), per provider. */
+export async function connect(userId, provider, { domain, code, redirectUri } = {}) {
+  assertKnownProvider(provider);
   const p = getProvider(provider);
+  const label = getProviderMeta(provider)?.label ?? provider;
   const tokens = await p.exchangeCode({
     domain,
     code,
     redirectUri: redirectUri || env.lms.redirectUri,
   });
   if (!tokens.accessToken) {
-    throw AppError.badRequest('Canvas did not return an access token.');
+    throw AppError.badRequest(`${label} did not return an access token.`);
   }
   await query(
-    `UPDATE users SET
-       lms_provider = $2,
-       lms_domain = $3,
-       lms_access_token = $4,
-       lms_refresh_token = $5,
-       lms_token_expires_at = $6,
-       lms_connected = true
-     WHERE id = $1`,
+    `INSERT INTO lms_connections
+       (user_id, provider, domain, access_token, refresh_token, token_expires_at, connected)
+     VALUES ($1, $2, $3, $4, $5, $6, true)
+     ON CONFLICT (user_id, provider) DO UPDATE SET
+       domain = EXCLUDED.domain,
+       access_token = EXCLUDED.access_token,
+       refresh_token = EXCLUDED.refresh_token,
+       token_expires_at = EXCLUDED.token_expires_at,
+       connected = true`,
     [
       userId,
       provider,
@@ -82,39 +116,42 @@ export async function connect(userId, { provider = DEFAULT_PROVIDER, domain, cod
       tokens.expiresAt ?? null,
     ],
   );
-  return getStatus(userId);
+  return getStatus(userId, provider);
 }
 
-/** Forget the LMS connection and stored tokens. Leaves synced data in place. */
-export async function disconnect(userId) {
+/** Forget one provider's connection + stored tokens. Leaves synced data in place. */
+export async function disconnect(userId, provider) {
+  assertKnownProvider(provider);
   await query(
-    `UPDATE users SET
-       lms_connected = false,
-       lms_access_token = NULL,
-       lms_refresh_token = NULL,
-       lms_token_expires_at = NULL
-     WHERE id = $1`,
-    [userId],
+    `UPDATE lms_connections SET
+       connected = false,
+       access_token = NULL,
+       refresh_token = NULL,
+       token_expires_at = NULL
+     WHERE user_id = $1 AND provider = $2`,
+    [userId, provider],
   );
-  return getStatus(userId);
+  return getStatus(userId, provider);
 }
 
-/** Load + decrypt the connection, or throw a clear 400 if not connected. */
-async function requireConnection(userId) {
+/** Load + decrypt a provider connection, or throw a clear 400 if not connected. */
+async function requireConnection(userId, provider) {
+  assertKnownProvider(provider);
   const { rows } = await query(
-    `SELECT lms_provider, lms_domain, lms_access_token, lms_refresh_token, lms_token_expires_at
-     FROM users WHERE id = $1`,
-    [userId],
+    `SELECT provider, domain, access_token, refresh_token, token_expires_at
+       FROM lms_connections WHERE user_id = $1 AND provider = $2`,
+    [userId, provider],
   );
   const row = rows[0];
-  if (!row || !row.lms_access_token) {
-    throw AppError.badRequest('Connect Canvas in Settings first.', { code: 'lms_not_connected' });
+  const label = getProviderMeta(provider)?.label ?? provider;
+  if (!row || !row.access_token) {
+    throw AppError.badRequest(`Connect ${label} in Settings first.`, { code: 'lms_not_connected' });
   }
   return {
-    provider: row.lms_provider || DEFAULT_PROVIDER,
-    domain: row.lms_domain,
-    accessToken: decrypt(row.lms_access_token),
-    refreshToken: row.lms_refresh_token ? decrypt(row.lms_refresh_token) : null,
+    provider,
+    domain: row.domain,
+    accessToken: decrypt(row.access_token),
+    refreshToken: row.refresh_token ? decrypt(row.refresh_token) : null,
   };
 }
 
@@ -124,12 +161,13 @@ async function requireConnection(userId) {
  * "reconnect" error.
  */
 async function withValidToken(userId, conn, fn) {
+  const label = getProviderMeta(conn.provider)?.label ?? conn.provider;
   try {
     return await fn(conn.accessToken);
   } catch (err) {
     if (err?.details?.code !== 'lms_token_expired') throw err;
     if (!conn.refreshToken) {
-      throw new AppError(401, 'Your Canvas session expired. Reconnect Canvas in Settings.', {
+      throw new AppError(401, `Your ${label} session expired. Reconnect ${label} in Settings.`, {
         code: 'lms_reconnect_required',
       });
     }
@@ -138,13 +176,14 @@ async function withValidToken(userId, conn, fn) {
     try {
       tokens = await provider.refresh({ domain: conn.domain, refreshToken: conn.refreshToken });
     } catch {
-      throw new AppError(401, 'Your Canvas session expired. Reconnect Canvas in Settings.', {
+      throw new AppError(401, `Your ${label} session expired. Reconnect ${label} in Settings.`, {
         code: 'lms_reconnect_required',
       });
     }
     await query(
-      `UPDATE users SET lms_access_token = $2, lms_token_expires_at = $3 WHERE id = $1`,
-      [userId, encrypt(tokens.accessToken), tokens.expiresAt ?? null],
+      `UPDATE lms_connections SET access_token = $3, token_expires_at = $4
+         WHERE user_id = $1 AND provider = $2`,
+      [userId, conn.provider, encrypt(tokens.accessToken), tokens.expiresAt ?? null],
     );
     conn.accessToken = tokens.accessToken;
     return fn(tokens.accessToken);
@@ -236,26 +275,26 @@ async function upsertAssignment(client, classId, source, a, tally) {
 
 /* ---- Public sync operations --------------------------------------------- */
 
-/** Full sync: every active course's assignments. Returns a summary tally. */
-export async function syncAll(userId) {
-  const conn = await requireConnection(userId);
-  const provider = getProvider(conn.provider);
-  const source = provider.name;
+/** Full sync for one provider: every active course's assignments. Returns a tally. */
+export async function syncAll(userId, provider = DEFAULT_PROVIDER) {
+  const conn = await requireConnection(userId, provider);
+  const resolved = getProvider(provider);
+  const source = resolved.name;
 
   // 1. Fetch everything from the LMS first (network), refreshing token if needed.
   const courses = await withValidToken(userId, conn, (tok) =>
-    provider.listCourses({ domain: conn.domain, accessToken: tok }),
+    resolved.listCourses({ domain: conn.domain, accessToken: tok }),
   );
   const fetched = [];
   for (const course of courses) {
     const assignments = await withValidToken(userId, conn, (tok) =>
-      provider.listAssignments({ domain: conn.domain, accessToken: tok, externalCourseId: course.externalId }),
+      resolved.listAssignments({ domain: conn.domain, accessToken: tok, externalCourseId: course.externalId }),
     );
     fetched.push({ course, assignments });
   }
 
   // 2. Persist atomically.
-  const tally = { courses: fetched.length, classesCreated: 0, classesMatched: 0, imported: 0, updated: 0, grades: 0 };
+  const tally = { provider, courses: fetched.length, classesCreated: 0, classesMatched: 0, imported: 0, updated: 0, grades: 0 };
   await withTransaction(async (client) => {
     for (const { course, assignments } of fetched) {
       const cls = await matchOrCreateClass(client, userId, source, course, tally);
@@ -263,19 +302,23 @@ export async function syncAll(userId) {
     }
   });
 
-  await query(`UPDATE users SET lms_synced_at = now() WHERE id = $1`, [userId]);
+  await query(
+    `UPDATE lms_connections SET synced_at = now() WHERE user_id = $1 AND provider = $2`,
+    [userId, provider],
+  );
   return tally;
 }
 
 /** Resolve which external course a Summit class corresponds to (linking if needed). */
-async function resolveCourseForClass(userId, conn, provider, cls) {
-  const source = provider.name;
+async function resolveCourseForClass(userId, conn, resolved, cls) {
+  const source = resolved.name;
+  const label = getProviderMeta(conn.provider)?.label ?? conn.provider;
   if (cls.external_course_id && cls.external_source === source) {
     return cls.external_course_id;
   }
   // Not linked yet — match against the LMS course list by name/code.
   const courses = await withValidToken(userId, conn, (tok) =>
-    provider.listCourses({ domain: conn.domain, accessToken: tok }),
+    resolved.listCourses({ domain: conn.domain, accessToken: tok }),
   );
   const match = courses.find(
     (c) =>
@@ -284,7 +327,7 @@ async function resolveCourseForClass(userId, conn, provider, cls) {
   );
   if (!match) {
     throw AppError.badRequest(
-      `Couldn't find a matching Canvas course for "${cls.name}". Run a full sync from the dashboard, or rename the class to match Canvas.`,
+      `Couldn't find a matching ${label} course for "${cls.name}". Run a full sync, or rename the class to match ${label}.`,
     );
   }
   await query(
@@ -294,15 +337,15 @@ async function resolveCourseForClass(userId, conn, provider, cls) {
   return match.externalId;
 }
 
-/** List a class's Canvas assignments, flagging which are already imported. */
-export async function listImportableAssignments(userId, cls) {
-  const conn = await requireConnection(userId);
-  const provider = getProvider(conn.provider);
-  const source = provider.name;
-  const externalCourseId = await resolveCourseForClass(userId, conn, provider, cls);
+/** List a class's assignments for a provider, flagging which are already imported. */
+export async function listImportableAssignments(userId, provider, cls) {
+  const conn = await requireConnection(userId, provider);
+  const resolved = getProvider(provider);
+  const source = resolved.name;
+  const externalCourseId = await resolveCourseForClass(userId, conn, resolved, cls);
 
   const assignments = await withValidToken(userId, conn, (tok) =>
-    provider.listAssignments({ domain: conn.domain, accessToken: tok, externalCourseId }),
+    resolved.listAssignments({ domain: conn.domain, accessToken: tok, externalCourseId }),
   );
 
   const { rows } = await query(
@@ -322,20 +365,20 @@ export async function listImportableAssignments(userId, cls) {
   }));
 }
 
-/** Import a chosen subset of a class's Canvas assignments. */
-export async function importAssignments(userId, cls, externalIds) {
-  const conn = await requireConnection(userId);
-  const provider = getProvider(conn.provider);
-  const source = provider.name;
-  const externalCourseId = await resolveCourseForClass(userId, conn, provider, cls);
+/** Import a chosen subset of a class's assignments for a provider. */
+export async function importAssignments(userId, provider, cls, externalIds) {
+  const conn = await requireConnection(userId, provider);
+  const resolved = getProvider(provider);
+  const source = resolved.name;
+  const externalCourseId = await resolveCourseForClass(userId, conn, resolved, cls);
 
   const all = await withValidToken(userId, conn, (tok) =>
-    provider.listAssignments({ domain: conn.domain, accessToken: tok, externalCourseId }),
+    resolved.listAssignments({ domain: conn.domain, accessToken: tok, externalCourseId }),
   );
   const wanted = new Set(externalIds.map(String));
   const selected = all.filter((a) => wanted.has(String(a.externalId)));
 
-  const tally = { imported: 0, updated: 0, grades: 0 };
+  const tally = { provider, imported: 0, updated: 0, grades: 0 };
   await withTransaction(async (client) => {
     for (const a of selected) await upsertAssignment(client, cls.id, source, a, tally);
   });

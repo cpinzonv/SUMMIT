@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { LMS_PROVIDER_KEYS, envStem } from '../services/lms/providers.js';
 
 dotenv.config();
 
@@ -42,22 +43,49 @@ export const env = {
   anthropicApiKey: optional('ANTHROPIC_API_KEY', ''),
   anthropicModel: optional('ANTHROPIC_MODEL', 'claude-opus-4-8'),
 
-  // LMS integration (Canvas, etc.). All optional — the feature 503s until
-  // configured, exactly like the syllabus/Anthropic feature.
+  // LMS integration (Canvas, Blackboard, Google Classroom, Brightspace, Moodle,
+  // Sakai). All optional — a provider 503s until configured, exactly like the
+  // syllabus/Anthropic feature. Every provider shares this block; per-provider
+  // credentials live under lms.providers[<key>] (see services/lms/providers.js).
   lms: {
     // 32-byte key (64 hex chars) for encrypting stored OAuth tokens at rest.
     // Generate with: openssl rand -hex 32
     tokenEncKey: optional('LMS_TOKEN_ENC_KEY', ''),
-    // Where Canvas sends the user back after consent (a frontend route).
+    // Where a provider sends the user back after consent (a frontend route).
     redirectUri: optional('LMS_REDIRECT_URI', 'http://localhost:5173/lms/callback'),
-    // Dev mode: use an in-memory fixture LMS instead of calling a real Canvas.
-    // Lets the whole connect→sync→import pipeline run without credentials.
+    // Global dev switch: use the in-memory fixture LMS for EVERY provider instead
+    // of calling real APIs. Lets the whole connect→sync→import pipeline run with
+    // no credentials and no network. Individual providers can also be mocked on
+    // their own with MOCK_<KEY>_MODE=true (e.g. MOCK_BLACKBOARD_MODE=true).
     useMock: optional('LMS_MOCK', 'false') === 'true',
-    canvas: {
-      clientId: optional('CANVAS_CLIENT_ID', ''),
-      clientSecret: optional('CANVAS_CLIENT_SECRET', ''),
-    },
+    // Per-provider credentials + mock flag, keyed by provider key.
+    //   CANVAS_CLIENT_ID / CANVAS_CLIENT_SECRET / MOCK_CANVAS_MODE
+    //   BLACKBOARD_CLIENT_ID / ... / MOCK_BLACKBOARD_MODE
+    //   GOOGLE_CLASSROOM_CLIENT_ID / ... / MOCK_GOOGLE_CLASSROOM_MODE
+    //   BRIGHTSPACE_CLIENT_ID / MOODLE_CLIENT_ID / SAKAI_CLIENT_ID ...
+    providers: Object.fromEntries(
+      LMS_PROVIDER_KEYS.map((key) => {
+        const STEM = envStem(key);
+        return [
+          key,
+          {
+            clientId: optional(`${STEM}_CLIENT_ID`, ''),
+            clientSecret: optional(`${STEM}_CLIENT_SECRET`, ''),
+            // Per-provider mock override (in addition to the global LMS_MOCK).
+            mock: optional(`MOCK_${STEM}_MODE`, 'false') === 'true',
+          },
+        ];
+      }),
+    ),
   },
 };
+
+// Back-compat alias: canvas.js historically read env.lms.canvas.*
+env.lms.canvas = env.lms.providers.canvas;
+
+/** True when the named provider should use the in-memory mock. */
+export function providerUsesMock(key) {
+  return env.lms.useMock || Boolean(env.lms.providers[key]?.mock);
+}
 
 export const isProd = env.nodeEnv === 'production';

@@ -2,10 +2,9 @@
  * LMS provider registry.
  *
  * Every provider implements this interface so the sync service stays
- * provider-agnostic (add Blackboard/Brightspace/Moodle by writing one module
- * and registering it here):
+ * provider-agnostic — adding an LMS is "write one module + register it here":
  *
- *   name: string
+ *   name: string                      // canonical source key (matches providers.js)
  *   isConfigured(): boolean
  *   buildAuthUrl({ domain, redirectUri, state }): string
  *   exchangeCode({ domain, redirectUri, code }): Promise<Tokens>
@@ -19,22 +18,36 @@
  *   Assignment = { externalId, title, dueDate(ISO)|null, pointValue|null,
  *                  description|null, url|null, grade:{pointsEarned,pointsPossible}|null }
  *
- * When LMS_MOCK=true the mock provider is used for every provider name, so the
- * full pipeline runs without credentials or network.
+ * When a provider is in mock mode (global LMS_MOCK=true, or MOCK_<KEY>_MODE=true)
+ * the in-memory fixture provider is used in its place, so the full pipeline runs
+ * without credentials or network. Swapping in the real provider is an env change.
  */
-import { env } from '../../config/env.js';
+import { providerUsesMock } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
-import * as canvas from './canvas.js';
-import * as mock from './mock.js';
 
-const PROVIDERS = { canvas };
+import * as canvas from './canvas.js';
+import { mockProvider } from './mock.js';
+
+// Providers are registered here one at a time. Everything downstream (status,
+// routes, the per-provider mock) keys off Object.keys(PROVIDERS), so adding a
+// provider is a single edit: import the module and add it to this map.
+const PROVIDERS = {
+  canvas,
+};
 
 export const DEFAULT_PROVIDER = 'canvas';
 
-/** Resolve a provider module by name (honoring LMS_MOCK). Throws 400 if unknown. */
+/** All registered provider keys. */
+export const PROVIDER_KEYS = Object.keys(PROVIDERS);
+
+/**
+ * Resolve a provider module by key, honoring mock mode. Throws 400 if unknown.
+ * In mock mode the returned module reports `name === <key>` so stored
+ * external_source rows stay consistent with the real provider.
+ */
 export function getProvider(providerName = DEFAULT_PROVIDER) {
-  if (env.lms.useMock) return mock;
-  const provider = PROVIDERS[providerName];
-  if (!provider) throw AppError.badRequest(`Unsupported LMS provider: ${providerName}`);
-  return provider;
+  const real = PROVIDERS[providerName];
+  if (!real) throw AppError.badRequest(`Unsupported LMS provider: ${providerName}`);
+  if (providerUsesMock(providerName)) return mockProvider(providerName);
+  return real;
 }
