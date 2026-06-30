@@ -92,6 +92,14 @@ router.post(
   asyncHandler(notes.create),
 );
 
+// Ask Claude a question grounded in this class's notes.
+router.post(
+  '/:id/notes-chatbot',
+  validate(classes.classIdParam, 'params'),
+  validate(notes.chatbotSchema),
+  asyncHandler(notes.chatbot),
+);
+
 // Attendance nested under a class (delete by id lives in attendance.routes).
 router.get(
   '/:id/attendance',

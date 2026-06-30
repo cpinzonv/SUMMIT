@@ -1,10 +1,20 @@
 import { z } from 'zod';
 import * as noteService from '../services/note.service.js';
+import { askAboutNotes } from '../services/chatbot.service.js';
 
 export const createNoteSchema = z.object({
   title: z.string().max(300).optional(),
   content: z.string().optional(),
 });
+
+export const chatbotSchema = z.object({
+  question: z.string().min(1, 'Ask a question').max(2000),
+});
+
+export async function chatbot(req, res) {
+  const result = await askAboutNotes(req.user.id, req.params.id, req.body.question);
+  res.json(result);
+}
 
 export const updateNoteSchema = z
   .object({
