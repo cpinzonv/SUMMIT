@@ -12,6 +12,7 @@ import {
   classGradient,
 } from '../components/ui';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
+import { dueStatus, isDone } from '../lib/dueDate';
 import { ClassNotes } from '../components/ClassNotes';
 import { ClassAttendance } from '../components/ClassAttendance';
 
@@ -254,12 +255,20 @@ export default function ClassDetailPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/40">
-                {assignments.map((a) => (
-                  <tr key={a.id} className="transition hover:bg-white/40">
+                {assignments.map((a) => {
+                  const st = dueStatus(a.dueDate);
+                  const overdue = st.isPastDue && !isDone(a);
+                  return (
+                  <tr key={a.id} className={`transition hover:bg-white/40 ${overdue ? 'bg-rose-50/70' : ''}`}>
                     <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-ink">{a.title}</span>
                         {a.externalSource && <LmsBadge source={a.externalSource} />}
+                        {overdue && (
+                          <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">
+                            {st.lateLabel}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-muted">
                         {a.category || a.status?.replace('_', ' ')}
@@ -303,7 +312,8 @@ export default function ClassDetailPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

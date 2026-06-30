@@ -136,14 +136,28 @@ export async function listCurrentClasses(userId) {
   return Promise.all(
     rows.map(async (row) => {
       const currentGrade = await computeClassGrade(row.id);
+      const overdueCount = await countOverdueAssignments(row.id);
       return {
         ...toPublicClass(row),
         currentGrade,
         // Single source of truth: same generated-session rate the grade uses.
         attendanceRate: currentGrade.attendancePercentage,
+        // Past-due work not yet submitted/graded — drives the dashboard warning.
+        overdueCount,
       };
     }),
   );
+}
+
+/** Count a class's assignments that are past due and not yet submitted/graded. */
+async function countOverdueAssignments(classId) {
+  const { rows } = await query(
+    `SELECT count(*)::int AS n FROM assignments
+     WHERE class_id = $1 AND due_date IS NOT NULL AND due_date < now()
+       AND status NOT IN ('submitted', 'graded')`,
+    [classId],
+  );
+  return rows[0]?.n ?? 0;
 }
 
 /**

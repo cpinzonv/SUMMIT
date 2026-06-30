@@ -307,6 +307,11 @@ function ClassCard({ cls, index, animating = false, onArchive }) {
             <p className="text-xs text-muted">
               {[cls.code, cls.term].filter(Boolean).join(' · ') || 'No code'}
             </p>
+            {cls.overdueCount > 0 && (
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">
+                {cls.overdueCount} overdue
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right">
@@ -341,7 +346,14 @@ function ClassRow({ cls, index, animating = false, onArchive }) {
     >
       <span className="h-9 w-1.5 rounded-full" style={{ backgroundImage: classGradient(cls, index) }} />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-semibold text-ink">{cls.name}</div>
+        <div className="flex items-center gap-2">
+          <span className="truncate font-semibold text-ink">{cls.name}</span>
+          {cls.overdueCount > 0 && (
+            <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">
+              {cls.overdueCount} overdue
+            </span>
+          )}
+        </div>
         <div className="truncate text-xs text-muted">
           {[cls.code, cls.term].filter(Boolean).join(' · ') || 'No code'}
         </div>

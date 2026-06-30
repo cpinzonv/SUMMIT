@@ -10,6 +10,7 @@ import {
   Modal,
   gradeColor,
 } from '../components/ui';
+import { dueStatus, isDone } from '../lib/dueDate';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const VIEWS = [
@@ -26,6 +27,15 @@ const PRIORITY_DOT = {
   none: 'bg-slate-300',
 };
 const PRIORITY_LABEL = { high: 'High', medium: 'Medium', low: 'Low', none: 'None' };
+
+// Dot color for a calendar event: a past-due (and not-done) DUE deadline turns
+// red to stand out; otherwise the dot follows the assignment's priority.
+function eventDot(ev) {
+  if (ev.type === 'due' && !isDone(ev.a) && dueStatus(ev.a.dueDate).isPastDue) {
+    return 'bg-rose-600 ring-1 ring-rose-300';
+  }
+  return PRIORITY_DOT[ev.a.priority || 'none'];
+}
 
 const localKey = (d) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
@@ -385,7 +395,7 @@ function MonthChip({ ev, act, dnd }) {
       className={`flex w-full items-center gap-1 truncate rounded-lg px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-sm transition hover:brightness-105 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 ring-2 ring-white/70' : ''}`}
       style={{ backgroundImage: ev.gradient, opacity: isDragging ? 0.4 : isDue ? 1 : 0.42 }}
     >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-white/70 ${PRIORITY_DOT[ev.a.priority || 'none']}`} />
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-white/70 ${eventDot(ev)}`} />
       <span className="truncate">{ev.a.title}</span>
     </button>
   );
@@ -448,7 +458,7 @@ function EventRow({ ev, act, dnd }) {
       onDoubleClick={() => act.edit(ev)}
       className={`flex w-full items-center gap-2 rounded-lg border border-white/50 bg-white/45 px-2 py-1.5 text-left transition hover:bg-white/75 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 shadow-lg ring-2 ring-brand-400/50' : ''}`}
     >
-      <span className={`h-2 w-2 shrink-0 rounded-full ${PRIORITY_DOT[ev.a.priority || 'none']}`} />
+      <span className={`h-2 w-2 shrink-0 rounded-full ${eventDot(ev)}`} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-xs font-semibold text-ink">{ev.a.title}</span>
         <span className="block truncate text-[10px] text-muted">{ev.cls.code || ev.cls.name}</span>
