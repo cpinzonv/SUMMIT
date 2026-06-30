@@ -64,12 +64,16 @@ export function LearnEmptyState({ className, onGenerate, onAddManual }) {
           Ready to ace <span className="text-gradient">{className || 'this class'}</span>?
         </h2>
         <p className="mt-2 max-w-sm text-sm text-muted">
-          Generate a smart flashcard set from your notes &amp; transcripts, or write one by hand.
-          Your study streak starts here.
+          Generate flashcards from your notes &amp; transcripts, or create one by hand.
         </p>
         <div className="mt-6 flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-3">
-          <button className="btn btn-primary" onClick={onGenerate}>✦ Generate from notes</button>
-          <button className="btn btn-soft" onClick={onAddManual}>+ Add card manually</button>
+          <button className="btn btn-primary" onClick={onGenerate}>Generate from notes</button>
+          <button
+            className="rounded-[0.95rem] border-2 border-[#4FC3DC] bg-[#4FC3DC]/10 px-5 py-[0.55rem] text-sm font-semibold text-[#2a93ab] transition hover:-translate-y-0.5 hover:bg-[#4FC3DC]/20"
+            onClick={onAddManual}
+          >
+            Add card manually
+          </button>
         </div>
       </div>
     </div>
