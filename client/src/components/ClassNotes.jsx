@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState } from './ui';
+import { EmptyHero, NotepadIllustration } from './EmptyHero';
 import { RichTextEditor } from './RichTextEditor';
 
 /* ---- date helpers ------------------------------------------------------- */
@@ -131,9 +132,19 @@ export function ClassNotes({ classId }) {
       {loading ? (
         <Spinner label="Loading notes…" />
       ) : notes.length === 0 ? (
-        <EmptyState title={q ? 'No notes match your search' : view === 'archived' ? 'No archived notes' : 'No notes yet'}>
-          {!q && view === 'active' && 'Capture lecture notes, readings, and ideas.'}
-        </EmptyState>
+        q || view === 'archived' ? (
+          // Search / archived empty results keep the simple message.
+          <EmptyState title={q ? 'No notes match your search' : 'No archived notes'} />
+        ) : (
+          // True empty state — the glassmorphism hero.
+          <EmptyHero
+            illustration={<NotepadIllustration />}
+            headline="Start capturing ideas"
+            subheading="Capture lecture notes, readings, and ideas. Notes auto-save as you type."
+            ctaLabel="Create your first note"
+            onCta={() => setEditing({ note: { isNew: true, title: '', content: '' }, mode: 'modal' })}
+          />
+        )
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {notes.map((note) => (

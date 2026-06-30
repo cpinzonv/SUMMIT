@@ -9,6 +9,7 @@ import {
   classGradient,
   gradeColor,
 } from '../components/ui';
+import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 
 const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
 const STATUS_BADGE = {
@@ -181,10 +182,13 @@ export default function PlannerPage() {
           </div>
 
           {terms.length === 0 ? (
-            <EmptyState title="No courses planned yet">
-              Add courses by semester to build your 4-year roadmap. When a term starts, its
-              courses move to your Dashboard automatically.
-            </EmptyState>
+            <EmptyHero
+              illustration={<CalendarIllustration />}
+              headline="Build your 4-year roadmap"
+              subheading="Add courses by semester. When a term starts, they move to your Dashboard automatically."
+              ctaLabel="Add your first course"
+              onCta={() => setAdding(true)}
+            />
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {terms.map(({ term, courses, credits }, i) => (
