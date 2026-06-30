@@ -338,8 +338,14 @@ export default function ClassDetailPage() {
             </table>
           </div>
           <div className="mt-3 flex justify-end">
-            <button onClick={() => setModal({ type: 'gradeSim' })} className="btn btn-soft">
-              What if?
+            <button
+              type="button"
+              onClick={() => setModal({ type: 'gradeSim' })}
+              title="What if?"
+              aria-label="What if? — grade simulator"
+              className="grid h-10 w-10 place-items-center rounded-full border border-white/60 bg-white/55 shadow-sm backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/85 hover:shadow-md"
+            >
+              <WhatIfIcon className="h-6 w-6" />
             </button>
           </div>
           </>
@@ -551,6 +557,32 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Custom "What if?" grade-simulator icon: a minimal line-art target (coral +
+ * orange concentric rings) with a teal arrow piercing the bullseye toward the
+ * upper-right — Summit's warm→cool gradient in clean 2px linework.
+ */
+function WhatIfIcon({ className = '' }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" stroke="#FF6B6B" />
+      <circle cx="12" cy="12" r="5" stroke="#FFA500" />
+      {/* arrow through the centre, pointing up-right */}
+      <path d="M8.5 15.5 L19 5" stroke="#20B2AA" />
+      <path d="M13.5 5 L19 5 L19 10.5" stroke="#20B2AA" />
+      <circle cx="12" cy="12" r="1.25" fill="#20B2AA" stroke="none" />
+    </svg>
   );
 }
 
