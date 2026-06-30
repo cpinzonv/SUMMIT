@@ -31,6 +31,13 @@ router.post(
 router.post('/', validate(classes.createClassSchema), asyncHandler(classes.create));
 router.get('/', asyncHandler(classes.list));
 
+router.patch(
+  '/:id',
+  validate(classes.classIdParam, 'params'),
+  validate(classes.updateClassSchema),
+  asyncHandler(classes.update),
+);
+
 router.put(
   '/:id/archive',
   validate(classes.classIdParam, 'params'),

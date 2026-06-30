@@ -29,6 +29,8 @@ const syllabusSchema = z
   })
   .optional();
 
+const weekday = z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+
 export const createClassSchema = z.object({
   name: z.string().min(1, 'name is required'),
   description: z.string().optional(),
@@ -38,14 +40,36 @@ export const createClassSchema = z.object({
   color: z.string().optional(),
   startDate: dateString.optional(),
   endDate: dateString.optional(),
+  meetingDays: z.array(weekday).optional(),
+  meetingTime: z.string().optional(),
   syllabus: syllabusSchema,
 });
+
+// PATCH /api/classes/:id — schedule + basic fields, all optional.
+export const updateClassSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    description: z.string().nullable().optional(),
+    code: z.string().nullable().optional(),
+    term: z.string().nullable().optional(),
+    color: z.string().nullable().optional(),
+    startDate: dateString.nullable().optional(),
+    endDate: dateString.nullable().optional(),
+    meetingDays: z.array(weekday).optional(),
+    meetingTime: z.string().nullable().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 
 export const classIdParam = z.object({ id: z.string().uuid('Invalid class id') });
 
 export async function create(req, res) {
   const created = await classService.createClass(req.user.id, req.body);
   res.status(201).json({ class: created });
+}
+
+export async function update(req, res) {
+  const updated = await classService.updateClass(req.user.id, req.params.id, req.body);
+  res.json({ class: updated });
 }
 
 export async function list(req, res) {

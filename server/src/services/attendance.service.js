@@ -2,55 +2,80 @@ import { query } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
 
-function toPublicRecord(row) {
+const DAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+const fmt = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate(),
+  ).padStart(2, '0')}`;
+
+/**
+ * Every date between start and end (inclusive) that falls on one of the meeting
+ * weekdays. Dates are local-calendar 'YYYY-MM-DD' strings.
+ */
+function generateSessionDates(startStr, endStr, days) {
+  if (!startStr || !endStr || !Array.isArray(days) || days.length === 0) return [];
+  const wanted = new Set(days.map((d) => DAY_INDEX[d]).filter((n) => n !== undefined));
+  if (wanted.size === 0) return [];
+
+  const [sy, sm, sd] = startStr.split('-').map(Number);
+  const [ey, em, ed] = endStr.split('-').map(Number);
+  const cur = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+
+  const out = [];
+  let guard = 0;
+  while (cur <= end && guard < 3000) {
+    if (wanted.has(cur.getDay())) out.push(fmt(cur));
+    cur.setDate(cur.getDate() + 1);
+    guard++;
+  }
+  return out;
+}
+
+function summarize(sessions) {
+  const counts = { present: 0, late: 0, absent: 0, excused: 0 };
+  for (const s of sessions) if (s.status) counts[s.status] += 1;
+  // Excused sessions don't count against you; unmarked sessions are ignored.
+  const denom = counts.present + counts.late + counts.absent;
   return {
-    id: row.id,
-    classId: row.class_id,
-    sessionDate: row.session_date,
-    status: row.status,
-    note: row.note,
+    total: sessions.length,
+    marked: counts.present + counts.late + counts.absent + counts.excused,
+    ...counts,
+    rate: denom > 0 ? Math.round(((counts.present + counts.late) / denom) * 100) : null,
   };
 }
 
 /**
- * Summarize attendance for a class. Attendance rate counts present + late as
- * attended. `db` may be a transaction client. Used by the class list (rate only)
- * and the class detail page (full breakdown).
+ * List the class's auto-generated sessions (from its meeting schedule), each
+ * joined with any recorded attendance status, plus a summary and the schedule.
  */
-export async function computeAttendance(classId, db = { query }) {
-  const { rows } = await db.query(
-    `SELECT
-       COUNT(*)                                              AS total,
-       COUNT(*) FILTER (WHERE status = 'present')            AS present,
-       COUNT(*) FILTER (WHERE status = 'late')               AS late,
-       COUNT(*) FILTER (WHERE status = 'absent')             AS absent,
-       COUNT(*) FILTER (WHERE status = 'excused')            AS excused,
-       COUNT(*) FILTER (WHERE status IN ('present', 'late')) AS attended
-     FROM attendance WHERE class_id = $1`,
-    [classId],
-  );
-  const r = rows[0];
-  const total = Number(r.total);
-  return {
-    total,
-    present: Number(r.present),
-    late: Number(r.late),
-    absent: Number(r.absent),
-    excused: Number(r.excused),
-    rate: total > 0 ? Math.round((Number(r.attended) / total) * 100) : null,
-  };
-}
-
-/** List a class's sessions (newest first) plus the summary. */
 export async function listAttendance(userId, classId) {
-  await getOwnedClass(userId, classId);
+  const cls = await getOwnedClass(userId, classId);
+  const days = Array.isArray(cls.meeting_days) ? cls.meeting_days : [];
+  const dates = generateSessionDates(cls.start_date, cls.end_date, days);
+
   const { rows } = await query(
-    `SELECT * FROM attendance WHERE class_id = $1 ORDER BY session_date DESC`,
+    'SELECT id, session_date, status FROM attendance WHERE class_id = $1',
     [classId],
   );
+  const byDate = new Map(rows.map((r) => [r.session_date, r]));
+
+  const sessions = dates.map((date) => {
+    const rec = byDate.get(date);
+    return { sessionDate: date, status: rec?.status ?? null, recordId: rec?.id ?? null };
+  });
+
   return {
-    records: rows.map(toPublicRecord),
-    summary: await computeAttendance(classId),
+    sessions,
+    summary: summarize(sessions),
+    schedule: {
+      startDate: cls.start_date,
+      endDate: cls.end_date,
+      meetingDays: days,
+      meetingTime: cls.meeting_time ?? null,
+      configured: dates.length > 0,
+    },
   };
 }
 
@@ -65,7 +90,14 @@ export async function markAttendance(userId, classId, { sessionDate, status, not
      RETURNING *`,
     [classId, sessionDate, status, note ?? null],
   );
-  return toPublicRecord(rows[0]);
+  const r = rows[0];
+  return {
+    id: r.id,
+    classId: r.class_id,
+    sessionDate: r.session_date,
+    status: r.status,
+    note: r.note,
+  };
 }
 
 export async function deleteAttendance(userId, attendanceId) {

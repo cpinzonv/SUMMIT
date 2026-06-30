@@ -95,6 +95,9 @@ CREATE TABLE IF NOT EXISTS classes (
 -- For databases created before term became optional / description was added.
 ALTER TABLE classes ALTER COLUMN term DROP NOT NULL;
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS description TEXT;
+-- Meeting schedule (weekday codes + time) used to auto-generate attendance sessions.
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS meeting_days JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS meeting_time TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_classes_user_id ON classes(user_id);
 CREATE INDEX IF NOT EXISTS idx_classes_user_term ON classes(user_id, term);

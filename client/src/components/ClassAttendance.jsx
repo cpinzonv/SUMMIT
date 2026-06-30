@@ -2,13 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState, gradeColor } from './ui';
 
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const STATUSES = [
   { key: 'present', label: 'Present' },
   { key: 'late', label: 'Late' },
   { key: 'absent', label: 'Absent' },
   { key: 'excused', label: 'Excused' },
 ];
-
 const BADGE = {
   present: 'bg-emerald-100 text-emerald-700',
   late: 'bg-amber-100 text-amber-700',
@@ -16,69 +16,101 @@ const BADGE = {
   excused: 'bg-slate-200 text-slate-600',
 };
 
-const todayInput = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+function localSummary(sessions) {
+  const c = { present: 0, late: 0, absent: 0, excused: 0 };
+  for (const s of sessions) if (s.status) c[s.status] += 1;
+  const denom = c.present + c.late + c.absent;
+  return {
+    total: sessions.length,
+    marked: c.present + c.late + c.absent + c.excused,
+    ...c,
+    rate: denom > 0 ? Math.round(((c.present + c.late) / denom) * 100) : null,
+  };
+}
+
+const fmtSession = (date) =>
+  new Date(`${date}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
 export function ClassAttendance({ classId }) {
-  const [records, setRecords] = useState([]);
-  const [summary, setSummary] = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [editing, setEditing] = useState(false);
 
-  const [date, setDate] = useState(todayInput());
-  const [status, setStatus] = useState('present');
-  const [saving, setSaving] = useState(false);
-
-  const load = useCallback(async () => {
-    setError('');
-    try {
-      const { data } = await api.get(`/api/classes/${classId}/attendance`);
-      setRecords(data.records);
-      setSummary(data.summary);
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [classId]);
+  const load = useCallback(
+    async (showSpinner = true) => {
+      if (showSpinner) setLoading(true);
+      setError('');
+      try {
+        const { data } = await api.get(`/api/classes/${classId}/attendance`);
+        setData(data);
+      } catch (err) {
+        setError(errorMessage(err));
+      } finally {
+        if (showSpinner) setLoading(false);
+      }
+    },
+    [classId],
+  );
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const mark = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
+  const setStatus = async (session, newStatus) => {
+    const clearing = session.status === newStatus;
+    // Optimistic update.
+    setData((d) => {
+      const sessions = d.sessions.map((s) =>
+        s.sessionDate === session.sessionDate
+          ? { ...s, status: clearing ? null : newStatus }
+          : s,
+      );
+      return { ...d, sessions, summary: localSummary(sessions) };
+    });
     try {
-      await api.post(`/api/classes/${classId}/attendance`, {
-        sessionDate: date,
-        status,
-      });
-      await load();
+      if (clearing && session.recordId) {
+        await api.delete(`/api/attendance/${session.recordId}`);
+      } else {
+        await api.post(`/api/classes/${classId}/attendance`, {
+          sessionDate: session.sessionDate,
+          status: newStatus,
+        });
+      }
+      await load(false); // sync real record ids
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const removeRecord = async (id) => {
-    try {
-      await api.delete(`/api/attendance/${id}`);
-      await load();
-    } catch (err) {
-      setError(errorMessage(err));
+      await load(false);
     }
   };
 
   if (loading) return <Spinner label="Loading attendance…" />;
+  if (!data) return <ErrorBanner message={error} />;
+
+  const { sessions, summary, schedule } = data;
+
+  if (!schedule.configured || editing) {
+    return (
+      <ScheduleForm
+        classId={classId}
+        schedule={schedule}
+        onSaved={async () => {
+          setEditing(false);
+          await load();
+        }}
+        onCancel={schedule.configured ? () => setEditing(false) : null}
+      />
+    );
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
-      {/* Summary + mark form */}
+      {/* Summary */}
       <div className="space-y-4">
         <div className="glass-card relative overflow-hidden p-6 text-center">
           <span
@@ -88,70 +120,60 @@ export function ClassAttendance({ classId }) {
           <div className="relative text-xs font-medium uppercase tracking-wide text-muted">
             Attendance
           </div>
-          <div className={`relative text-4xl font-extrabold ${gradeColor(summary?.rate)}`}>
-            {summary?.rate != null ? `${summary.rate}%` : '—'}
+          <div className={`relative text-4xl font-extrabold ${gradeColor(summary.rate)}`}>
+            {summary.rate != null ? `${summary.rate}%` : '—'}
           </div>
-          <div className="relative mt-2 flex justify-center gap-3 text-xs text-muted">
-            <span>{summary?.present ?? 0} present</span>
-            <span>{summary?.late ?? 0} late</span>
-            <span>{summary?.absent ?? 0} absent</span>
+          <div className="relative mt-1 text-xs text-muted">
+            {summary.marked} of {summary.total} sessions marked
+          </div>
+          <div className="relative mt-3 flex justify-center gap-3 text-xs text-muted">
+            <span>{summary.present} present</span>
+            <span>{summary.late} late</span>
+            <span>{summary.absent} absent</span>
           </div>
         </div>
-
-        <form onSubmit={mark} className="glass-card space-y-3 p-5">
-          <h3 className="text-sm font-bold text-ink">Mark a session</h3>
-          <ErrorBanner message={error} />
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field" />
-          <div className="grid grid-cols-2 gap-2">
-            {STATUSES.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setStatus(s.key)}
-                className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
-                  status === s.key
-                    ? `${BADGE[s.key]} ring-2 ring-brand-400/40`
-                    : 'bg-white/50 text-muted hover:bg-white/80'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+        <div className="glass-card p-4 text-sm">
+          <div className="font-bold text-ink">Schedule</div>
+          <div className="mt-1 text-muted">
+            {schedule.meetingDays.join(', ')}
+            {schedule.meetingTime ? ` · ${schedule.meetingTime}` : ''}
           </div>
-          <button type="submit" disabled={saving} className="btn btn-primary w-full">
-            {saving ? 'Saving…' : 'Mark session'}
+          <button onClick={() => setEditing(true)} className="mt-3 btn btn-soft w-full">
+            Edit schedule
           </button>
-        </form>
+        </div>
       </div>
 
-      {/* Session log */}
+      {/* Session list */}
       <div>
-        {records.length === 0 ? (
-          <EmptyState title="No sessions recorded">
-            Mark your first session using the form.
-          </EmptyState>
+        <ErrorBanner message={error} />
+        {sessions.length === 0 ? (
+          <EmptyState title="No sessions in this date range" />
         ) : (
           <div className="glass-card divide-y divide-white/40 overflow-hidden">
-            {records.map((r) => (
-              <div key={r.id} className="flex items-center justify-between px-5 py-3">
-                <span className="text-sm font-medium text-ink">
-                  {new Date(`${r.sessionDate}T00:00:00`).toLocaleDateString(undefined, {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
+            {sessions.map((s) => (
+              <div
+                key={s.sessionDate}
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
+              >
+                <span className="text-sm font-medium text-ink">{fmtSession(s.sessionDate)}</span>
+                <div className="flex gap-1.5">
+                  {STATUSES.map((st) => {
+                    const active = s.status === st.key;
+                    return (
+                      <button
+                        key={st.key}
+                        onClick={() => setStatus(s, st.key)}
+                        className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                          active
+                            ? `${BADGE[st.key]} ring-2 ring-brand-400/40`
+                            : 'bg-white/45 text-muted hover:bg-white/80'
+                        }`}
+                      >
+                        {st.label}
+                      </button>
+                    );
                   })}
-                </span>
-                <div className="flex items-center gap-3">
-                  <span className={`rounded-full px-3 py-0.5 text-xs font-semibold capitalize ${BADGE[r.status]}`}>
-                    {r.status}
-                  </span>
-                  <button
-                    onClick={() => removeRecord(r.id)}
-                    className="text-xs font-semibold text-muted transition hover:text-rose-500"
-                  >
-                    ✕
-                  </button>
                 </div>
               </div>
             ))}
@@ -159,5 +181,98 @@ export function ClassAttendance({ classId }) {
         )}
       </div>
     </div>
+  );
+}
+
+function ScheduleForm({ classId, schedule, onSaved, onCancel }) {
+  const [startDate, setStartDate] = useState(schedule.startDate || '');
+  const [endDate, setEndDate] = useState(schedule.endDate || '');
+  const [days, setDays] = useState(schedule.meetingDays || []);
+  const [time, setTime] = useState(schedule.meetingTime || '');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const toggleDay = (d) =>
+    setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (!startDate || !endDate || days.length === 0) {
+      setError('Pick a start date, end date, and at least one meeting day.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await api.patch(`/api/classes/${classId}`, {
+        startDate,
+        endDate,
+        meetingDays: days,
+        meetingTime: time || null,
+      });
+      await onSaved();
+    } catch (err) {
+      setError(errorMessage(err));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={save} className="glass-card mx-auto max-w-lg space-y-4 p-6">
+      <div>
+        <h3 className="text-lg font-bold text-ink">Set up the class schedule</h3>
+        <p className="text-sm text-muted">
+          Sessions are generated automatically for every meeting day in the term.
+        </p>
+      </div>
+      <ErrorBanner message={error} />
+      <div className="grid grid-cols-2 gap-4">
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-ink">Start date</span>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="field" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-ink">End date</span>
+          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="field" />
+        </label>
+      </div>
+      <div>
+        <span className="mb-1.5 block text-sm font-semibold text-ink">Meeting days</span>
+        <div className="flex flex-wrap gap-2">
+          {DAYS.map((d) => {
+            const on = days.includes(d);
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => toggleDay(d)}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  on
+                    ? 'text-white shadow-sm'
+                    : 'bg-white/55 text-muted hover:bg-white/80'
+                }`}
+                style={on ? { backgroundImage: 'var(--grad-teal-purple)' } : undefined}
+              >
+                {d}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <label className="block max-w-[12rem]">
+        <span className="mb-1 block text-sm font-semibold text-ink">Time (optional)</span>
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
+      </label>
+      <div className="flex justify-end gap-2 pt-1">
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="btn btn-soft">
+            Cancel
+          </button>
+        )}
+        <button type="submit" disabled={saving} className="btn btn-primary">
+          {saving ? 'Saving…' : 'Save schedule'}
+        </button>
+      </div>
+    </form>
   );
 }

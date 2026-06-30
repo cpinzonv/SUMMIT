@@ -14,6 +14,8 @@ export function toPublicClass(row) {
     color: row.color,
     startDate: row.start_date,
     endDate: row.end_date,
+    meetingDays: row.meeting_days ?? [],
+    meetingTime: row.meeting_time ?? null,
     archivedAt: row.archived_at,
     syllabus: {
       instructor: row.instructor,
@@ -47,10 +49,12 @@ export async function createClass(userId, input) {
   const { rows } = await query(
     `INSERT INTO classes
        (user_id, name, description, code, term, credits, color, start_date, end_date,
+        meeting_days, meeting_time,
         instructor, instructor_email, location, meeting_times, grading_scheme,
         syllabus_url)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,
-             COALESCE($13,'[]'::jsonb), COALESCE($14,'[]'::jsonb), $15)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, COALESCE($10,'[]'::jsonb), $11,
+             $12,$13,$14,
+             COALESCE($15,'[]'::jsonb), COALESCE($16,'[]'::jsonb), $17)
      RETURNING *`,
     [
       userId,
@@ -62,6 +66,8 @@ export async function createClass(userId, input) {
       input.color ?? null,
       input.startDate ?? null,
       input.endDate ?? null,
+      input.meetingDays ? JSON.stringify(input.meetingDays) : null,
+      input.meetingTime ?? null,
       s.instructor ?? null,
       s.instructorEmail ?? null,
       s.location ?? null,
@@ -73,11 +79,51 @@ export async function createClass(userId, input) {
   return toPublicClass(rows[0]);
 }
 
+// Whitelisted fields for PATCH /api/classes/:id (column mapping).
+const CLASS_UPDATABLE = {
+  name: 'name',
+  description: 'description',
+  code: 'code',
+  term: 'term',
+  color: 'color',
+  startDate: 'start_date',
+  endDate: 'end_date',
+  meetingTime: 'meeting_time',
+};
+
+/** Partially update a class the user owns (schedule, basic fields). */
+export async function updateClass(userId, classId, input) {
+  await getOwnedClass(userId, classId);
+  const sets = [];
+  const values = [];
+  let i = 1;
+  for (const [field, column] of Object.entries(CLASS_UPDATABLE)) {
+    if (field in input) {
+      sets.push(`${column} = $${i++}`);
+      values.push(input[field] ?? null);
+    }
+  }
+  if ('meetingDays' in input) {
+    sets.push(`meeting_days = $${i++}::jsonb`);
+    values.push(JSON.stringify(input.meetingDays ?? []));
+  }
+  if (sets.length === 0) {
+    return toPublicClass(await getOwnedClass(userId, classId));
+  }
+  values.push(classId);
+  const { rows } = await query(
+    `UPDATE classes SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
+    values,
+  );
+  return toPublicClass(rows[0]);
+}
+
 /** List the user's active (non-archived) classes, each with grade + attendance. */
 export async function listCurrentClasses(userId) {
   const { rows } = await query(
     `SELECT c.*,
-       (SELECT COUNT(*) FROM attendance a WHERE a.class_id = c.id) AS att_total,
+       (SELECT COUNT(*) FROM attendance a
+        WHERE a.class_id = c.id AND a.status IN ('present', 'late', 'absent')) AS att_denom,
        (SELECT COUNT(*) FROM attendance a
         WHERE a.class_id = c.id AND a.status IN ('present', 'late')) AS att_attended
      FROM classes c
@@ -87,13 +133,13 @@ export async function listCurrentClasses(userId) {
   );
   return Promise.all(
     rows.map(async (row) => {
-      const attTotal = Number(row.att_total);
+      const denom = Number(row.att_denom);
       return {
         ...toPublicClass(row),
         currentGrade: await computeClassGrade(row.id),
         attendanceRate:
-          attTotal > 0
-            ? Math.round((Number(row.att_attended) / attTotal) * 100)
+          denom > 0
+            ? Math.round((Number(row.att_attended) / denom) * 100)
             : null,
       };
     }),

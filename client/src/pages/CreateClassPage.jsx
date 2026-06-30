@@ -6,6 +6,8 @@ import { ErrorBanner, Spinner } from '../components/ui';
 const ROW_INPUT =
   'rounded-lg border border-white/70 bg-white/60 px-2.5 py-1.5 text-sm text-ink outline-none backdrop-blur transition focus:border-brand-400 focus:bg-white/85';
 
+const MEETING_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
 export default function CreateClassPage() {
   const navigate = useNavigate();
   const fileInput = useRef(null);
@@ -19,6 +21,10 @@ export default function CreateClassPage() {
     startDate: '',
     endDate: '',
   });
+  // Meeting schedule → drives auto-generated attendance sessions.
+  const [meetingDays, setMeetingDays] = useState([]);
+  const [meetingTime, setMeetingTime] = useState('');
+
   // Preview rows populated from a syllabus extraction; user-editable.
   const [assignments, setAssignments] = useState([]);
   const [grading, setGrading] = useState([]);
@@ -31,6 +37,9 @@ export default function CreateClassPage() {
 
   const update = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const toggleDay = (d) =>
+    setMeetingDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
 
   // ---- Syllabus PDF extraction -------------------------------------------
   const handleFile = async (e) => {
@@ -113,6 +122,8 @@ export default function CreateClassPage() {
         description: form.description || undefined,
         startDate: form.startDate || undefined,
         endDate: form.endDate || undefined,
+        meetingDays: meetingDays.length ? meetingDays : undefined,
+        meetingTime: meetingTime || undefined,
         syllabus: {
           instructor: form.instructor || undefined,
           gradingScheme: grading
@@ -200,6 +211,40 @@ export default function CreateClassPage() {
           <Field label="Start date" type="date" value={form.startDate} onChange={update('startDate')} />
           <Field label="End date" type="date" value={form.endDate} onChange={update('endDate')} />
         </div>
+
+        {/* Meeting schedule → auto-generates attendance sessions */}
+        <div>
+          <span className="mb-1.5 block text-sm font-semibold text-ink">Meeting days</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {MEETING_DAYS.map((d) => {
+              const on = meetingDays.includes(d);
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => toggleDay(d)}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                    on ? 'text-white shadow-sm' : 'bg-white/55 text-muted hover:bg-white/80'
+                  }`}
+                  style={on ? { backgroundImage: 'var(--grad-teal-purple)' } : undefined}
+                >
+                  {d}
+                </button>
+              );
+            })}
+            <input
+              type="time"
+              value={meetingTime}
+              onChange={(e) => setMeetingTime(e.target.value)}
+              className="field ml-1 max-w-[8rem]"
+              aria-label="Meeting time"
+            />
+          </div>
+          <p className="mt-1.5 text-xs text-muted">
+            Used to auto-generate attendance sessions across the term.
+          </p>
+        </div>
+
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-ink">Description</span>
           <textarea
