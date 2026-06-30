@@ -26,6 +26,7 @@ import { providerUsesMock } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
 
 import * as canvas from './canvas.js';
+import * as blackboard from './blackboard.js';
 import { mockProvider } from './mock.js';
 
 // Providers are registered here one at a time. Everything downstream (status,
@@ -33,6 +34,7 @@ import { mockProvider } from './mock.js';
 // provider is a single edit: import the module and add it to this map.
 const PROVIDERS = {
   canvas,
+  blackboard,
 };
 
 export const DEFAULT_PROVIDER = 'canvas';
