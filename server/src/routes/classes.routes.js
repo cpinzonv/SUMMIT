@@ -11,6 +11,7 @@ import * as notes from '../controllers/notes.controller.js';
 import * as attendance from '../controllers/attendance.controller.js';
 import * as files from '../controllers/files.controller.js';
 import * as grades from '../controllers/grades.controller.js';
+import * as transcripts from '../controllers/transcripts.controller.js';
 
 // Syllabus uploads: PDF, DOCX (Word), JPG, PNG. Kept in memory; 32MB cap
 // (the Claude API request limit).
@@ -52,6 +53,16 @@ const fileUpload = multer({
   fileFilter: (req, file, cb) => {
     if (FILE_MIME.has(file.mimetype)) cb(null, true);
     else cb(AppError.badRequest('Unsupported file type. Upload a PDF, Office doc, image, or text file.'));
+  },
+});
+
+// Lecture-recording audio uploads (WebM/WAV/MP4/OGG), kept in memory; 40MB cap.
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 40 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/^audio\//.test(file.mimetype) || file.mimetype === 'video/webm') cb(null, true);
+    else cb(AppError.badRequest('Unsupported audio type.'));
   },
 });
 
@@ -147,6 +158,26 @@ router.post(
   validate(classes.classIdParam, 'params'),
   fileUpload.single('file'),
   asyncHandler(files.upload),
+);
+
+// Transcripts nested under a class (update/delete by id live in transcripts.routes).
+router.get(
+  '/:id/transcripts',
+  validate(classes.classIdParam, 'params'),
+  validate(transcripts.listQuery, 'query'),
+  asyncHandler(transcripts.list),
+);
+router.post(
+  '/:id/transcripts',
+  validate(classes.classIdParam, 'params'),
+  validate(transcripts.createSchema),
+  asyncHandler(transcripts.create),
+);
+router.post(
+  '/:id/transcripts/record',
+  validate(classes.classIdParam, 'params'),
+  audioUpload.single('audio'),
+  asyncHandler(transcripts.record),
 );
 
 // Attendance nested under a class (delete by id lives in attendance.routes).

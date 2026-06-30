@@ -7,7 +7,9 @@ import { query } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
 
-export const FILE_CATEGORIES = ['syllabus', 'notes', 'handouts', 'other'];
+// 'audio' backs lecture recordings (hidden from the document sections); the
+// rest are the document categories shown in the Files tab.
+export const FILE_CATEGORIES = ['pdf', 'slides', 'textbook', 'formula_sheet', 'audio', 'other'];
 
 function toPublicFile(row) {
   return {

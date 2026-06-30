@@ -12,6 +12,7 @@ import adminRoutes from './admin.routes.js';
 import workloadRoutes from './workload.routes.js';
 import gcalRoutes from './gcal.routes.js';
 import filesRoutes from './files.routes.js';
+import transcriptsRoutes from './transcripts.routes.js';
 import lmsRoutes from './lms.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -50,5 +51,6 @@ router.use('/plan', planRoutes);
 router.use('/workload', workloadRoutes); // weekly estimated-hours prediction
 router.use('/google-calendar', gcalRoutes); // Summit → Google Calendar one-way sync
 router.use('/files', filesRoutes); // per-class file download/delete by id
+router.use('/transcripts', transcriptsRoutes); // transcript update/delete by id
 
 export default router;

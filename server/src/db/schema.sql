@@ -334,6 +334,35 @@ CREATE TABLE IF NOT EXISTS class_files (
 CREATE INDEX IF NOT EXISTS idx_class_files_class_id ON class_files(class_id);
 
 -- ----------------------------------------------------------------------------
+-- transcripts — lecture transcripts per class (pasted/uploaded text, or text
+-- attached to an in-app recording). `audio_file_id` optionally links the stored
+-- recording (a class_files row). `timestamps` holds optional HH:MM:SS markers.
+-- Auto speech-to-text is pluggable and off by default, so a recording stores
+-- the audio and an (initially empty) transcript the student can fill in.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS transcripts (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id         UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title            TEXT NOT NULL DEFAULT 'Lecture transcript',
+  content          TEXT NOT NULL DEFAULT '',
+  source           TEXT NOT NULL DEFAULT 'upload',   -- 'upload' | 'paste' | 'recording'
+  audio_file_id    UUID REFERENCES class_files(id) ON DELETE SET NULL,
+  duration_seconds INTEGER,
+  recorded_date    DATE,
+  timestamps       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_transcripts_class_id ON transcripts(class_id);
+
+DROP TRIGGER IF EXISTS trg_transcripts_updated_at ON transcripts;
+CREATE TRIGGER trg_transcripts_updated_at
+  BEFORE UPDATE ON transcripts
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- ----------------------------------------------------------------------------
 -- notes — rich-text (Markdown) notes per class. Searchable by title/content.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS notes (
