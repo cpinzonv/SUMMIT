@@ -20,14 +20,20 @@ export const updateNoteSchema = z
   .object({
     title: z.string().max(300).optional(),
     content: z.string().optional(),
+    archived: z.boolean().optional(),
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 
 export const noteIdParam = z.object({ noteId: z.string().uuid('Invalid note id') });
-export const listQuery = z.object({ q: z.string().optional() });
+export const listQuery = z.object({
+  q: z.string().optional(),
+  archived: z.enum(['true', 'false']).optional(),
+});
 
 export async function list(req, res) {
-  const notes = await noteService.listNotes(req.user.id, req.params.id, req.query.q);
+  const notes = await noteService.listNotes(req.user.id, req.params.id, req.query.q, {
+    archived: req.query.archived === 'true',
+  });
   res.json({ notes });
 }
 

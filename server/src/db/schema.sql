@@ -377,6 +377,8 @@ CREATE TABLE IF NOT EXISTS notes (
 
 CREATE INDEX IF NOT EXISTS idx_notes_class_id ON notes(class_id);
 CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
+-- Archived notes are hidden from the default list (kept, not deleted).
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 DROP TRIGGER IF EXISTS trg_notes_updated_at ON notes;
 CREATE TRIGGER trg_notes_updated_at

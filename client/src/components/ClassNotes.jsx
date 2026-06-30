@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState } from './ui';
 import { RichTextEditor } from './RichTextEditor';
@@ -17,43 +17,42 @@ function shortDate(iso) {
 }
 function fullDateTime(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleString(undefined, {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return new Date(iso).toLocaleString(undefined, { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
-// Plain-text preview (strip HTML tags, entities, and any leftover Markdown).
 function previewText(content) {
   const t = (content || '')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/\[(.*?)\]\(.*?\)/g, '$1')
     .replace(/[#>*_`~]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   return t.length > 90 ? `${t.slice(0, 90)}…` : t;
 }
+const isContentEmpty = (html) => !previewText(html);
+
+const DotsIcon = ({ className = '' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" /></svg>
+);
+const ExpandIcon = ({ className = '' }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
+);
 
 export function ClassNotes({ classId }) {
   const [notes, setNotes] = useState([]);
   const [q, setQ] = useState('');
+  const [view, setView] = useState('active'); // 'active' | 'archived'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [editing, setEditing] = useState(null); // note object, or { isNew: true }
-  const [fullScreen, setFullScreen] = useState(false);
+  const [editing, setEditing] = useState(null); // { note, mode:'modal'|'full' }
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   const load = useCallback(
-    async (search = q) => {
+    async (search = q, v = view) => {
       setError('');
       try {
         const { data } = await api.get(`/api/classes/${classId}/notes`, {
-          params: search ? { q: search } : {},
+          params: { ...(search ? { q: search } : {}), ...(v === 'archived' ? { archived: 'true' } : {}) },
         });
         setNotes(data.notes);
       } catch (err) {
@@ -62,54 +61,69 @@ export function ClassNotes({ classId }) {
         setLoading(false);
       }
     },
-    [classId, q],
+    [classId, q, view],
   );
 
   useEffect(() => {
-    load('');
+    load(q, view);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classId]);
+  }, [classId, view]);
 
   // Debounced search.
   useEffect(() => {
-    const t = setTimeout(() => load(q), 250);
+    const t = setTimeout(() => load(q, view), 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  const removeNote = async (note) => {
-    if (!confirm(`Delete "${note.title}"?`)) return;
+  const setArchived = async (note, archived) => {
+    try {
+      await api.patch(`/api/notes/${note.id}`, { archived });
+      await load(q, view);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+  const doDelete = async (note) => {
     try {
       await api.delete(`/api/notes/${note.id}`);
-      await load(q);
+      setPendingDelete(null);
+      if (editing?.note?.id === note.id) setEditing(null);
+      await load(q, view);
     } catch (err) {
       setError(errorMessage(err));
     }
   };
 
+  // Single click → modal; double click → full screen.
+  const clickTimer = useRef(null);
+  const openModal = (note) => {
+    clearTimeout(clickTimer.current);
+    clickTimer.current = setTimeout(() => setEditing({ note, mode: 'modal' }), 200);
+  };
+  const openFull = (note) => {
+    clearTimeout(clickTimer.current);
+    setEditing({ note, mode: 'full' });
+  };
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search notes…"
-          className="field max-w-xs"
-        />
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setFullScreen(true)}
-            title="Open in full screen"
-            aria-label="Open notes in full screen"
-            className="grid h-9 w-9 place-items-center rounded-full border border-white/60 bg-white/55 text-muted transition hover:bg-white/85 hover:text-ink"
-          >
-            ⛶
-          </button>
-          <button onClick={() => setEditing({ isNew: true, title: '', content: '' })} className="btn btn-primary">
-            + New note
-          </button>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search notes…" className="field max-w-xs" />
+        <div className="flex gap-1 rounded-full bg-white/45 p-1 text-sm">
+          {['active', 'archived'].map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`rounded-full px-3 py-1 font-semibold capitalize transition ${view === v ? 'bg-white/85 text-brand-700 shadow-sm' : 'text-muted hover:text-ink'}`}
+            >
+              {v}
+            </button>
+          ))}
         </div>
+        <button onClick={() => setEditing({ note: { isNew: true, title: '', content: '' }, mode: 'modal' })} className="btn btn-primary ml-auto">
+          + New note
+        </button>
       </div>
 
       <ErrorBanner message={error} />
@@ -117,282 +131,238 @@ export function ClassNotes({ classId }) {
       {loading ? (
         <Spinner label="Loading notes…" />
       ) : notes.length === 0 ? (
-        <EmptyState title={q ? 'No notes match your search' : 'No notes yet'}>
-          {!q && 'Capture lecture notes, readings, and ideas — formatted with Markdown.'}
+        <EmptyState title={q ? 'No notes match your search' : view === 'archived' ? 'No archived notes' : 'No notes yet'}>
+          {!q && view === 'active' && 'Capture lecture notes, readings, and ideas.'}
         </EmptyState>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           {notes.map((note) => (
             <div
               key={note.id}
-              className="note-surface group flex flex-col p-5 transition hover:-translate-y-0.5"
+              onClick={() => openModal(note)}
+              onDoubleClick={() => openFull(note)}
+              className="note-surface group relative cursor-pointer p-5 transition hover:-translate-y-0.5"
             >
-              <button onClick={() => setEditing(note)} className="min-w-0 flex-1 text-left">
-                <h3 className="truncate font-bold" style={{ color: 'var(--note-text)' }}>{note.title}</h3>
-                <p className="mt-0.5 text-xs" style={{ color: 'var(--note-accent)' }}>
-                  {shortDate(note.createdAt)}
-                </p>
-                <p className="mt-2 line-clamp-2 text-sm" style={{ color: 'rgba(45,55,72,0.7)' }}>
-                  {previewText(note.content) || 'Empty note'}
-                </p>
-              </button>
-              <div className="mt-3 flex items-center justify-end gap-3 text-xs font-semibold">
-                <button onClick={() => setEditing(note)} className="text-muted transition hover:text-[color:var(--note-accent)]">
-                  Edit
-                </button>
-                <button onClick={() => removeNote(note)} className="text-muted transition hover:text-rose-500">
-                  Delete
-                </button>
-              </div>
+              <CardMenu
+                archived={view === 'archived'}
+                onArchive={() => setArchived(note, view !== 'archived')}
+                onDelete={() => setPendingDelete(note)}
+              />
+              <h3 className="truncate pr-8 font-bold" style={{ color: 'var(--note-text)' }}>{note.title}</h3>
+              <p className="mt-0.5 text-xs" style={{ color: 'var(--note-accent)' }}>{shortDate(note.createdAt)}</p>
+              <p className="mt-2 line-clamp-2 text-sm" style={{ color: 'rgba(45,55,72,0.7)' }}>
+                {previewText(note.content) || 'Empty note'}
+              </p>
             </div>
           ))}
         </div>
       )}
 
       {editing && (
-        <NoteModal
+        <NoteEditor
           classId={classId}
-          note={editing}
+          note={editing.note}
+          mode={editing.mode}
+          onMode={(mode) => setEditing((e) => ({ ...e, mode }))}
           onClose={() => setEditing(null)}
-          onSaved={async () => {
-            setEditing(null);
-            await load(q);
-          }}
-          onDeleted={async () => {
-            setEditing(null);
-            await load(q);
-          }}
+          onChanged={() => load(q, view)}
+          onArchive={(savedNote) => { setEditing(null); setArchived(savedNote, true); }}
+          onRequestDelete={(savedNote) => setPendingDelete(savedNote)}
         />
       )}
 
-      {fullScreen && (
-        <NotesFullScreen
-          classId={classId}
-          onClose={() => {
-            setFullScreen(false);
-            load(q);
-          }}
+      {pendingDelete && (
+        <ConfirmDelete
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => doDelete(pendingDelete)}
         />
       )}
     </div>
   );
 }
 
-/* ---- Shared editor body (title + dates + markdown + actions) ------------ */
-function NoteEditorBody({ classId, note, fullHeight, onSaved, onClose, onDeleted }) {
-  const isNew = note.isNew;
+/* ---- 3-dot menu on a note card ----------------------------------------- */
+function CardMenu({ archived, onArchive, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+  const pick = (fn) => (e) => { e.stopPropagation(); setOpen(false); fn(); };
+  return (
+    <div ref={ref} className="absolute right-2 top-2" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        aria-label="Note options"
+        className="grid h-7 w-7 place-items-center rounded-full text-muted opacity-0 transition hover:bg-black/5 hover:text-ink group-hover:opacity-100"
+      >
+        <DotsIcon className="h-4 w-4" />
+      </button>
+      {open && (
+        <div role="menu" className="glass-panel absolute right-0 z-20 mt-1 w-40 overflow-hidden p-1.5 text-sm shadow-xl">
+          <button type="button" onClick={pick(onArchive)} className="menu-item">
+            <span>🗄</span> {archived ? 'Unarchive' : 'Archive'} note
+          </button>
+          <button type="button" onClick={pick(onDelete)} className="menu-item text-rose-600 hover:bg-rose-50/70">
+            <span>🗑</span> Delete note
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- Auto-saving editor (modal or full-screen) ------------------------- */
+function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive, onRequestDelete }) {
   const [title, setTitle] = useState(note.title || '');
   const [content, setContent] = useState(note.content || '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [status, setStatus] = useState('idle'); // idle | saving | saved
+  const [menuOpen, setMenuOpen] = useState(false);
+  const idRef = useRef(note.isNew ? null : note.id);
+  const savedRef = useRef({ title: note.title || '', content: note.content || '' });
+  const skipFirst = useRef(true);
+  const fadeTimer = useRef(null);
+  const menuRef = useRef(null);
 
-  const save = async (e) => {
-    e?.preventDefault?.();
-    setSaving(true);
-    setError('');
+  const persist = useCallback(async (t, c) => {
+    if (t === savedRef.current.title && c === savedRef.current.content) return;
+    if (!idRef.current && !t.trim() && isContentEmpty(c)) return; // don't create an empty note
+    setStatus('saving');
     try {
-      const { data } = isNew
-        ? await api.post(`/api/classes/${classId}/notes`, { title, content })
-        : await api.patch(`/api/notes/${note.id}`, { title, content });
-      await onSaved(data.note);
-    } catch (err) {
-      setError(errorMessage(err));
-      setSaving(false);
+      if (!idRef.current) {
+        const { data } = await api.post(`/api/classes/${classId}/notes`, { title: t, content: c });
+        idRef.current = data.note.id;
+      } else {
+        await api.patch(`/api/notes/${idRef.current}`, { title: t, content: c });
+      }
+      savedRef.current = { title: t, content: c };
+      setStatus('saved');
+      onChanged?.();
+      clearTimeout(fadeTimer.current);
+      fadeTimer.current = setTimeout(() => setStatus((s) => (s === 'saved' ? 'idle' : s)), 1600);
+    } catch {
+      setStatus('error');
     }
-  };
+  }, [classId, onChanged]);
 
-  const remove = async () => {
-    if (!confirm('Delete this note?')) return;
-    try {
-      await api.delete(`/api/notes/${note.id}`);
-      await onDeleted();
-    } catch (err) {
-      setError(errorMessage(err));
-    }
-  };
+  // Debounced auto-save on edits.
+  useEffect(() => {
+    if (skipFirst.current) { skipFirst.current = false; return; }
+    const h = setTimeout(() => persist(title, content), 800);
+    return () => clearTimeout(h);
+  }, [title, content, persist]);
 
-  return (
-    <form onSubmit={save} className={`flex flex-col gap-3 ${fullHeight ? 'h-full' : ''}`}>
+  // Flush pending save on unmount.
+  useEffect(() => () => { persist(title, content); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const close = () => { persist(title, content); onClose(); };
+
+  // Escape closes (modal) or exits full-screen → closes.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') { if (menuOpen) setMenuOpen(false); else close(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onDown = (e) => menuRef.current && !menuRef.current.contains(e.target) && setMenuOpen(false);
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [menuOpen]);
+
+  const savedNote = () => ({ ...note, id: idRef.current, title, content });
+  const archived = Boolean(note.archivedAt);
+
+  const TopBar = (
+    <div className="flex items-center justify-end gap-1.5">
+      <span className={`mr-auto text-xs transition-opacity ${status === 'idle' ? 'opacity-0' : 'opacity-100'}`} style={{ color: 'rgba(45,55,72,0.5)' }}>
+        {status === 'saving' ? 'Saving…' : status === 'saved' ? '✓ Saved' : status === 'error' ? 'Save failed' : ''}
+      </span>
+      <div ref={menuRef} className="relative">
+        <button type="button" onClick={() => setMenuOpen((o) => !o)} aria-label="Note options" className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-black/5" style={{ color: 'var(--note-text)' }}>
+          <DotsIcon className="h-4 w-4" />
+        </button>
+        {menuOpen && (
+          <div role="menu" className="glass-panel absolute right-0 z-20 mt-1 w-40 overflow-hidden p-1.5 text-sm shadow-xl">
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); if (idRef.current) onArchive(savedNote()); else onClose(); }}
+              className="menu-item"
+            >
+              <span>🗄</span> {archived ? 'Unarchive' : 'Archive'} note
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); if (idRef.current) onRequestDelete(savedNote()); else onClose(); }}
+              className="menu-item text-rose-600 hover:bg-rose-50/70"
+            >
+              <span>🗑</span> Delete note
+            </button>
+          </div>
+        )}
+      </div>
+      <button type="button" onClick={() => onMode(mode === 'full' ? 'modal' : 'full')} aria-label={mode === 'full' ? 'Exit full screen' : 'Full screen'} title={mode === 'full' ? 'Exit full screen' : 'Full screen'} className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-black/5" style={{ color: 'var(--note-text)' }}>
+        <ExpandIcon className="h-4 w-4" />
+      </button>
+      <button type="button" onClick={close} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full text-xl leading-none transition hover:bg-black/5" style={{ color: 'rgba(45,55,72,0.6)' }}>
+        ×
+      </button>
+    </div>
+  );
+
+  const Body = (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {TopBar}
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Note title"
+        placeholder="Untitled note"
         className="note-input text-lg font-bold"
         autoFocus
       />
-
-      {!isNew && (note.createdAt || note.updatedAt) && (
-        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs" style={{ color: 'rgba(45,55,72,0.55)' }}>
-          {note.createdAt && <span>Created: {fullDateTime(note.createdAt)}</span>}
-          {note.updatedAt && <span>Modified: {fullDateTime(note.updatedAt)}</span>}
-        </div>
-      )}
-
-      {error && <ErrorBanner message={error} />}
-
-      <div className={fullHeight ? 'min-h-0 flex-1' : ''}>
-        <RichTextEditor value={content} onChange={setContent} fullHeight={fullHeight} />
+      <div className="min-h-0 flex-1">
+        <RichTextEditor value={content} onChange={setContent} fullHeight />
       </div>
-
-      <div className="flex items-center gap-2">
-        {!isNew && (
-          <button type="button" onClick={remove} className="note-tool mr-auto text-rose-500 hover:!bg-rose-50 hover:!text-rose-600">
-            Delete
-          </button>
-        )}
-        <button type="button" onClick={onClose} className={`btn btn-soft ${isNew ? 'ml-auto' : ''}`}>
-          {fullHeight ? 'Cancel' : 'Close'}
-        </button>
-        <button
-          type="submit"
-          disabled={saving}
-          className="btn"
-          style={{ backgroundColor: 'var(--note-accent)', color: '#fff' }}
-        >
-          {saving ? 'Saving…' : 'Save note'}
-        </button>
-      </div>
-    </form>
+    </div>
   );
-}
 
-/* ---- Centered modal editor (warm white, ~85vw × 80vh) ------------------- */
-function NoteModal({ classId, note, onClose, onSaved, onDeleted }) {
-  useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
+  if (mode === 'full') {
+    return (
+      <div className="fixed inset-0 z-[60] flex flex-col p-5 sm:p-8" style={{ background: 'var(--note-bg)' }}>
+        <div className="mx-auto flex h-full w-full max-w-3xl flex-col">{Body}</div>
+      </div>
+    );
+  }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="note-surface flex max-h-[85vh] w-full max-w-[900px] flex-col p-6"
-        style={{ width: '85vw', height: '80vh' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-lg font-bold" style={{ color: 'var(--note-text)' }}>
-            {note.isNew ? 'New note' : 'Edit note'}
-          </h3>
-          <button onClick={onClose} aria-label="Close" className="text-2xl leading-none" style={{ color: 'rgba(45,55,72,0.5)' }}>
-            ×
-          </button>
-        </div>
-        <div className="min-h-0 flex-1">
-          <NoteEditorBody
-            classId={classId}
-            note={note}
-            fullHeight
-            onClose={onClose}
-            onSaved={onSaved}
-            onDeleted={onDeleted}
-          />
-        </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-sm" onClick={close}>
+      <div className="note-surface flex flex-col p-6" style={{ width: '85vw', maxWidth: 900, height: '80vh' }} onClick={(e) => e.stopPropagation()}>
+        {Body}
       </div>
     </div>
   );
 }
 
-/* ---- Full-screen note workspace (sidebar + editor) ---------------------- */
-function NotesFullScreen({ classId, onClose }) {
-  const [notes, setNotes] = useState([]);
-  const [selected, setSelected] = useState(null); // note | { isNew:true } | null
-  const [loading, setLoading] = useState(true);
-
-  const reload = useCallback(async () => {
-    const { data } = await api.get(`/api/classes/${classId}/notes`);
-    setNotes(data.notes);
-    setLoading(false);
-    return data.notes;
-  }, [classId]);
-
-  useEffect(() => {
-    reload().then((list) => setSelected((s) => s || list[0] || { isNew: true, title: '', content: '' }));
-  }, [reload]);
-
-  useEffect(() => {
-    const onKey = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
+/* ---- Delete confirmation ----------------------------------------------- */
+function ConfirmDelete({ onCancel, onConfirm }) {
+  const [busy, setBusy] = useState(false);
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col" style={{ background: 'var(--note-bg)' }}>
-      {/* Top bar */}
-      <div className="flex items-center justify-between border-b px-5 py-3" style={{ borderColor: 'var(--note-border)' }}>
-        <div className="flex items-center gap-2 font-bold" style={{ color: 'var(--note-text)' }}>
-          <span style={{ color: 'var(--note-accent)' }}>✎</span> Notes
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm" onClick={onCancel}>
+      <div className="note-surface w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold" style={{ color: 'var(--note-text)' }}>Delete this note?</h3>
+        <p className="mt-1 text-sm" style={{ color: 'rgba(45,55,72,0.65)' }}>This can’t be undone.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onCancel} className="btn btn-soft">Cancel</button>
+          <button onClick={() => { setBusy(true); onConfirm(); }} disabled={busy} className="btn btn-danger">
+            {busy ? 'Deleting…' : 'Delete'}
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          title="Close (Esc)"
-          aria-label="Close full screen"
-          className="grid h-9 w-9 place-items-center rounded-full transition hover:bg-black/5"
-          style={{ color: 'var(--note-text)' }}
-        >
-          ×
-        </button>
-      </div>
-
-      <div className="flex min-h-0 flex-1">
-        {/* Sidebar */}
-        <aside className="hidden w-64 shrink-0 flex-col border-r sm:flex" style={{ borderColor: 'var(--note-border)' }}>
-          <div className="p-3">
-            <button
-              onClick={() => setSelected({ isNew: true, title: '', content: '' })}
-              className="w-full rounded-lg py-2 text-sm font-semibold text-white"
-              style={{ backgroundColor: 'var(--note-accent)' }}
-            >
-              + New note
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-            {loading ? (
-              <p className="px-2 text-sm" style={{ color: 'rgba(45,55,72,0.5)' }}>Loading…</p>
-            ) : (
-              notes.map((n) => {
-                const active = !selected?.isNew && selected?.id === n.id;
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => setSelected(n)}
-                    className="mb-1 w-full rounded-lg px-3 py-2 text-left transition"
-                    style={active ? { background: 'rgba(32,178,170,0.14)' } : undefined}
-                  >
-                    <div className="truncate text-sm font-semibold" style={{ color: 'var(--note-text)' }}>{n.title}</div>
-                    <div className="text-[11px]" style={{ color: 'rgba(45,55,72,0.5)' }}>{shortDate(n.createdAt)}</div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </aside>
-
-        {/* Editor */}
-        <main className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-8">
-          <div className="mx-auto h-full max-w-3xl">
-            {selected ? (
-              <NoteEditorBody
-                key={selected.id || 'new'}
-                classId={classId}
-                note={selected}
-                fullHeight
-                onClose={onClose}
-                onSaved={async (saved) => {
-                  const list = await reload();
-                  setSelected(list.find((n) => n.id === saved.id) || saved);
-                }}
-                onDeleted={async () => {
-                  const list = await reload();
-                  setSelected(list[0] || { isNew: true, title: '', content: '' });
-                }}
-              />
-            ) : (
-              <p style={{ color: 'rgba(45,55,72,0.5)' }}>Select a note or create a new one.</p>
-            )}
-          </div>
-        </main>
       </div>
     </div>
   );

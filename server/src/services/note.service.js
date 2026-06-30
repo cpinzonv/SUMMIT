@@ -24,6 +24,7 @@ function toPublicNote(row) {
     title: row.title,
     content: row.content,
     className: row.class_name, // present on search results
+    archivedAt: row.archived_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -42,10 +43,11 @@ async function getOwnedNote(userId, noteId) {
 }
 
 /** List a class's notes, newest first. Optional case-insensitive search. */
-export async function listNotes(userId, classId, q) {
+export async function listNotes(userId, classId, q, { archived = false } = {}) {
   await getOwnedClass(userId, classId);
   const params = [classId];
-  let where = 'class_id = $1';
+  // Default view = active notes; `archived` flips to the archived view.
+  let where = `class_id = $1 AND archived_at IS ${archived ? 'NOT NULL' : 'NULL'}`;
   if (q) {
     params.push(`%${q}%`);
     where += ` AND (title ILIKE $2 OR content ILIKE $2)`;
@@ -80,6 +82,10 @@ export async function updateNote(userId, noteId, input) {
   if ('content' in input) {
     sets.push(`content = $${i++}`);
     values.push(sanitizeNoteHtml(input.content));
+  }
+  if ('archived' in input) {
+    // Boolean toggle → stamp or clear archived_at (no placeholder needed).
+    sets.push(`archived_at = ${input.archived ? 'now()' : 'NULL'}`);
   }
   if (sets.length === 0) return getOwnedNote(userId, noteId).then(toPublicNote);
   values.push(noteId);
