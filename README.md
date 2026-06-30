@@ -139,6 +139,7 @@ the authenticated student (other users' data returns `404`).
 | GET    | `/api/classes/:id/assignments`    | — (each includes its `grade`, ordered by due date)          |
 | PATCH  | `/api/assignments/:assignmentId`  | any subset of the create fields (nullable to clear)         |
 | DELETE | `/api/assignments/:assignmentId`  | — (grade cascades)                                          |
+| POST   | `/api/classes/extract-syllabus`   | multipart `file` (PDF) → `{ syllabus: {...} }` extracted via Claude |
 | POST   | `/api/grades`                     | `assignmentId` (req), `pointsEarned` (req), `pointsPossible?`, `feedback?` |
 | PUT    | `/api/classes/:id/archive`        | — (snapshots the class + final grade into `archives`)       |
 | GET    | `/api/archives`                   | — (archived class snapshots, newest first)                  |
@@ -152,6 +153,13 @@ the authenticated student (other users' data returns `404`).
 - **Archiving** stamps `classes.archived_at` (so it drops out of `GET /api/classes`) and
   writes an immutable point-in-time snapshot (class + assignments + final grade) into the
   `archives` table. Idempotent.
+- **Syllabus extraction** (`POST /api/classes/extract-syllabus`) accepts a PDF upload,
+  sends it to Claude (`claude-opus-4-8`) as a base64 `document` block with a JSON-schema
+  structured-output constraint, and returns `{ courseName, courseCode, instructor,
+  termStart, termEnd, attendanceRequired, assignmentNames, assignments:
+  [{name, dueDate, pointValue}], gradingBreakdown: {category: percent} }`. Requires
+  `ANTHROPIC_API_KEY` in the server env (returns `503` if unset). The create-class page
+  uses it to auto-fill the form + assignments, which the user edits before creating.
 
 ### Quick smoke test
 
@@ -173,7 +181,10 @@ curl -s localhost:4000/api/auth/register \
 - **Phase 4 — done:** Electron desktop shell (`desktop/`) — dev orchestration,
   `app://` protocol packaging, auto-updates via electron-updater. Verified in dev,
   unpacked-prod, and fully-packaged builds.
-- **Deploy:** Railway (provides `DATABASE_URL`; set `DATABASE_SSL=true` and JWT secrets).
+- **Phase 5 — done:** syllabus PDF extraction via the Claude API
+  (`POST /api/classes/extract-syllabus`) + create-class auto-fill. Needs `ANTHROPIC_API_KEY`.
+- **Deploy:** Railway (provides `DATABASE_URL`; set `DATABASE_SSL=true`, JWT secrets, and
+  `ANTHROPIC_API_KEY`).
 
 ## Notes
 

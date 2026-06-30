@@ -37,6 +37,10 @@ export const env = {
     accessTtl: optional('ACCESS_TOKEN_TTL', '15m'),
     refreshTtlDays: Number(optional('REFRESH_TOKEN_TTL_DAYS', '30')),
   },
+
+  // Optional: only needed for syllabus PDF extraction. Empty string = unconfigured.
+  anthropicApiKey: optional('ANTHROPIC_API_KEY', ''),
+  anthropicModel: optional('ANTHROPIC_MODEL', 'claude-opus-4-8'),
 };
 
 export const isProd = env.nodeEnv === 'production';
