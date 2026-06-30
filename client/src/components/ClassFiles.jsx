@@ -1,15 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import { Spinner, EmptyState, Modal } from './ui';
+import { Spinner, Modal } from './ui';
 
-// Document categories shown in the Files tab (audio is internal to recordings).
-const DOC_CATEGORIES = [
-  { key: 'pdf', label: 'PDFs', icon: '📄', hint: 'Syllabus, handouts, notes' },
-  { key: 'slides', label: 'Slides', icon: '🎬', hint: 'Lecture presentations' },
-  { key: 'textbook', label: 'Textbooks', icon: '📚', hint: 'eBooks, textbook PDFs' },
-  { key: 'formula_sheet', label: 'Formula Sheets', icon: '📋', hint: 'Quick reference' },
+/* ---- line icons (2px stroke, currentColor) ----------------------------- */
+const svg = (children) =>
+  function Icon({ className = '' }) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {children}
+      </svg>
+    );
+  };
+const PdfIcon = svg(<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" /></>);
+const SlidesIcon = svg(<><rect x="3" y="4" width="18" height="12" rx="1.5" /><path d="M12 16v4M8.5 20h7M8 9l2.5 2L8 13" /></>);
+const MicIcon = svg(<><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8.5 21h7" /></>);
+const BookIcon = svg(<><path d="M12 6C10 4.5 7 4.5 4 5v13c3-.5 6-.5 8 1 2-1.5 5-1.5 8-1V5c-3-.5-6-.5-8 1z" /><path d="M12 6v13" /></>);
+const GridIcon = svg(<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></>);
+const FileIcon = svg(<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></>);
+
+// Category config. `key` matches the stored file category; transcripts are a
+// separate data source (their own table) flagged with isTranscript.
+const CATS = [
+  { key: 'pdf', label: 'PDFs', color: '#ff7a52', Icon: PdfIcon, hint: 'Syllabus, handouts, notes' },
+  { key: 'slides', label: 'Slides', color: '#ff9a3d', Icon: SlidesIcon, hint: 'Lecture presentations' },
+  { key: 'transcript', label: 'Transcripts', color: '#20b2aa', Icon: MicIcon, hint: 'Record or upload a lecture', isTranscript: true },
+  { key: 'textbook', label: 'Textbooks', color: '#5aa9d6', Icon: BookIcon, hint: 'eBooks, textbook PDFs' },
+  { key: 'formula_sheet', label: 'Formula Sheets', color: '#7e8fe0', Icon: GridIcon, hint: 'Quick reference' },
 ];
-const DOC_KEYS = DOC_CATEGORIES.map((c) => c.key);
+const OTHER_CAT = { key: 'other', label: 'Other', color: '#8a93a6', Icon: FileIcon };
+const DOC_KEYS = ['pdf', 'slides', 'textbook', 'formula_sheet'];
+const singular = (label) => label.replace(/s$/, '');
 
 function fmtSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -21,11 +41,7 @@ function fmtDate(iso) {
 }
 function fmtDay(d) {
   if (!d) return null;
-  return new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 function fmtDuration(s) {
   if (s == null) return null;
@@ -35,19 +51,21 @@ function fmtDuration(s) {
   const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
   return `${h > 0 ? `${h}:` : ''}${mm}:${String(sec).padStart(2, '0')}`;
 }
+const SOURCE_LABEL = { recording: 'Recording', paste: 'Pasted', upload: 'Uploaded' };
 
 /**
- * Per-class Files tab: documents grouped into categories (PDFs, Slides,
- * Textbooks, Formula Sheets) each with its own upload, plus a Transcripts
- * section supporting in-app recording (MediaRecorder) and pasted/uploaded text.
+ * Files tab: dynamic category tabs that appear only once a category has files
+ * (or transcripts). Empty state shows a big "+" and a Record button. The "+"
+ * opens a type chooser; recording is always available without the chooser.
  */
 export function ClassFiles({ classId }) {
   const [files, setFiles] = useState(null);
   const [transcripts, setTranscripts] = useState(null);
+  const [active, setActive] = useState(null);
   const [error, setError] = useState('');
   const [uploadingCat, setUploadingCat] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [modal, setModal] = useState(null); // {type:'uploadTranscript'} | {type:'viewTranscript',transcript}
-  const [search, setSearch] = useState('');
 
   const pendingCat = useRef('pdf');
   const fileInput = useRef(null);
@@ -63,7 +81,24 @@ export function ClassFiles({ classId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classId]);
 
-  /* ---- File uploads (per category) ------------------------------------- */
+  const ready = files !== null && transcripts !== null;
+  const countOf = (cat) =>
+    cat.isTranscript ? (transcripts?.length ?? 0) : (files || []).filter((f) => f.category === cat.key).length;
+  const otherFiles = (files || []).filter((f) => f.category !== 'audio' && !DOC_KEYS.includes(f.category));
+
+  // Tabs for categories that currently have content (+ Other if any legacy files).
+  const tabs = [...CATS.filter((c) => countOf(c) > 0), ...(otherFiles.length ? [OTHER_CAT] : [])];
+
+  // Keep the active tab valid as categories appear/disappear.
+  useEffect(() => {
+    if (!ready) return;
+    const keys = tabs.map((t) => t.key);
+    if (active && keys.includes(active)) return;
+    setActive(keys[0] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, files, transcripts]);
+
+  /* ---- uploads -------------------------------------------------------- */
   const pickFor = (category) => {
     pendingCat.current = category;
     fileInput.current?.click();
@@ -82,6 +117,7 @@ export function ClassFiles({ classId }) {
         await api.post(`/api/classes/${classId}/files`, fd);
       }
       await loadFiles();
+      setActive(category); // reveal/focus the category's tab
     } catch (err) {
       setError(errorMessage(err, 'Upload failed'));
     } finally {
@@ -104,151 +140,112 @@ export function ClassFiles({ classId }) {
     if (!confirm(`Delete "${f.filename}"?`)) return;
     try {
       await api.delete(`/api/files/${f.id}`);
-      setFiles((fs) => fs.filter((x) => x.id !== f.id));
+      await loadFiles();
     } catch (err) {
       setError(errorMessage(err, 'Could not delete file'));
     }
   };
-
   const deleteTranscript = async (tr) => {
     if (!confirm(`Delete "${tr.title}"?`)) return;
     try {
       await api.delete(`/api/transcripts/${tr.id}`);
-      setTranscripts((ts) => ts.filter((x) => x.id !== tr.id));
+      await loadTranscripts();
     } catch (err) {
       setError(errorMessage(err, 'Could not delete transcript'));
     }
   };
 
-  const filtered = (transcripts || []).filter((t) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (t.title || '').toLowerCase().includes(q) || (t.content || '').toLowerCase().includes(q);
-  });
+  // Picking a type from the "+" chooser.
+  const pickType = (cat) => {
+    setAddOpen(false);
+    if (cat.isTranscript) setModal({ type: 'uploadTranscript' });
+    else pickFor(cat.key);
+  };
 
-  // Any files in categories we don't surface as their own section (e.g. legacy).
-  const otherFiles = (files || []).filter((f) => f.category !== 'audio' && !DOC_KEYS.includes(f.category));
+  const activeCat = [...CATS, OTHER_CAT].find((c) => c.key === active);
 
   return (
-    <div className="space-y-6">
+    <div>
       {error && (
-        <div className="rounded-2xl border border-rose-300/50 bg-rose-50/70 px-4 py-2.5 text-sm font-medium text-rose-700">
+        <div className="mb-3 rounded-2xl border border-rose-300/50 bg-rose-50/70 px-4 py-2.5 text-sm font-medium text-rose-700">
           {error}
         </div>
       )}
 
       <input ref={fileInput} type="file" multiple className="hidden" onChange={onFilePicked} />
 
-      {files === null ? (
+      {!ready ? (
         <Spinner label="Loading files…" />
+      ) : tabs.length === 0 ? (
+        /* ---- Empty state ---- */
+        <div className="flex flex-col items-center justify-center gap-4 py-16">
+          <button
+            onClick={() => setAddOpen(true)}
+            aria-label="Add files"
+            className="grid h-20 w-20 place-items-center rounded-full text-white shadow-lg transition hover:scale-105 active:scale-95"
+            style={{ backgroundImage: 'var(--grad-teal-purple)' }}
+          >
+            <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+          <p className="text-sm font-semibold text-muted">Add files to get started</p>
+          <RecordButton classId={classId} onSaved={loadTranscripts} onRecorded={() => setActive('transcript')} onView={(tr) => setModal({ type: 'viewTranscript', transcript: tr })} onError={setError} />
+        </div>
       ) : (
-        DOC_CATEGORIES.map((cat) => {
-          const group = files.filter((f) => f.category === cat.key);
-          return (
-            <FileCategory
-              key={cat.key}
-              cat={cat}
-              files={group}
-              uploading={uploadingCat === cat.key}
-              onUpload={() => pickFor(cat.key)}
+        <>
+          {/* ---- Tab bar ---- */}
+          <div className="mb-4 flex flex-wrap items-center gap-1 border-b border-white/50">
+            {tabs.map((c) => {
+              const on = active === c.key;
+              return (
+                <button
+                  key={c.key}
+                  onClick={() => setActive(c.key)}
+                  className="-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold transition"
+                  style={{ color: on ? c.color : 'var(--color-muted)', borderColor: on ? c.color : 'transparent' }}
+                >
+                  <c.Icon className="h-4 w-4" />
+                  {c.label} ({countOf(c)})
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setAddOpen(true)}
+              title="Add files"
+              aria-label="Add files"
+              className="ml-1 grid h-8 w-8 place-items-center rounded-full text-muted transition hover:bg-white/70 hover:text-ink"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+            <div className="ml-auto py-1">
+              <RecordButton classId={classId} onSaved={loadTranscripts} onRecorded={() => setActive('transcript')} onView={(tr) => setModal({ type: 'viewTranscript', transcript: tr })} onError={setError} />
+            </div>
+          </div>
+
+          {/* ---- Active panel ---- */}
+          {activeCat?.isTranscript ? (
+            <TranscriptsPanel
+              transcripts={transcripts}
+              onUpload={() => setModal({ type: 'uploadTranscript' })}
+              onView={(tr) => setModal({ type: 'viewTranscript', transcript: tr })}
+              onOpenAudio={(id) => openFile({ id })}
+              onDelete={deleteTranscript}
+            />
+          ) : activeCat ? (
+            <FilePanel
+              cat={activeCat}
+              files={activeCat.key === 'other' ? otherFiles : files.filter((f) => f.category === activeCat.key)}
+              uploading={uploadingCat === activeCat.key}
+              onUpload={() => pickFor(activeCat.key)}
               onOpen={openFile}
               onDelete={deleteFile}
             />
-          );
-        })
+          ) : null}
+        </>
       )}
 
-      {otherFiles.length > 0 && (
-        <FileCategory
-          cat={{ key: 'other', label: 'Other files', icon: '🗂️', hint: '' }}
-          files={otherFiles}
-          uploading={uploadingCat === 'other'}
-          onUpload={() => pickFor('other')}
-          onOpen={openFile}
-          onDelete={deleteFile}
-        />
-      )}
-
-      {/* ---- Transcripts -------------------------------------------------- */}
-      <section>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
-            <span className="text-base">🎙️</span> Transcripts
-            {transcripts ? ` (${transcripts.length})` : ''}
-          </h3>
-          <div className="flex gap-2">
-            <RecordButton classId={classId} onSaved={loadTranscripts} onView={(tr) => setModal({ type: 'viewTranscript', transcript: tr })} onError={setError} />
-            <button onClick={() => setModal({ type: 'uploadTranscript' })} className="btn btn-soft !py-1.5 text-sm">
-              Upload transcript
-            </button>
-          </div>
-        </div>
-
-        {transcripts === null ? (
-          <Spinner label="Loading transcripts…" />
-        ) : transcripts.length === 0 ? (
-          <EmptyState title="No transcripts yet">
-            Record a lecture or upload a transcript to keep it searchable with this class.
-          </EmptyState>
-        ) : (
-          <>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search transcripts…"
-              className="field mb-2"
-            />
-            <div className="glass-card divide-y divide-white/40 overflow-hidden">
-              {filtered.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-muted">No transcripts match “{search}”.</p>
-              ) : (
-                filtered.map((tr) => (
-                  <div key={tr.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="text-lg">🎙️</span>
-                    <button
-                      type="button"
-                      onClick={() => setModal({ type: 'viewTranscript', transcript: tr })}
-                      className="min-w-0 flex-1 text-left"
-                    >
-                      <div className="truncate text-sm font-semibold text-ink hover:text-brand-600">
-                        {tr.title}
-                        {!tr.content && (
-                          <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">
-                            Needs text
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted">
-                        {[fmtDay(tr.recordedDate) || fmtDate(tr.createdAt), fmtDuration(tr.durationSeconds), SOURCE_LABEL[tr.source]]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </div>
-                    </button>
-                    {tr.audioFileId && (
-                      <button
-                        type="button"
-                        onClick={() => openFile({ id: tr.audioFileId, filename: 'recording' })}
-                        className="text-xs font-semibold text-brand-600 transition hover:underline"
-                        title="Play / download audio"
-                      >
-                        ▶ Audio
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => deleteTranscript(tr)}
-                      className="text-xs font-semibold text-muted transition hover:text-rose-500"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </>
-        )}
-      </section>
-
+      {addOpen && <AddTypeModal onPick={pickType} onClose={() => setAddOpen(false)} />}
       {modal?.type === 'uploadTranscript' && (
         <UploadTranscriptModal
           classId={classId}
@@ -256,6 +253,7 @@ export function ClassFiles({ classId }) {
           onSaved={async () => {
             setModal(null);
             await loadTranscripts();
+            setActive('transcript');
           }}
         />
       )}
@@ -273,46 +271,110 @@ export function ClassFiles({ classId }) {
   );
 }
 
-const SOURCE_LABEL = { recording: '🎙 Recording', paste: 'Pasted', upload: 'Uploaded' };
-
-/* ---- A single document category section -------------------------------- */
-function FileCategory({ cat, files, uploading, onUpload, onOpen, onDelete }) {
+/* ---- Type chooser ("+") ------------------------------------------------- */
+function AddTypeModal({ onPick, onClose }) {
   return (
-    <section>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-muted">
-          <span className="text-base">{cat.icon}</span> {cat.label} ({files.length})
-        </h3>
-        <button onClick={onUpload} disabled={uploading} className="btn btn-soft !py-1.5 text-sm">
-          {uploading ? 'Uploading…' : `Upload ${cat.label.replace(/s$/, '')}`}
-        </button>
+    <Modal title="What would you like to add?" onClose={onClose}>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {CATS.map((c) => (
+          <button
+            key={c.key}
+            onClick={() => onPick(c)}
+            className="flex items-center gap-3 rounded-xl border border-white/60 bg-white/50 px-4 py-3 text-left transition hover:-translate-y-0.5 hover:bg-white/85"
+          >
+            <span style={{ color: c.color }}><c.Icon className="h-6 w-6" /></span>
+            <span className="min-w-0">
+              <span className="block font-semibold text-ink">{c.label}</span>
+              <span className="block text-xs text-muted">{c.hint}</span>
+            </span>
+          </button>
+        ))}
       </div>
-      {files.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-purple-soft/40 bg-white/30 px-4 py-3 text-xs text-muted">
-          No {cat.label.toLowerCase()} yet{cat.hint ? ` — ${cat.hint}.` : '.'}
-        </div>
-      ) : (
-        <div className="glass-card divide-y divide-white/40 overflow-hidden">
-          {files.map((f) => (
-            <div key={f.id} className="flex items-center gap-3 px-4 py-2.5">
-              <span className="text-lg">{cat.icon}</span>
-              <button type="button" onClick={() => onOpen(f)} className="min-w-0 flex-1 text-left" title="Open / download">
-                <div className="truncate text-sm font-semibold text-ink hover:text-brand-600">{f.filename}</div>
-                <div className="text-xs text-muted">{fmtSize(f.sizeBytes)} · {fmtDate(f.uploadedAt)}</div>
+    </Modal>
+  );
+}
+
+/* ---- Document category panel ------------------------------------------- */
+function FilePanel({ cat, files, uploading, onUpload, onOpen, onDelete }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-bold" style={{ color: cat.color }}>
+          <cat.Icon className="h-4 w-4" /> {cat.label}
+        </h3>
+        {cat.key !== 'other' && (
+          <button onClick={onUpload} disabled={uploading} className="btn btn-soft !py-1.5 text-sm">
+            {uploading ? 'Uploading…' : `Upload ${singular(cat.label)}`}
+          </button>
+        )}
+      </div>
+      <div className="glass-card divide-y divide-white/40 overflow-hidden">
+        {files.map((f) => (
+          <div key={f.id} className="flex items-center gap-3 px-4 py-2.5">
+            <span style={{ color: cat.color }}><cat.Icon className="h-5 w-5" /></span>
+            <button type="button" onClick={() => onOpen(f)} className="min-w-0 flex-1 text-left" title="Open / download">
+              <div className="truncate text-sm font-semibold text-ink hover:text-brand-600">{f.filename}</div>
+              <div className="text-xs text-muted">{fmtSize(f.sizeBytes)} · {fmtDate(f.uploadedAt)}</div>
+            </button>
+            <button type="button" onClick={() => onDelete(f)} className="text-xs font-semibold text-muted transition hover:text-rose-500">
+              Delete
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ---- Transcripts panel -------------------------------------------------- */
+function TranscriptsPanel({ transcripts, onUpload, onView, onOpenAudio, onDelete }) {
+  const [search, setSearch] = useState('');
+  const filtered = transcripts.filter((t) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (t.title || '').toLowerCase().includes(q) || (t.content || '').toLowerCase().includes(q);
+  });
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-bold" style={{ color: '#20b2aa' }}>
+          <MicIcon className="h-4 w-4" /> Transcripts
+        </h3>
+        <button onClick={onUpload} className="btn btn-soft !py-1.5 text-sm">Upload transcript</button>
+      </div>
+      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search transcripts…" className="field mb-2" />
+      <div className="glass-card divide-y divide-white/40 overflow-hidden">
+        {filtered.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-muted">No transcripts match “{search}”.</p>
+        ) : (
+          filtered.map((tr) => (
+            <div key={tr.id} className="flex items-center gap-3 px-4 py-2.5">
+              <span style={{ color: '#20b2aa' }}><MicIcon className="h-5 w-5" /></span>
+              <button type="button" onClick={() => onView(tr)} className="min-w-0 flex-1 text-left">
+                <div className="truncate text-sm font-semibold text-ink hover:text-brand-600">
+                  {tr.title}
+                  {!tr.content && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700">Needs text</span>}
+                </div>
+                <div className="text-xs text-muted">
+                  {[fmtDay(tr.recordedDate) || fmtDate(tr.createdAt), fmtDuration(tr.durationSeconds), SOURCE_LABEL[tr.source]].filter(Boolean).join(' · ')}
+                </div>
               </button>
-              <button type="button" onClick={() => onDelete(f)} className="text-xs font-semibold text-muted transition hover:text-rose-500">
-                Delete
-              </button>
+              {tr.audioFileId && (
+                <button type="button" onClick={() => onOpenAudio(tr.audioFileId)} className="text-xs font-semibold text-brand-600 transition hover:underline" title="Play / download audio">
+                  ▶ Audio
+                </button>
+              )}
+              <button type="button" onClick={() => onDelete(tr)} className="text-xs font-semibold text-muted transition hover:text-rose-500">Delete</button>
             </div>
-          ))}
-        </div>
-      )}
-    </section>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
 /* ---- Record lecture (MediaRecorder) ------------------------------------ */
-function RecordButton({ classId, onSaved, onView, onError }) {
+function RecordButton({ classId, onSaved, onRecorded, onView, onError }) {
   const [state, setState] = useState('idle'); // idle | recording | saving
   const [seconds, setSeconds] = useState(0);
   const rec = useRef({ mr: null, chunks: [], stream: null, timer: null });
@@ -356,7 +418,7 @@ function RecordButton({ classId, onSaved, onView, onError }) {
         fd.append('recordedDate', new Date().toISOString().slice(0, 10));
         const { data } = await api.post(`/api/classes/${classId}/transcripts/record`, fd);
         await onSaved();
-        // No auto-transcription → open it so the student can paste the text.
+        onRecorded?.();
         if (data.transcript && !data.transcript.content) onView(data.transcript);
       } catch (err) {
         onError(errorMessage(err, 'Could not save the recording.'));
@@ -506,9 +568,7 @@ function TranscriptModal({ transcript, onClose, onSaved }) {
     <Modal title={transcript.title} onClose={onClose} wide>
       <div className="space-y-3">
         <div className="text-xs text-muted">
-          {[fmtDay(transcript.recordedDate), fmtDuration(transcript.durationSeconds), SOURCE_LABEL[transcript.source]]
-            .filter(Boolean)
-            .join(' · ')}
+          {[fmtDay(transcript.recordedDate), fmtDuration(transcript.durationSeconds), SOURCE_LABEL[transcript.source]].filter(Boolean).join(' · ')}
         </div>
         {!transcript.content && (
           <div className="rounded-xl border border-amber-300/50 bg-amber-50/70 px-3 py-2 text-sm text-amber-700">
@@ -524,9 +584,7 @@ function TranscriptModal({ transcript, onClose, onSaved }) {
           </button>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="btn btn-soft">Close</button>
-            <button type="button" onClick={save} disabled={saving || !dirty} className="btn btn-primary">
-              {saving ? 'Saving…' : 'Save'}
-            </button>
+            <button type="button" onClick={save} disabled={saving || !dirty} className="btn btn-primary">{saving ? 'Saving…' : 'Save'}</button>
           </div>
         </div>
       </div>
