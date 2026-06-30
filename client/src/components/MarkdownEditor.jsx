@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import { renderMarkdown } from '../utils/markdown';
 
-const TOOL_BTN =
-  'rounded-lg border border-brand-400/30 bg-brand-50/60 px-2.5 py-1 text-xs font-semibold text-brand-700 transition hover:bg-brand-100';
-
-/** Lightweight Markdown editor: formatting toolbar + write/preview toggle. */
-export function MarkdownEditor({ value, onChange, placeholder, rows = 10 }) {
+/**
+ * Lightweight Markdown editor: a formatting toolbar + write/preview toggle.
+ * Styled with the warm note theme (see index.css). `fullHeight` makes the
+ * editor grow to fill its container (used in the full-screen notes view).
+ */
+export function MarkdownEditor({ value, onChange, placeholder, rows = 12, fullHeight = false }) {
   const ref = useRef(null);
   const [preview, setPreview] = useState(false);
 
@@ -39,25 +40,31 @@ export function MarkdownEditor({ value, onChange, placeholder, rows = 10 }) {
   };
 
   return (
-    <div>
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        <button type="button" className={TOOL_BTN} onClick={() => surround('**')} title="Bold"><b>B</b></button>
-        <button type="button" className={TOOL_BTN} onClick={() => surround('*')} title="Italic"><i>I</i></button>
-        <button type="button" className={TOOL_BTN} onClick={() => surround('`')} title="Inline code">{'</>'}</button>
-        <button type="button" className={TOOL_BTN} onClick={() => prefixLine('## ')} title="Heading">H</button>
-        <button type="button" className={TOOL_BTN} onClick={() => prefixLine('- ')} title="Bulleted list">• List</button>
-        <button type="button" className={TOOL_BTN} onClick={() => prefixLine('1. ')} title="Numbered list">1. List</button>
+    <div className={fullHeight ? 'flex h-full flex-col' : ''}>
+      <div
+        className="mb-2 flex flex-wrap items-center gap-1 rounded-[10px] p-1"
+        style={{ background: 'var(--note-toolbar-bg)' }}
+      >
+        <button type="button" className="note-tool" onClick={() => surround('**')} title="Bold"><b>B</b></button>
+        <button type="button" className="note-tool" onClick={() => surround('*')} title="Italic"><i>I</i></button>
+        <button type="button" className="note-tool font-mono" onClick={() => surround('`')} title="Inline code">&lt;/&gt;</button>
+        <span className="mx-1 h-4 w-px" style={{ background: 'var(--note-border)' }} />
+        <button type="button" className="note-tool" onClick={() => prefixLine('## ')} title="Heading">H</button>
+        <button type="button" className="note-tool" onClick={() => prefixLine('- ')} title="Bulleted list">☰ List</button>
+        <button type="button" className="note-tool" onClick={() => prefixLine('1. ')} title="Numbered list">1. List</button>
         <button
           type="button"
           onClick={() => setPreview((p) => !p)}
-          className={`ml-auto ${TOOL_BTN}`}
+          className={`ml-auto note-tool ${preview ? 'note-tool-active' : ''}`}
+          title={preview ? 'Back to editing' : 'Preview formatted note'}
         >
-          {preview ? 'Write' : 'Preview'}
+          {preview ? '✎ Write' : '👁 Preview'}
         </button>
       </div>
       {preview ? (
         <div
-          className="note-prose min-h-[10rem] rounded-xl border border-brand-400/20 bg-white/55 px-4 py-3 text-sm"
+          className={`note-prose overflow-y-auto rounded-[10px] px-4 py-3 text-sm ${fullHeight ? 'flex-1' : 'min-h-[12rem]'}`}
+          style={{ background: '#fff', border: '1px solid var(--note-border)', color: 'var(--note-text)' }}
           dangerouslySetInnerHTML={{ __html: renderMarkdown(value) || '<p class="opacity-50">Nothing to preview</p>' }}
         />
       ) : (
@@ -66,8 +73,9 @@ export function MarkdownEditor({ value, onChange, placeholder, rows = 10 }) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          rows={rows}
-          className="field font-mono !text-[13px] leading-relaxed"
+          rows={fullHeight ? undefined : rows}
+          className={`note-input resize-none text-[15px] leading-relaxed ${fullHeight ? 'flex-1' : ''}`}
+          style={{ fontFamily: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif' }}
         />
       )}
     </div>

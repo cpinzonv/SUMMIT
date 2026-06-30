@@ -33,6 +33,14 @@
   --grad-teal-purple: linear-gradient(135deg, #ff8a4c 0%, #ff6f73 45%, #4f9fd6 100%);
   --grad-pink-lavender: linear-gradient(135deg, #ff7e79 0%, #ffc59e 100%);
 
+  /* Notes editor palette — warm white surface, teal accent, soft shadow. */
+  --note-bg: #fafaf8;
+  --note-toolbar-bg: #f5f3f0;
+  --note-text: #2d3748;
+  --note-accent: #20b2aa;
+  --note-border: rgba(45, 55, 72, 0.12);
+  --note-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
   /* Warm amber depth + glow */
   --shadow-glass: 0 20px 54px -22px rgba(214, 130, 78, 0.42);
   --shadow-soft: 0 18px 44px -16px rgba(150, 100, 60, 0.34);
@@ -245,6 +253,46 @@
       0 0 0 4px rgba(255, 138, 90, 0.16),
       0 8px 22px -12px rgba(255, 120, 80, 0.4);
   }
+
+  /* ---- Notes editor theme (warm white + teal) ---------------------------- */
+  .note-surface {
+    background: var(--note-bg);
+    color: var(--note-text);
+    border-radius: 12px;
+    box-shadow: var(--note-shadow);
+  }
+  .note-input {
+    width: 100%;
+    border-radius: 10px;
+    border: 1px solid var(--note-border);
+    background: #fff;
+    color: var(--note-text);
+    padding: 0.6rem 0.85rem;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .note-input::placeholder { color: rgba(45, 55, 72, 0.4); }
+  .note-input:focus {
+    border-color: var(--note-accent);
+    box-shadow: 0 0 0 3px rgba(32, 178, 170, 0.18);
+  }
+  /* Toolbar buttons — subtle by default, Summit coral on hover, teal when active. */
+  .note-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--note-text);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .note-tool:hover { background: rgba(255, 122, 82, 0.14); color: #d6552a; }
+  .note-tool-active { background: var(--note-accent); color: #fff; }
+  .note-tool-active:hover { background: var(--note-accent); color: #fff; }
 
   /* Rendered Markdown (notes) */
   .note-prose {
