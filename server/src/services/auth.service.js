@@ -9,7 +9,7 @@ import {
 
 const SALT_ROUNDS = 12;
 
-/** Shape returned to clients — never includes password_hash. */
+/** Shape returned to clients — never includes password_hash or LMS tokens. */
 function toPublicUser(row) {
   return {
     id: row.id,
@@ -18,6 +18,13 @@ function toPublicUser(row) {
     school: row.school,
     timezone: row.timezone,
     preferences: row.preferences ?? {},
+    // LMS connection status only — tokens are never exposed.
+    lms: {
+      connected: Boolean(row.lms_connected),
+      provider: row.lms_provider ?? null,
+      domain: row.lms_domain ?? null,
+      syncedAt: row.lms_synced_at ?? null,
+    },
     createdAt: row.created_at,
   };
 }

@@ -78,6 +78,44 @@ export function ErrorBanner({ message }) {
   );
 }
 
+/**
+ * Transient bottom-center toast. Pass a `toast` object:
+ *   { msg, type?: 'success' | 'error', loading?: boolean }
+ * Render `{toast && <Toast toast={toast} />}` and clear it on a timer.
+ */
+export function Toast({ toast }) {
+  if (!toast) return null;
+  const isError = toast.type === 'error';
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4">
+      <div
+        className={`glass-panel pointer-events-auto flex items-center gap-2 px-4 py-2.5 text-sm font-semibold shadow-lg ${
+          isError ? 'text-rose-600' : 'text-emerald-600'
+        }`}
+      >
+        {toast.loading ? (
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/40 border-t-current" />
+        ) : (
+          <span>{isError ? '⚠' : '✓'}</span>
+        )}
+        {toast.msg}
+      </div>
+    </div>
+  );
+}
+
+/** Small "Canvas" provenance badge for assignments synced from an LMS. */
+export function CanvasBadge({ className = '' }) {
+  return (
+    <span
+      title="Synced from Canvas"
+      className={`inline-flex items-center gap-1 rounded-full bg-[#e2410b]/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#c8401a] ${className}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-[#e2410b]" /> Canvas
+    </span>
+  );
+}
+
 export function EmptyState({ title, children }) {
   return (
     <div className="rounded-2xl border border-dashed border-purple-soft/50 bg-white/40 px-6 py-12 text-center backdrop-blur">

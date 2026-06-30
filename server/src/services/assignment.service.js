@@ -14,6 +14,7 @@ function toPublicAssignment(row) {
     pointValue: row.point_value == null ? null : Number(row.point_value),
     status: row.status,
     priority: row.priority ?? 'none',
+    externalSource: row.external_source ?? null, // 'canvas' if synced from an LMS
     grade:
       row.grade_id == null
         ? null

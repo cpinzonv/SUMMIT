@@ -41,6 +41,18 @@ CREATE TABLE IF NOT EXISTS users (
 -- User settings (theme, color scheme, font size, default views, etc.).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- LMS integration (Canvas today; Blackboard/Brightspace/Moodle reuse the same
+-- columns — see services/lms/). Tokens are stored ENCRYPTED (AES-256-GCM); the
+-- app never persists them in plaintext. lms_domain is the per-institution host
+-- (e.g. "asu.instructure.com").
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_provider          TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_domain            TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_access_token      TEXT;   -- encrypted
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_refresh_token     TEXT;   -- encrypted
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_token_expires_at  TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_connected         BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS lms_synced_at         TIMESTAMPTZ;
+
 DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
 CREATE TRIGGER trg_users_updated_at
   BEFORE UPDATE ON users
@@ -104,6 +116,14 @@ ALTER TABLE classes ADD COLUMN IF NOT EXISTS meeting_time TEXT;
 -- Attendance grading: whether attendance counts toward the grade, and its weight (percent).
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS attendance_graded BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS attendance_weight NUMERIC(5,2);
+-- LMS linkage: which external course (if any) this class is synced with.
+-- external_source = 'canvas' | 'blackboard' | ...; external_course_id is that LMS's course id.
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS external_source    TEXT;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS external_course_id TEXT;
+-- One Summit class per (user, source, external course).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_external
+  ON classes(user_id, external_source, external_course_id)
+  WHERE external_course_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_classes_user_id ON classes(user_id);
 CREATE INDEX IF NOT EXISTS idx_classes_user_term ON classes(user_id, term);
@@ -149,6 +169,15 @@ CREATE TABLE IF NOT EXISTS assignments (
 -- Priority for calendar sorting/indicators (added later).
 ALTER TABLE assignments
   ADD COLUMN IF NOT EXISTS priority assignment_priority NOT NULL DEFAULT 'none';
+
+-- LMS provenance: assignments pulled from Canvas/etc. carry the source + the
+-- external assignment id, used to prevent duplicate imports and to show a badge.
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS external_source TEXT;
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS external_id     TEXT;
+-- A given external assignment maps to at most one Summit assignment per class.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_assignments_external
+  ON assignments(class_id, external_source, external_id)
+  WHERE external_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_assignments_class_id ON assignments(class_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_due_date ON assignments(due_date);

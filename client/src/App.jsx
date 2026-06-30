@@ -9,6 +9,7 @@ import CreateClassPage from './pages/CreateClassPage';
 import ArchivePage from './pages/ArchivePage';
 import PlannerPage from './pages/PlannerPage';
 import SettingsPage from './pages/SettingsPage';
+import LmsCallbackPage from './pages/LmsCallbackPage';
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/planner" element={<PlannerPage />} />
         <Route path="/archives" element={<ArchivePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/lms/callback" element={<LmsCallbackPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

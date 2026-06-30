@@ -102,6 +102,13 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  /** Re-fetch the current user (e.g. after connecting/syncing Canvas). */
+  const refreshUser = useCallback(async () => {
+    const { data } = await api.get('/api/auth/me');
+    setUser(data.user);
+    return data.user;
+  }, []);
+
   /** Optimistically update preferences locally, then persist. */
   const savePreferences = useCallback(async (partial) => {
     setUser((u) =>
@@ -123,7 +130,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, preferences, login, register, logout, savePreferences }}
+      value={{ user, loading, preferences, login, register, logout, savePreferences, refreshUser }}
     >
       {children}
     </AuthContext.Provider>

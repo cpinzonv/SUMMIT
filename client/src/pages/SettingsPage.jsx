@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
-import { ErrorBanner, Toggle, classGradient, gradeColor } from '../components/ui';
+import { ErrorBanner, Toast, Toggle, classGradient, gradeColor } from '../components/ui';
+import { canvasApi, beginConnect, summarizeSync } from '../lib/canvas';
 
 const TABS = [
   { key: 'account', label: 'Account' },
@@ -12,7 +13,10 @@ const TABS = [
 
 export default function SettingsPage() {
   const { user, preferences, savePreferences } = useAuth();
-  const [tab, setTab] = useState('account');
+  // Land on Preferences (where Canvas lives) when returning from the OAuth redirect.
+  const [tab, setTab] = useState(() =>
+    new URLSearchParams(window.location.search).has('canvas') ? 'preferences' : 'account',
+  );
   const set = (key) => (value) => savePreferences({ [key]: value });
 
   return (
@@ -151,31 +155,169 @@ function ChangePassword() {
 /* ---- Preferences ------------------------------------------------------- */
 function PreferencesTab({ prefs, set }) {
   return (
-    <Section title="Preferences" description="Defaults and notifications.">
-      <Row label="Default dashboard view" hint="How classes appear on the dashboard.">
-        <select value={prefs.defaultDashboardView} onChange={(e) => set('defaultDashboardView')(e.target.value)} className="field !w-auto">
-          <option value="cards">Cards</option>
-          <option value="list">List</option>
-        </select>
-      </Row>
-      <Row label="Default calendar view">
-        <RadioGroup
-          name="calview"
-          value={prefs.defaultCalendarView}
-          onChange={set('defaultCalendarView')}
-          options={[
-            { value: 'month', label: 'Month' },
-            { value: 'week', label: 'Week' },
-            { value: 'day', label: 'Day' },
-          ]}
-        />
-      </Row>
-      <Row label="Email notifications" hint="Due-date reminders by email.">
-        <Toggle on={!!prefs.notificationsEnabled} onChange={() => set('notificationsEnabled')(!prefs.notificationsEnabled)} />
-      </Row>
-      <Row label="Show archived semesters" hint="Include archived classes in views.">
-        <Toggle on={!!prefs.showArchived} onChange={() => set('showArchived')(!prefs.showArchived)} />
-      </Row>
+    <>
+      <Section title="Preferences" description="Defaults and notifications.">
+        <Row label="Default dashboard view" hint="How classes appear on the dashboard.">
+          <select value={prefs.defaultDashboardView} onChange={(e) => set('defaultDashboardView')(e.target.value)} className="field !w-auto">
+            <option value="cards">Cards</option>
+            <option value="list">List</option>
+          </select>
+        </Row>
+        <Row label="Default calendar view">
+          <RadioGroup
+            name="calview"
+            value={prefs.defaultCalendarView}
+            onChange={set('defaultCalendarView')}
+            options={[
+              { value: 'month', label: 'Month' },
+              { value: 'week', label: 'Week' },
+              { value: 'day', label: 'Day' },
+            ]}
+          />
+        </Row>
+        <Row label="Email notifications" hint="Due-date reminders by email.">
+          <Toggle on={!!prefs.notificationsEnabled} onChange={() => set('notificationsEnabled')(!prefs.notificationsEnabled)} />
+        </Row>
+        <Row label="Show archived semesters" hint="Include archived classes in views.">
+          <Toggle on={!!prefs.showArchived} onChange={() => set('showArchived')(!prefs.showArchived)} />
+        </Row>
+      </Section>
+
+      <CanvasSection />
+    </>
+  );
+}
+
+/* ---- Canvas integration ------------------------------------------------ */
+function CanvasSection() {
+  const { user, refreshUser } = useAuth();
+  const location = useLocation();
+  const [status, setStatus] = useState(user?.lms || { connected: false, available: true });
+  const [domain, setDomain] = useState(user?.lms?.domain || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState(null);
+
+  // Pull fresh status (includes server `available` flag) on mount.
+  useEffect(() => {
+    canvasApi
+      .status()
+      .then((s) => {
+        setStatus(s);
+        if (s.domain) setDomain(s.domain);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const justConnected = new URLSearchParams(location.search).get('canvas') === 'connected';
+
+  const connect = async () => {
+    setError('');
+    const d = domain.trim();
+    if (!d) return setError("Enter your school's Canvas web address, e.g. school.instructure.com.");
+    setBusy(true);
+    try {
+      const { url, state } = await canvasApi.authUrl(d);
+      beginConnect({ url, state, domain: d }); // redirects to Canvas
+    } catch (err) {
+      setError(errorMessage(err, 'Could not start the Canvas connection.'));
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (!confirm('Disconnect Canvas? Synced assignments stay, but syncing stops.')) return;
+    setBusy(true);
+    try {
+      const s = await canvasApi.disconnect();
+      setStatus(s);
+      await refreshUser();
+      setToast({ type: 'success', msg: 'Canvas disconnected' });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sync = async () => {
+    setToast({ loading: true, msg: 'Syncing assignments…' });
+    try {
+      const result = await canvasApi.sync();
+      await refreshUser();
+      const s = await canvasApi.status();
+      setStatus(s);
+      setToast({ type: 'success', msg: summarizeSync(result) });
+    } catch (err) {
+      setToast({ type: 'error', msg: errorMessage(err, 'Sync failed') });
+    }
+  };
+
+  const lastSynced = status.syncedAt
+    ? new Date(status.syncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+    : 'never';
+
+  return (
+    <Section title="Canvas" description="Connect your Canvas account to auto-import assignments.">
+      {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
+      {justConnected && status.connected && (
+        <div className="mb-3 rounded-2xl border border-emerald-300/50 bg-emerald-50/70 px-4 py-3 text-sm font-medium text-emerald-700">
+          Canvas connected — you can now sync assignments.
+        </div>
+      )}
+
+      {!status.available ? (
+        <p className="text-sm text-muted">
+          Canvas isn’t configured on this server yet. An admin needs to set the Canvas
+          developer key and token encryption key.
+        </p>
+      ) : status.connected ? (
+        <div className="space-y-3">
+          <Row label="Status" hint={status.domain || undefined}>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-600">
+              ✓ Connected
+            </span>
+          </Row>
+          <Row label="Last synced" hint="Imports new and updated assignments.">
+            <span className="text-sm text-muted">{lastSynced}</span>
+          </Row>
+          <div className="flex gap-2 pt-1">
+            <button onClick={sync} disabled={!!toast?.loading} className="btn btn-primary">
+              {toast?.loading ? 'Syncing…' : 'Sync now'}
+            </button>
+            <button onClick={disconnect} disabled={busy} className="btn btn-soft">
+              Disconnect
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-ink">Canvas web address</span>
+            <input
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              placeholder="school.instructure.com"
+              className="field"
+              autoCapitalize="none"
+              autoCorrect="off"
+            />
+            <span className="mt-1 block text-xs text-muted">
+              The address you use to log into Canvas (e.g. <code>asu.instructure.com</code>).
+            </span>
+          </label>
+          <button onClick={connect} disabled={busy} className="btn btn-primary">
+            {busy ? 'Redirecting…' : 'Connect Canvas'}
+          </button>
+        </div>
+      )}
+      <Toast toast={toast} />
     </Section>
   );
 }

@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import {
   Spinner,
   ErrorBanner,
   EmptyState,
   Modal,
+  Toast,
+  CanvasBadge,
   gradeColor,
   classGradient,
 } from '../components/ui';
+import { canvasApi, summarizeSync } from '../lib/canvas';
 import { ClassNotes } from '../components/ClassNotes';
 import { ClassAttendance } from '../components/ClassAttendance';
 
@@ -30,6 +34,15 @@ export default function ClassDetailPage() {
   // Active modal: { type: 'assignment', assignment? } or { type: 'grade', assignment }
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('assignments');
+  const [toast, setToast] = useState(null);
+  const { user } = useAuth();
+  const canvasConnected = Boolean(user?.lms?.connected);
+
+  useEffect(() => {
+    if (!toast || toast.loading) return undefined;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const load = useCallback(async () => {
     setError('');
@@ -68,6 +81,24 @@ export default function ClassDetailPage() {
       await load();
     } catch (err) {
       setError(errorMessage(err));
+    }
+  };
+
+  // "Sync Canvas assignments" for this class = import every assignment of its
+  // matched Canvas course (upserts, so it also picks up due-date/point changes).
+  const syncClassCanvas = async () => {
+    setToast({ loading: true, msg: 'Syncing from Canvas…' });
+    try {
+      const { assignments: list } = await canvasApi.listCourseAssignments(id);
+      if (list.length === 0) {
+        setToast({ type: 'success', msg: 'No Canvas assignments for this course' });
+        return;
+      }
+      const result = await canvasApi.import(id, list.map((a) => a.externalId));
+      await load();
+      setToast({ type: 'success', msg: summarizeSync(result) });
+    } catch (err) {
+      setToast({ type: 'error', msg: errorMessage(err, 'Canvas sync failed') });
     }
   };
 
@@ -134,9 +165,12 @@ export default function ClassDetailPage() {
         </div>
         <div className="absolute right-3 top-3 z-30">
           <ClassMenu
+            canvasConnected={canvasConnected}
             onEdit={() => setModal({ type: 'editClass' })}
             onArchive={() => setModal({ type: 'confirmArchive' })}
             onDelete={() => setModal({ type: 'confirmDelete' })}
+            onImportCanvas={() => setModal({ type: 'canvasImport' })}
+            onSyncCanvas={syncClassCanvas}
           />
         </div>
       </div>
@@ -201,7 +235,10 @@ export default function ClassDetailPage() {
                 {assignments.map((a) => (
                   <tr key={a.id} className="transition hover:bg-white/40">
                     <td className="px-5 py-3">
-                      <div className="font-semibold text-ink">{a.title}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-ink">{a.title}</span>
+                        {a.externalSource === 'canvas' && <CanvasBadge />}
+                      </div>
                       <div className="text-xs text-muted">
                         {a.category || a.status?.replace('_', ' ')}
                       </div>
@@ -302,12 +339,30 @@ export default function ClassDetailPage() {
           onClose={() => setModal(null)}
         />
       )}
+      {modal?.type === 'canvasImport' && (
+        <CanvasImportModal
+          classId={id}
+          className={cls?.name}
+          onClose={() => setModal(null)}
+          onImported={async (result) => {
+            setModal(null);
+            await load();
+            setToast({ type: 'success', msg: summarizeSync(result) });
+          }}
+        />
+      )}
+
+      <Toast toast={toast} />
     </div>
   );
 }
 
-/** Top-right ⋮ menu on the class header: Edit / Archive / Delete. */
-function ClassMenu({ onEdit, onArchive, onDelete }) {
+/**
+ * Top-right ⋮ menu on the class header. Class actions (Edit / Archive / Delete)
+ * plus, below a divider, Canvas sync actions — disabled with a tooltip when
+ * Canvas isn't connected.
+ */
+function ClassMenu({ canvasConnected, onEdit, onArchive, onDelete, onImportCanvas, onSyncCanvas }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -345,7 +400,7 @@ function ClassMenu({ onEdit, onArchive, onDelete }) {
       {open && (
         <div
           role="menu"
-          className="glass-panel absolute right-0 z-20 mt-1 w-44 overflow-hidden p-1.5 text-sm shadow-xl"
+          className="glass-panel absolute right-0 z-20 mt-1 w-60 overflow-hidden p-1.5 text-sm shadow-xl"
         >
           <button type="button" role="menuitem" onClick={pick(onEdit)} className="menu-item">
             <span>✎</span> Edit class
@@ -353,7 +408,6 @@ function ClassMenu({ onEdit, onArchive, onDelete }) {
           <button type="button" role="menuitem" onClick={pick(onArchive)} className="menu-item">
             <span>🗄</span> Archive class
           </button>
-          <div className="my-1 border-t border-white/50" />
           <button
             type="button"
             role="menuitem"
@@ -361,6 +415,29 @@ function ClassMenu({ onEdit, onArchive, onDelete }) {
             className="menu-item text-rose-600 hover:bg-rose-50/70"
           >
             <span>🗑</span> Delete class
+          </button>
+
+          {/* Canvas sync actions */}
+          <div className="my-1 border-t border-white/50" />
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!canvasConnected}
+            onClick={canvasConnected ? pick(onImportCanvas) : undefined}
+            title={canvasConnected ? undefined : 'Connect Canvas in Settings first'}
+            className={`menu-item ${canvasConnected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/50 hover:bg-transparent'}`}
+          >
+            <span>⬇</span> Import assignments from Canvas
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!canvasConnected}
+            onClick={canvasConnected ? pick(onSyncCanvas) : undefined}
+            title={canvasConnected ? undefined : 'Connect Canvas in Settings first'}
+            className={`menu-item ${canvasConnected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/50 hover:bg-transparent'}`}
+          >
+            <span>↻</span> Sync Canvas assignments
           </button>
         </div>
       )}
@@ -467,6 +544,122 @@ function ClassEditModal({ cls, onClose, onSaved }) {
         {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
         <ModalActions saving={saving} onClose={onClose} label="Save changes" />
       </form>
+    </Modal>
+  );
+}
+
+/** Pick a subset of a class's Canvas assignments and import them. */
+function CanvasImportModal({ classId, className, onClose, onImported }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [items, setItems] = useState([]);
+  const [selected, setSelected] = useState({}); // externalId -> bool
+  const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    canvasApi
+      .listCourseAssignments(classId)
+      .then(({ assignments }) => {
+        if (!active) return;
+        setItems(assignments);
+        // Pre-select assignments that haven't been imported yet.
+        const sel = {};
+        assignments.forEach((a) => {
+          if (!a.alreadyImported) sel[a.externalId] = true;
+        });
+        setSelected(sel);
+      })
+      .catch((err) => active && setError(errorMessage(err, 'Could not load Canvas assignments.')))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [classId]);
+
+  const toggle = (id) => setSelected((s) => ({ ...s, [id]: !s[id] }));
+  const chosenIds = items.filter((a) => selected[a.externalId]).map((a) => a.externalId);
+
+  const submit = async () => {
+    if (chosenIds.length === 0) return;
+    setImporting(true);
+    setError('');
+    try {
+      const result = await canvasApi.import(classId, chosenIds);
+      onImported(result);
+    } catch (err) {
+      setError(errorMessage(err, 'Import failed'));
+      setImporting(false);
+    }
+  };
+
+  return (
+    <Modal title="Import from Canvas" onClose={onClose} wide>
+      <p className="mb-3 text-sm text-muted">
+        Assignments from Canvas for <span className="font-semibold text-ink">{className}</span>.
+        Already-imported ones are checked; uncheck anything you don’t want.
+      </p>
+
+      {loading ? (
+        <Spinner label="Loading Canvas assignments…" />
+      ) : error ? (
+        <ErrorBanner message={error} />
+      ) : items.length === 0 ? (
+        <EmptyState title="No Canvas assignments">
+          This Canvas course has no assignments to import.
+        </EmptyState>
+      ) : (
+        <>
+          <div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+            {items.map((a) => (
+              <label
+                key={a.externalId}
+                className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/50 bg-white/45 px-3 py-2.5 transition hover:bg-white/70"
+              >
+                <input
+                  type="checkbox"
+                  checked={!!selected[a.externalId]}
+                  onChange={() => toggle(a.externalId)}
+                  className="h-4 w-4 shrink-0 accent-brand-500"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-ink">{a.title}</span>
+                    {a.alreadyImported && (
+                      <span className="shrink-0 rounded-full bg-slate-200/70 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
+                        Imported
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted">
+                    {a.dueDate ? `Due ${fmtDate(a.dueDate)}` : 'No due date'}
+                    {a.pointValue != null ? ` · ${a.pointValue} pts` : ''}
+                    {a.hasGrade ? ' · grade available' : ''}
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          {error && <p className="mt-2 text-xs font-semibold text-rose-600">{error}</p>}
+          <div className="mt-4 flex items-center justify-between">
+            <span className="text-xs text-muted">{chosenIds.length} selected</span>
+            <div className="flex gap-2">
+              <button type="button" onClick={onClose} className="btn btn-soft">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submit}
+                disabled={importing || chosenIds.length === 0}
+                className="btn btn-primary"
+              >
+                {importing ? 'Importing…' : `Import selected`}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

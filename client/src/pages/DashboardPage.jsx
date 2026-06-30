@@ -6,17 +6,21 @@ import {
   Spinner,
   ErrorBanner,
   EmptyState,
+  Toast,
   gradeColor,
   classGradient,
   computeGpa,
 } from '../components/ui';
+import { canvasApi, summarizeSync } from '../lib/canvas';
 
 export default function DashboardPage() {
-  const { preferences } = useAuth();
+  const { preferences, user, refreshUser } = useAuth();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [archivedNotice, setArchivedNotice] = useState(0);
+  const [toast, setToast] = useState(null);
+  const canvasConnected = Boolean(user?.lms?.connected);
   // Auto-archive runs once per dashboard load. Holding the in-flight promise in
   // a ref makes both React StrictMode mounts await the SAME archive call, so the
   // class list is always loaded AFTER expired classes are archived (no stale
@@ -57,6 +61,25 @@ export default function DashboardPage() {
     return () => clearTimeout(t);
   }, [archivedNotice]);
 
+  useEffect(() => {
+    if (!toast || toast.loading) return undefined;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const syncCanvas = async () => {
+    setToast({ loading: true, msg: 'Syncing assignments…' });
+    try {
+      const result = await canvasApi.sync();
+      const res = await api.get('/api/classes');
+      setClasses(res.data.classes);
+      await refreshUser();
+      setToast({ type: 'success', msg: summarizeSync(result) });
+    } catch (err) {
+      setToast({ type: 'error', msg: errorMessage(err, 'Canvas sync failed') });
+    }
+  };
+
   const graded = classes.filter((c) => c.currentGrade?.percentage != null);
   const average =
     graded.length > 0
@@ -77,9 +100,16 @@ export default function DashboardPage() {
             Your active classes — keep climbing toward your summit
           </p>
         </div>
-        <Link to="/classes/new" className="btn btn-primary">
-          + New class
-        </Link>
+        <div className="flex items-center gap-2">
+          {canvasConnected && (
+            <button onClick={syncCanvas} disabled={!!toast?.loading} className="btn btn-soft">
+              {toast?.loading ? 'Syncing…' : '↻ Sync with Canvas'}
+            </button>
+          )}
+          <Link to="/classes/new" className="btn btn-primary">
+            + New class
+          </Link>
+        </div>
       </div>
 
       {archivedNotice > 0 && (
@@ -140,6 +170,8 @@ export default function DashboardPage() {
           )}
         </>
       )}
+
+      <Toast toast={toast} />
     </div>
   );
 }
