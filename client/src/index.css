@@ -308,6 +308,18 @@
       transform: translateY(-10px);
     }
   }
+
+  /* Archive exit animation: fade out + slide up before removal from the DOM.
+     Applied by adding `.archive-animating` to a class card/row (or the class
+     detail header) just before the archive/delete API call fires. */
+  .archive-exit {
+    transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+  }
+  .archive-animating {
+    opacity: 0;
+    transform: translateY(-30px);
+    pointer-events: none;
+  }
 }
 
 /* ============================================================================

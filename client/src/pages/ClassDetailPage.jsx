@@ -34,6 +34,8 @@ export default function ClassDetailPage() {
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('assignments');
   const [toast, setToast] = useState(null);
+  // Plays the archive exit animation on the header before navigating away.
+  const [archiving, setArchiving] = useState(false);
   // All registered LMS providers + their connection state (drives the ⋮ menu).
   const [lmsProviders, setLmsProviders] = useState([]);
 
@@ -74,8 +76,17 @@ export default function ClassDetailPage() {
   }, [load]);
 
   const doArchive = async () => {
-    await api.put(`/api/classes/${id}/archive`);
-    navigate('/');
+    // Play the exit animation on the header, then archive + leave.
+    setModal(null);
+    setArchiving(true);
+    await new Promise((r) => setTimeout(r, 500));
+    try {
+      await api.put(`/api/classes/${id}/archive`);
+      navigate('/');
+    } catch (err) {
+      setArchiving(false);
+      setToast({ type: 'error', msg: errorMessage(err, 'Could not archive class') });
+    }
   };
 
   const doDelete = async () => {
@@ -126,7 +137,7 @@ export default function ClassDetailPage() {
 
       {/* Outer wrapper is the positioning context for the ⋮ menu, which lives
           OUTSIDE the overflow-hidden card so its dropdown isn't clipped. */}
-      <div className="relative mt-3">
+      <div className={`relative mt-3 archive-exit ${archiving ? 'archive-animating' : ''}`}>
         <div className="glass-card relative overflow-hidden p-6">
           <span
             className="pointer-events-none absolute inset-0 opacity-[0.12]"

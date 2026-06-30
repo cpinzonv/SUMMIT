@@ -23,6 +23,28 @@ export default function DashboardPage() {
   const [syncingProvider, setSyncingProvider] = useState(null);
   // Connected LMS providers (each gets its own "Sync" button).
   const [connectedLms, setConnectedLms] = useState([]);
+  // Class ids currently playing the archive exit animation (before removal).
+  const [animatingIds, setAnimatingIds] = useState(() => new Set());
+
+  // Archive a class with a smooth exit: play the fade/slide animation, then call
+  // the API and drop it from the list once the animation has finished.
+  const archiveClass = (id) => {
+    setAnimatingIds((prev) => new Set(prev).add(id));
+    setTimeout(async () => {
+      try {
+        await api.put(`/api/classes/${id}/archive`);
+        setClasses((cs) => cs.filter((c) => c.id !== id));
+        setToast({ type: 'success', msg: 'Class archived' });
+      } catch (err) {
+        setToast({ type: 'error', msg: errorMessage(err, 'Could not archive class') });
+        setAnimatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    }, 500);
+  };
   // Auto-archive runs once per dashboard load. Holding the in-flight promise in
   // a ref makes both React StrictMode mounts await the SAME archive call, so the
   // class list is always loaded AFTER expired classes are archived (no stale
@@ -182,13 +204,25 @@ export default function DashboardPage() {
           ) : preferences.defaultDashboardView === 'list' ? (
             <div className="glass-card divide-y divide-white/40 overflow-hidden">
               {classes.map((cls, i) => (
-                <ClassRow key={cls.id} cls={cls} index={i} />
+                <ClassRow
+                  key={cls.id}
+                  cls={cls}
+                  index={i}
+                  animating={animatingIds.has(cls.id)}
+                  onArchive={archiveClass}
+                />
               ))}
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2">
               {classes.map((cls, i) => (
-                <ClassCard key={cls.id} cls={cls} index={i} />
+                <ClassCard
+                  key={cls.id}
+                  cls={cls}
+                  index={i}
+                  animating={animatingIds.has(cls.id)}
+                  onArchive={archiveClass}
+                />
               ))}
             </div>
           )}
@@ -221,14 +255,33 @@ function Stat({ label, value, valueClass = 'text-ink', gradient = false, glow })
   );
 }
 
-function ClassCard({ cls, index }) {
+function archiveHandler(onArchive, id) {
+  return (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirm('Archive this class? It moves to your Archives.')) onArchive(id);
+  };
+}
+
+function ClassCard({ cls, index, animating = false, onArchive }) {
   const grade = cls.currentGrade;
   const gradient = classGradient(cls, index);
   return (
     <Link
       to={`/classes/${cls.id}`}
-      className="glass-card group relative overflow-hidden p-6 transition hover:-translate-y-1 hover:shadow-[0_22px_48px_-18px_rgba(180,120,80,0.45)]"
+      className={`glass-card group relative overflow-hidden p-6 transition hover:-translate-y-1 hover:shadow-[0_22px_48px_-18px_rgba(180,120,80,0.45)] archive-exit ${animating ? 'archive-animating' : ''}`}
     >
+      {onArchive && (
+        <button
+          type="button"
+          onClick={archiveHandler(onArchive, cls.id)}
+          title="Archive class"
+          aria-label="Archive class"
+          className="absolute right-2.5 top-2.5 z-10 grid h-7 w-7 place-items-center rounded-full text-muted opacity-0 transition hover:bg-white/70 hover:text-ink group-hover:opacity-100"
+        >
+          🗄
+        </button>
+      )}
       {/* Unique gradient wash tinting the whole card */}
       <span
         className="pointer-events-none absolute inset-0 opacity-[0.24] transition group-hover:opacity-[0.34]"
@@ -279,12 +332,12 @@ function ClassCard({ cls, index }) {
   );
 }
 
-function ClassRow({ cls, index }) {
+function ClassRow({ cls, index, animating = false, onArchive }) {
   const grade = cls.currentGrade;
   return (
     <Link
       to={`/classes/${cls.id}`}
-      className="flex items-center gap-4 px-5 py-3.5 transition hover:bg-white/40"
+      className={`group flex items-center gap-4 px-5 py-3.5 transition hover:bg-white/40 archive-exit ${animating ? 'archive-animating' : ''}`}
     >
       <span className="h-9 w-1.5 rounded-full" style={{ backgroundImage: classGradient(cls, index) }} />
       <div className="min-w-0 flex-1">
@@ -302,6 +355,17 @@ function ClassRow({ cls, index }) {
         </div>
         <div className="text-[10px] font-medium text-muted">{grade?.letter || 'No grades'}</div>
       </div>
+      {onArchive && (
+        <button
+          type="button"
+          onClick={archiveHandler(onArchive, cls.id)}
+          title="Archive class"
+          aria-label="Archive class"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted opacity-0 transition hover:bg-white/70 hover:text-ink group-hover:opacity-100"
+        >
+          🗄
+        </button>
+      )}
     </Link>
   );
 }
