@@ -424,6 +424,7 @@ export default function ClassDetailPage() {
  */
 function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync }) {
   const [open, setOpen] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -431,22 +432,23 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
     const onDown = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
     };
-    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    const onKey = (e) => e.key === 'Escape' && (subOpen ? setSubOpen(false) : setOpen(false));
     window.addEventListener('mousedown', onDown);
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('mousedown', onDown);
       window.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [open, subOpen]);
 
+  // Close everything after picking an action.
   const pick = (fn) => () => {
     setOpen(false);
+    setSubOpen(false);
     fn();
   };
 
-  // Only surface providers the server can actually use (configured or mock).
-  const usable = (providers || []).filter((p) => p.available);
+  const lmsProviders = providers || [];
 
   return (
     <div ref={ref} className="relative self-start">
@@ -461,13 +463,77 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
         ⋮
       </button>
       {open && (
-        <div
-          role="menu"
-          className="glass-panel absolute right-0 z-20 mt-1 max-h-[28rem] w-64 overflow-y-auto p-1.5 text-sm shadow-xl"
-        >
+        <div role="menu" className="glass-panel absolute right-0 z-20 mt-1 w-60 p-1.5 text-sm shadow-xl">
           <button type="button" role="menuitem" onClick={pick(onEdit)} className="menu-item">
             <span>✎</span> Edit class
           </button>
+
+          {/* Add Integration → flyout submenu of LMS providers. */}
+          <div
+            className="relative"
+            onMouseEnter={() => setSubOpen(true)}
+            onMouseLeave={() => setSubOpen(false)}
+          >
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={subOpen}
+              onClick={() => setSubOpen((s) => !s)}
+              className="menu-item w-full justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-brand-600">⊕</span> Add Integration
+              </span>
+              <span className="text-muted">›</span>
+            </button>
+
+            {subOpen && (
+              <div
+                role="menu"
+                className="glass-panel absolute right-full top-0 z-30 mr-1 max-h-[22rem] w-64 overflow-y-auto p-1.5 text-sm shadow-xl"
+              >
+                {lmsProviders.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-muted">No integrations available.</div>
+                ) : (
+                  lmsProviders.map((p, i) => (
+                    <div key={p.provider}>
+                      {i > 0 && <div className="my-1 border-t border-white/50" />}
+                      <div className="flex items-center justify-between px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wide text-muted">
+                        <span>{p.label}</span>
+                        {!p.connected && (
+                          <span className="inline-flex items-center gap-1 normal-case text-muted/70">
+                            🔒 Not connected
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={!p.connected}
+                        onClick={p.connected ? pick(() => onImport(p.provider)) : undefined}
+                        title={p.connected ? undefined : `Connect ${p.label} in Settings first`}
+                        className={`menu-item ${p.connected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/40 hover:bg-transparent'}`}
+                      >
+                        <span>⬇</span> Import assignments
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={!p.connected}
+                        onClick={p.connected ? pick(() => onSync(p.provider)) : undefined}
+                        title={p.connected ? undefined : `Connect ${p.label} in Settings first`}
+                        className={`menu-item ${p.connected ? 'text-[#3fa1a6]' : 'cursor-not-allowed text-muted/40 hover:bg-transparent'}`}
+                      >
+                        <span>↻</span> Sync assignments
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="my-1 border-t border-white/50" />
           <button type="button" role="menuitem" onClick={pick(onArchive)} className="menu-item">
             <span>🗄</span> Archive class
           </button>
@@ -479,36 +545,6 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
           >
             <span>🗑</span> Delete class
           </button>
-
-          {/* Per-LMS import/sync actions */}
-          {usable.map((p) => (
-            <div key={p.provider}>
-              <div className="my-1 border-t border-white/50" />
-              <div className="px-3 pb-0.5 pt-1 text-[10px] font-bold uppercase tracking-wide text-muted">
-                {p.label}
-              </div>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!p.connected}
-                onClick={p.connected ? pick(() => onImport(p.provider)) : undefined}
-                title={p.connected ? undefined : `Connect ${p.label} in Settings first`}
-                className={`menu-item ${p.connected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/50 hover:bg-transparent'}`}
-              >
-                <span>⬇</span> Import assignments from {p.label}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!p.connected}
-                onClick={p.connected ? pick(() => onSync(p.provider)) : undefined}
-                title={p.connected ? undefined : `Connect ${p.label} in Settings first`}
-                className={`menu-item ${p.connected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/50 hover:bg-transparent'}`}
-              >
-                <span>↻</span> Sync {p.label} assignments
-              </button>
-            </div>
-          ))}
         </div>
       )}
     </div>
@@ -1103,19 +1139,22 @@ function ColorPicker({ value, onChange }) {
     <div className="block">
       <span className="mb-1 block text-xs font-semibold text-ink">Color</span>
       <div className="flex flex-wrap items-center gap-2">
-        {/* Glass / Clear — the default: no solid fill, frosted glass look. */}
+        {/* Glass / Clear — the default. The swatch shows the Summit brand
+            gradient (warm→cool) so it reads as "the signature Summit look",
+            not an empty/gray state. */}
         <button
           type="button"
           onClick={() => onChange('')}
-          aria-label="Glass (clear, no color)"
-          title="Glass — frosted, no solid color"
-          className={`relative grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-white/40 ring-offset-1 backdrop-blur transition ${
+          aria-label="Glass (clear, Summit default)"
+          title="Glass — the signature Summit look"
+          className={`h-7 w-7 rounded-full shadow-[0_2px_10px_-2px_rgba(255,120,80,0.6)] ring-offset-1 transition ${
             glassSelected ? 'ring-2 ring-ink' : 'ring-1 ring-white/70 hover:ring-ink/40'
           }`}
-        >
-          {/* diagonal slash signals "no fill" */}
-          <span className="absolute h-[1.5px] w-9 -rotate-45 bg-muted/60" />
-        </button>
+          style={{
+            backgroundImage:
+              'linear-gradient(135deg, #FF6B6B 0%, #FFA500 25%, #20B2AA 75%, #6B7FBD 100%)',
+          }}
+        />
         {CLASS_COLOR_PRESETS.map((c) => (
           <button
             key={c}
