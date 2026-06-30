@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import { Spinner, ErrorBanner, classColor, Modal, gradeColor } from '../components/ui';
+import { Spinner, ErrorBanner, classGradient, Modal, gradeColor } from '../components/ui';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const localKey = (d) =>
@@ -36,17 +36,17 @@ export default function CalendarPage() {
 
         const evs = [];
         lists.forEach(({ cls, assignments }, i) => {
-          const color = classColor(cls, i);
+          const gradient = classGradient(cls, i);
           assignments.forEach((a) => {
             if (a.dueDate)
-              evs.push({ date: new Date(a.dueDate), type: 'due', a, cls, color });
+              evs.push({ date: new Date(a.dueDate), type: 'due', a, cls, gradient });
             if (a.plannedDate)
               evs.push({
                 date: new Date(a.plannedDate),
                 type: 'planned',
                 a,
                 cls,
-                color,
+                gradient,
               });
           });
         });
@@ -62,7 +62,6 @@ export default function CalendarPage() {
     };
   }, []);
 
-  // Group events by local date key for quick lookup.
   const byDay = useMemo(() => {
     const map = new Map();
     for (const ev of events) {
@@ -73,7 +72,6 @@ export default function CalendarPage() {
     return map;
   }, [events]);
 
-  // Build a 6-week grid starting on the Sunday on/before the 1st.
   const cells = useMemo(() => {
     const start = new Date(cursor);
     start.setDate(1 - start.getDay());
@@ -95,26 +93,26 @@ export default function CalendarPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Calendar</h1>
-          <p className="text-sm text-slate-500">
+          <h1 className="text-3xl font-extrabold tracking-tight">Calendar</h1>
+          <p className="mt-1 text-sm text-muted">
             All assignments across your classes
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => shiftMonth(-1)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">←</button>
-          <span className="min-w-[150px] text-center text-sm font-medium">{monthLabel}</span>
-          <button onClick={() => shiftMonth(1)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100">→</button>
+          <button onClick={() => shiftMonth(-1)} className="btn btn-soft !px-3 !py-1.5">←</button>
+          <span className="min-w-[150px] text-center text-sm font-bold">{monthLabel}</span>
+          <button onClick={() => shiftMonth(1)} className="btn btn-soft !px-3 !py-1.5">→</button>
         </div>
       </div>
 
-      <div className="mb-4 flex gap-4 text-xs text-slate-500">
+      <div className="mb-4 flex gap-5 text-xs font-medium text-muted">
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-brand-600" /> Due date
+          <span className="h-3 w-3 rounded-md" style={{ backgroundImage: 'var(--grad-teal-purple)' }} /> Due date
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded bg-brand-600 opacity-40" /> Planned date
+          <span className="h-3 w-3 rounded-md opacity-40" style={{ backgroundImage: 'var(--grad-teal-purple)' }} /> Planned date
         </span>
       </div>
 
@@ -123,10 +121,10 @@ export default function CalendarPage() {
       ) : error ? (
         <ErrorBanner message={error} />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-medium text-slate-500">
+        <div className="glass-card overflow-hidden">
+          <div className="grid grid-cols-7 border-b border-white/50 text-center text-xs font-semibold text-muted">
             {DOW.map((d) => (
-              <div key={d} className="py-2">{d}</div>
+              <div key={d} className="py-3">{d}</div>
             ))}
           </div>
           <div className="grid grid-cols-7">
@@ -134,30 +132,40 @@ export default function CalendarPage() {
               const key = localKey(d);
               const inMonth = d.getMonth() === cursor.getMonth();
               const dayEvents = byDay.get(key) || [];
+              const isToday = key === todayKey;
               return (
                 <div
                   key={i}
-                  className={`min-h-[92px] border-b border-r border-slate-100 p-1.5 ${
-                    inMonth ? 'bg-white' : 'bg-slate-50/60'
+                  className={`min-h-[96px] border-b border-r border-white/30 p-1.5 ${
+                    inMonth ? '' : 'bg-white/10'
                   }`}
                 >
                   <div
-                    className={`mb-1 text-right text-xs ${
-                      key === todayKey
-                        ? 'font-bold text-brand-600'
+                    className={`mb-1 flex justify-end text-xs ${
+                      isToday
+                        ? 'font-extrabold text-brand-600'
                         : inMonth
                           ? 'text-slate-500'
                           : 'text-slate-300'
                     }`}
                   >
-                    {d.getDate()}
+                    <span
+                      className={
+                        isToday
+                          ? 'grid h-5 w-5 place-items-center rounded-full text-white'
+                          : ''
+                      }
+                      style={isToday ? { backgroundImage: 'var(--grad-teal-purple)' } : undefined}
+                    >
+                      {d.getDate()}
+                    </span>
                   </div>
                   <div className="space-y-1">
                     {dayEvents.slice(0, 3).map((ev, j) => (
                       <EventChip key={j} ev={ev} onSelect={setSelected} />
                     ))}
                     {dayEvents.length > 3 && (
-                      <div className="text-[10px] text-slate-400">
+                      <div className="text-[10px] text-muted">
                         +{dayEvents.length - 3} more
                       </div>
                     )}
@@ -169,9 +177,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {selected && (
-        <EventModal ev={selected} onClose={() => setSelected(null)} />
-      )}
+      {selected && <EventModal ev={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
@@ -183,11 +189,8 @@ function EventChip({ ev, onSelect }) {
       type="button"
       onClick={() => onSelect(ev)}
       title={`${ev.a.title} — ${ev.cls.name} (${isDue ? 'due' : 'planned'})`}
-      className="block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium text-white"
-      style={{
-        backgroundColor: ev.color,
-        opacity: isDue ? 1 : 0.4,
-      }}
+      className="block w-full truncate rounded-lg px-1.5 py-0.5 text-left text-[11px] font-semibold text-white shadow-sm transition hover:brightness-105"
+      style={{ backgroundImage: ev.gradient, opacity: isDue ? 1 : 0.42 }}
     >
       {ev.a.title}
     </button>
@@ -211,12 +214,9 @@ function EventModal({ ev, onClose }) {
     <Modal title={a.title} onClose={onClose}>
       <div className="space-y-3 text-sm">
         <div className="flex items-center gap-2">
-          <span
-            className="h-3 w-3 rounded-full"
-            style={{ backgroundColor: ev.color }}
-          />
-          <span className="font-medium text-slate-700">{cls.name}</span>
-          {cls.code && <span className="text-slate-400">· {cls.code}</span>}
+          <span className="h-3 w-3 rounded-full" style={{ backgroundImage: ev.gradient }} />
+          <span className="font-semibold text-ink">{cls.name}</span>
+          {cls.code && <span className="text-muted">· {cls.code}</span>}
         </div>
 
         <DetailRow label="Category" value={a.category || '—'} />
@@ -237,10 +237,7 @@ function EventModal({ ev, onClose }) {
           }
         />
 
-        <Link
-          to={`/classes/${cls.id}`}
-          className="mt-2 block rounded-lg bg-brand-600 py-2 text-center font-medium text-white hover:bg-brand-700"
-        >
+        <Link to={`/classes/${cls.id}`} className="btn btn-primary mt-2 w-full">
           Open class
         </Link>
       </div>
@@ -250,9 +247,9 @@ function EventModal({ ev, onClose }) {
 
 function DetailRow({ label, value }) {
   return (
-    <div className="flex justify-between border-b border-slate-100 pb-2">
-      <span className="text-slate-400">{label}</span>
-      <span className="font-medium text-slate-700">{value}</span>
+    <div className="flex justify-between border-b border-white/50 pb-2">
+      <span className="text-muted">{label}</span>
+      <span className="font-semibold text-ink">{value}</span>
     </div>
   );
 }

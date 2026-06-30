@@ -45,51 +45,40 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm">
+      {/* Floating dreamy blobs */}
+      <div
+        className="animate-float pointer-events-none absolute left-[12%] top-[18%] h-44 w-44 rounded-full opacity-40 blur-3xl"
+        style={{ backgroundImage: 'var(--grad-teal-purple)' }}
+      />
+      <div
+        className="animate-float pointer-events-none absolute bottom-[16%] right-[14%] h-52 w-52 rounded-full opacity-40 blur-3xl"
+        style={{ backgroundImage: 'var(--grad-pink-lavender)', animationDelay: '2s' }}
+      />
+
+      <div className="relative w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div className="text-3xl">🎓</div>
-          <h1 className="mt-2 text-2xl font-bold text-slate-900">
-            Student Workflow
-          </h1>
-          <p className="text-sm text-slate-500">
-            {mode === 'login' ? 'Sign in to your account' : 'Create your account'}
+          <div
+            className="mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl text-white shadow-lg"
+            style={{ backgroundImage: 'var(--grad-teal-purple)' }}
+          >
+            🎓
+          </div>
+          <h1 className="mt-3 text-2xl font-extrabold">Student Workflow</h1>
+          <p className="text-sm text-muted">
+            {mode === 'login' ? 'Welcome back' : 'Create your account'}
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-        >
+        <form onSubmit={handleSubmit} className="glass-panel space-y-4 p-6">
           <ErrorBanner message={error} />
 
           {mode === 'register' && (
-            <Field
-              label="Full name"
-              value={form.fullName}
-              onChange={update('fullName')}
-              required
-            />
+            <Field label="Full name" value={form.fullName} onChange={update('fullName')} required />
           )}
-          <Field
-            label="Email"
-            type="email"
-            value={form.email}
-            onChange={update('email')}
-            required
-          />
-          <Field
-            label="Password"
-            type="password"
-            value={form.password}
-            onChange={update('password')}
-            required
-          />
+          <Field label="Email" type="email" value={form.email} onChange={update('email')} required />
+          <Field label="Password" type="password" value={form.password} onChange={update('password')} required />
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-lg bg-brand-600 py-2.5 font-medium text-white transition hover:bg-brand-700 disabled:opacity-60"
-          >
+          <button type="submit" disabled={submitting} className="btn btn-primary w-full">
             {submitting
               ? 'Please wait…'
               : mode === 'login'
@@ -97,7 +86,7 @@ export default function LoginPage() {
                 : 'Create account'}
           </button>
 
-          <p className="text-center text-sm text-slate-500">
+          <p className="text-center text-sm text-muted">
             {mode === 'login' ? "Don't have an account?" : 'Already have one?'}{' '}
             <button
               type="button"
@@ -105,14 +94,14 @@ export default function LoginPage() {
                 setMode((m) => (m === 'login' ? 'register' : 'login'));
                 setError('');
               }}
-              className="font-medium text-brand-600 hover:underline"
+              className="font-semibold text-brand-600 hover:underline"
             >
               {mode === 'login' ? 'Register' : 'Sign in'}
             </button>
           </p>
         </form>
 
-        <p className="mt-4 text-center text-xs text-slate-400">
+        <p className="mt-4 text-center text-xs text-muted">
           Demo: demo@student.app / password123
         </p>
       </div>
@@ -123,13 +112,8 @@ export default function LoginPage() {
 function Field({ label, ...props }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">
-        {label}
-      </span>
-      <input
-        {...props}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-      />
+      <span className="mb-1 block text-sm font-semibold text-ink">{label}</span>
+      <input {...props} className="field" />
     </label>
   );
 }

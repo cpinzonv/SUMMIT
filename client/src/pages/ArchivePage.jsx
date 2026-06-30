@@ -5,6 +5,7 @@ import {
   ErrorBanner,
   EmptyState,
   gradeColor,
+  classGradient,
 } from '../components/ui';
 
 export default function ArchivePage() {
@@ -26,8 +27,8 @@ export default function ArchivePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold">Archives</h1>
-      <p className="mb-6 text-sm text-slate-500">
+      <h1 className="text-3xl font-extrabold tracking-tight">Archives</h1>
+      <p className="mb-6 mt-1 text-sm text-muted">
         Past classes and semesters, snapshotted when archived
       </p>
 
@@ -40,41 +41,40 @@ export default function ArchivePage() {
           Archive a class from its detail page and it will appear here.
         </EmptyState>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {archives.map((arc) => {
+        <div className="grid gap-5 sm:grid-cols-2">
+          {archives.map((arc, i) => {
             const snap = arc.snapshot || {};
             const grade = snap.finalGrade;
             const count = snap.assignments?.length ?? 0;
+            const gradient = classGradient(null, i);
             return (
-              <div
-                key={arc.id}
-                className="rounded-xl border border-slate-200 bg-white p-5"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-slate-900">
-                      {snap.class?.name || arc.label}
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      {[snap.class?.code, snap.class?.term]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
+              <div key={arc.id} className="glass-card relative overflow-hidden p-6">
+                <span
+                  className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full opacity-25 blur-2xl"
+                  style={{ backgroundImage: gradient }}
+                />
+                <div className="relative flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-1 h-12 w-1.5 rounded-full" style={{ backgroundImage: gradient }} />
+                    <div>
+                      <h3 className="font-bold text-ink">
+                        {snap.class?.name || arc.label}
+                      </h3>
+                      <p className="text-xs text-muted">
+                        {[snap.class?.code, snap.class?.term].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
                   </div>
                   <div className="text-right">
-                    <div
-                      className={`text-xl font-bold ${gradeColor(
-                        grade?.percentage,
-                      )}`}
-                    >
+                    <div className={`text-2xl font-extrabold ${gradeColor(grade?.percentage)}`}>
                       {grade?.percentage != null ? `${grade.percentage}%` : '—'}
                     </div>
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs font-medium text-muted">
                       {grade?.letter || 'Final'}
                     </div>
                   </div>
                 </div>
-                <div className="mt-3 flex justify-between text-xs text-slate-400">
+                <div className="relative mt-4 flex justify-between text-xs text-muted">
                   <span>{count} assignments</span>
                   <span>
                     Archived{' '}

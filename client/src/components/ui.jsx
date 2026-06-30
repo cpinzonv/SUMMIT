@@ -11,19 +11,19 @@ export function Modal({ title, onClose, children }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+        className="glass-panel w-full max-w-md p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          <h3 className="text-lg font-bold text-ink">{title}</h3>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-2xl leading-none text-slate-400 hover:text-slate-600"
+            className="text-2xl leading-none text-muted transition hover:text-ink"
           >
             ×
           </button>
@@ -36,8 +36,8 @@ export function Modal({ title, onClose, children }) {
 
 export function Spinner({ label = 'Loading…' }) {
   return (
-    <div className="flex items-center justify-center gap-3 py-10 text-slate-500">
-      <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-brand-600" />
+    <div className="flex items-center justify-center gap-3 py-10 text-muted">
+      <span className="h-5 w-5 animate-spin rounded-full border-2 border-purple-soft/50 border-t-brand-500" />
       <span>{label}</span>
     </div>
   );
@@ -54,7 +54,7 @@ export function FullPageSpinner() {
 export function ErrorBanner({ message }) {
   if (!message) return null;
   return (
-    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+    <div className="rounded-2xl border border-rose-deep/40 bg-rose-soft/15 px-4 py-3 text-sm text-rose-deep backdrop-blur">
       {message}
     </div>
   );
@@ -62,28 +62,39 @@ export function ErrorBanner({ message }) {
 
 export function EmptyState({ title, children }) {
   return (
-    <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-      <p className="font-medium text-slate-700">{title}</p>
-      {children && <div className="mt-1 text-sm text-slate-500">{children}</div>}
+    <div className="rounded-2xl border border-dashed border-purple-soft/50 bg-white/40 px-6 py-12 text-center backdrop-blur">
+      <p className="font-semibold text-ink">{title}</p>
+      {children && <div className="mt-1 text-sm text-muted">{children}</div>}
     </div>
   );
 }
 
-/** Color a grade percentage: green / amber / red bands. */
+/** Color a grade percentage: soft green / amber / rose bands. */
 export function gradeColor(percentage) {
-  if (percentage == null) return 'text-slate-400';
-  if (percentage >= 90) return 'text-emerald-600';
-  if (percentage >= 80) return 'text-lime-600';
-  if (percentage >= 70) return 'text-amber-600';
-  if (percentage >= 60) return 'text-orange-600';
-  return 'text-red-600';
+  if (percentage == null) return 'text-muted';
+  if (percentage >= 90) return 'text-emerald-500';
+  if (percentage >= 80) return 'text-teal-500';
+  if (percentage >= 70) return 'text-amber-500';
+  if (percentage >= 60) return 'text-orange-400';
+  return 'text-rose-400';
 }
 
-// Deterministic palette so each class gets a stable color in the calendar/cards.
-const PALETTE = [
-  '#4f46e5', '#0891b2', '#db2777', '#16a34a',
-  '#d97706', '#7c3aed', '#dc2626', '#0d9488',
+// Sophisticated gradient pairs — color-coded per class, cycled by index.
+const GRADIENTS = [
+  'linear-gradient(135deg, #5ba3a8 0%, #9b8fc4 100%)', // teal → slate blue
+  'linear-gradient(135deg, #e8a3a0 0%, #f3c9a8 100%)', // rose → peach
+  'linear-gradient(135deg, #8b7ba8 0%, #5ba3a8 100%)', // slate blue → teal
+  'linear-gradient(135deg, #d4888b 0%, #9b8fc4 100%)', // rose → periwinkle
+  'linear-gradient(135deg, #4b9b9f 0%, #f3c9a8 100%)', // deep teal → peach
+  'linear-gradient(135deg, #9b8fc4 0%, #e8a3a0 100%)', // periwinkle → rose
 ];
+
+// Representative solid tones (for small calendar chips).
+const PALETTE = ['#4b9b9f', '#d4888b', '#8b7ba8', '#5ba3a8', '#e8a3a0', '#9b8fc4'];
+
+export function classGradient(cls, index = 0) {
+  return GRADIENTS[index % GRADIENTS.length];
+}
 
 export function classColor(cls, index = 0) {
   return cls?.color || PALETTE[index % PALETTE.length];

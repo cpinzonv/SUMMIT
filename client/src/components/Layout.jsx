@@ -18,11 +18,17 @@ export function Layout() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
+      <header className="sticky top-0 z-30 border-b border-white/40 bg-white/45 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-6">
-            <NavLink to="/" className="text-lg font-semibold text-brand-700">
-              🎓 Student Workflow
+            <NavLink to="/" className="flex items-center gap-2 text-lg font-extrabold">
+              <span
+                className="grid h-8 w-8 place-items-center rounded-xl text-white shadow-sm"
+                style={{ backgroundImage: 'var(--grad-teal-purple)' }}
+              >
+                🎓
+              </span>
+              <span className="text-gradient">Student Workflow</span>
             </NavLink>
             <nav className="flex gap-1">
               {navItems.map((item) => (
@@ -31,10 +37,10 @@ export function Layout() {
                   to={item.to}
                   end={item.end}
                   className={({ isActive }) =>
-                    `rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                    `rounded-full px-4 py-1.5 text-sm font-semibold transition ${
                       isActive
-                        ? 'bg-brand-50 text-brand-700'
-                        : 'text-slate-600 hover:bg-slate-100'
+                        ? 'bg-white/70 text-brand-700 shadow-sm'
+                        : 'text-muted hover:bg-white/50 hover:text-ink'
                     }`
                   }
                 >
@@ -44,20 +50,17 @@ export function Layout() {
             </nav>
           </div>
           <div className="flex items-center gap-3 text-sm">
-            <span className="hidden text-slate-500 sm:inline">
+            <span className="hidden font-medium text-muted sm:inline">
               {user?.fullName}
             </span>
-            <button
-              onClick={handleLogout}
-              className="rounded-md border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100"
-            >
+            <button onClick={handleLogout} className="btn btn-soft">
               Log out
             </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-10">
         <Outlet />
       </main>
     </div>

@@ -3,6 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Spinner } from '../components/ui';
 
+const ROW_INPUT =
+  'rounded-lg border border-white/70 bg-white/60 px-2.5 py-1.5 text-sm text-ink outline-none backdrop-blur transition focus:border-brand-400 focus:bg-white/85';
+
 export default function CreateClassPage() {
   const navigate = useNavigate();
   const fileInput = useRef(null);
@@ -119,7 +122,6 @@ export default function CreateClassPage() {
       });
       const classId = data.class.id;
 
-      // Create each extracted assignment.
       for (const a of assignments.filter((a) => a.name.trim())) {
         await api.post(`/api/classes/${classId}/assignments`, {
           title: a.name.trim(),
@@ -139,19 +141,24 @@ export default function CreateClassPage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link to="/" className="text-sm text-brand-600 hover:underline">
+      <Link to="/" className="text-sm font-semibold text-brand-600 hover:underline">
         ← Back to dashboard
       </Link>
-      <h1 className="mb-6 mt-3 text-2xl font-bold">New class</h1>
+      <h1 className="mb-6 mt-3 text-3xl font-extrabold tracking-tight">New class</h1>
 
       {/* Syllabus import */}
-      <div className="mb-6 rounded-2xl border border-dashed border-brand-300 bg-brand-50/50 p-5">
-        <div className="flex items-center justify-between gap-4">
+      <div
+        className="glass-card relative mb-6 overflow-hidden p-5"
+        style={{ background: 'rgba(255,255,255,0.45)' }}
+      >
+        <span
+          className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full opacity-40 blur-2xl"
+          style={{ backgroundImage: 'var(--grad-pink-lavender)' }}
+        />
+        <div className="relative flex items-center justify-between gap-4">
           <div>
-            <h2 className="font-semibold text-brand-800">
-              📄 Import from syllabus
-            </h2>
-            <p className="text-sm text-slate-600">
+            <h2 className="font-bold text-ink">📄 Import from syllabus</h2>
+            <p className="text-sm text-muted">
               Upload a syllabus PDF and Claude will fill in the details below.
             </p>
           </div>
@@ -159,7 +166,7 @@ export default function CreateClassPage() {
             type="button"
             onClick={() => fileInput.current?.click()}
             disabled={extracting}
-            className="shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+            className="btn btn-primary shrink-0"
           >
             {extracting ? 'Reading…' : 'Upload PDF'}
           </button>
@@ -174,16 +181,13 @@ export default function CreateClassPage() {
         {extracting && <Spinner label="Extracting syllabus with Claude…" />}
         <ErrorBanner message={extractError} />
         {imported && !extracting && (
-          <p className="mt-3 text-sm text-emerald-700">
+          <p className="relative mt-3 text-sm font-medium text-emerald-600">
             ✓ Extracted — review and edit everything below, then create the class.
           </p>
         )}
       </div>
 
-      <form
-        onSubmit={submit}
-        className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6"
-      >
+      <form onSubmit={submit} className="glass-panel space-y-4 p-6">
         <ErrorBanner message={error} />
 
         <Field label="Class name" value={form.name} onChange={update('name')} required placeholder="Introduction to Computer Science" />
@@ -197,47 +201,37 @@ export default function CreateClassPage() {
           <Field label="End date" type="date" value={form.endDate} onChange={update('endDate')} />
         </div>
         <label className="block">
-          <span className="mb-1 block text-sm font-medium text-slate-700">Description</span>
+          <span className="mb-1 block text-sm font-semibold text-ink">Description</span>
           <textarea
             value={form.description}
             onChange={update('description')}
             rows={2}
             placeholder="Course description or notes…"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            className="field"
           />
         </label>
 
         {/* Grading breakdown */}
         {(grading.length > 0 || imported) && (
-          <section className="rounded-xl border border-slate-200 p-4">
+          <section className="rounded-2xl border border-white/60 bg-white/40 p-4">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">
+              <h3 className="text-sm font-bold text-ink">
                 Grading breakdown{' '}
-                <span className={gradingTotal === 100 ? 'text-emerald-600' : 'text-amber-600'}>
+                <span className={gradingTotal === 100 ? 'text-emerald-500' : 'text-amber-500'}>
                   ({gradingTotal}%)
                 </span>
               </h3>
-              <button type="button" onClick={addGradingRow} className="text-xs font-medium text-brand-600 hover:underline">
+              <button type="button" onClick={addGradingRow} className="text-xs font-semibold text-brand-600 hover:underline">
                 + Add category
               </button>
             </div>
             <div className="space-y-2">
               {grading.map((g, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <input
-                    value={g.category}
-                    onChange={(e) => setGradingRow(i, 'category', e.target.value)}
-                    placeholder="Category"
-                    className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-                  />
-                  <input
-                    type="number"
-                    value={g.weight}
-                    onChange={(e) => setGradingRow(i, 'weight', e.target.value)}
-                    className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
-                  />
-                  <span className="text-sm text-slate-400">%</span>
-                  <button type="button" onClick={() => removeGradingRow(i)} className="text-xs text-slate-400 hover:text-red-600">✕</button>
+                  <input value={g.category} onChange={(e) => setGradingRow(i, 'category', e.target.value)} placeholder="Category" className={`flex-1 ${ROW_INPUT}`} />
+                  <input type="number" value={g.weight} onChange={(e) => setGradingRow(i, 'weight', e.target.value)} className={`w-20 ${ROW_INPUT}`} />
+                  <span className="text-sm text-muted">%</span>
+                  <button type="button" onClick={() => removeGradingRow(i)} className="text-xs text-muted hover:text-rose-500">✕</button>
                 </div>
               ))}
             </div>
@@ -246,56 +240,36 @@ export default function CreateClassPage() {
 
         {/* Assignments preview */}
         {(assignments.length > 0 || imported) && (
-          <section className="rounded-xl border border-slate-200 p-4">
+          <section className="rounded-2xl border border-white/60 bg-white/40 p-4">
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-700">
+              <h3 className="text-sm font-bold text-ink">
                 Assignments ({assignments.filter((a) => a.name.trim()).length})
               </h3>
-              <button type="button" onClick={addAssignment} className="text-xs font-medium text-brand-600 hover:underline">
+              <button type="button" onClick={addAssignment} className="text-xs font-semibold text-brand-600 hover:underline">
                 + Add assignment
               </button>
             </div>
             <div className="space-y-2">
               {assignments.map((a, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <input
-                    value={a.name}
-                    onChange={(e) => setAssignment(i, 'name', e.target.value)}
-                    placeholder="Assignment name"
-                    className="flex-1 rounded border border-slate-300 px-2 py-1 text-sm"
-                  />
-                  <input
-                    type="date"
-                    value={a.dueDate}
-                    onChange={(e) => setAssignment(i, 'dueDate', e.target.value)}
-                    className="rounded border border-slate-300 px-2 py-1 text-xs"
-                  />
-                  <input
-                    type="number"
-                    value={a.pointValue}
-                    onChange={(e) => setAssignment(i, 'pointValue', e.target.value)}
-                    placeholder="pts"
-                    className="w-16 rounded border border-slate-300 px-2 py-1 text-sm"
-                  />
-                  <button type="button" onClick={() => removeAssignment(i)} className="text-xs text-slate-400 hover:text-red-600">✕</button>
+                  <input value={a.name} onChange={(e) => setAssignment(i, 'name', e.target.value)} placeholder="Assignment name" className={`flex-1 ${ROW_INPUT}`} />
+                  <input type="date" value={a.dueDate} onChange={(e) => setAssignment(i, 'dueDate', e.target.value)} className={`text-xs ${ROW_INPUT}`} />
+                  <input type="number" value={a.pointValue} onChange={(e) => setAssignment(i, 'pointValue', e.target.value)} placeholder="pts" className={`w-16 ${ROW_INPUT}`} />
+                  <button type="button" onClick={() => removeAssignment(i)} className="text-xs text-muted hover:text-rose-500">✕</button>
                 </div>
               ))}
               {assignments.length === 0 && (
-                <p className="text-sm text-slate-400">No assignments — add some or import a syllabus.</p>
+                <p className="text-sm text-muted">No assignments — add some or import a syllabus.</p>
               )}
             </div>
           </section>
         )}
 
         <div className="flex gap-3">
-          <button
-            type="submit"
-            disabled={saving || !form.name}
-            className="rounded-lg bg-brand-600 px-4 py-2 font-medium text-white hover:bg-brand-700 disabled:opacity-60"
-          >
+          <button type="submit" disabled={saving || !form.name} className="btn btn-primary">
             {saving ? 'Creating…' : 'Create class'}
           </button>
-          <Link to="/" className="rounded-lg border border-slate-300 px-4 py-2 font-medium text-slate-700 hover:bg-slate-100">
+          <Link to="/" className="btn btn-soft">
             Cancel
           </Link>
         </div>
@@ -311,11 +285,8 @@ function appendLine(existing, line) {
 function Field({ label, ...props }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
-      <input
-        {...props}
-        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-      />
+      <span className="mb-1 block text-sm font-semibold text-ink">{label}</span>
+      <input {...props} className="field" />
     </label>
   );
 }

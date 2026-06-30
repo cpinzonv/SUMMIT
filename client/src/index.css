@@ -1,19 +1,204 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 
 @theme {
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
+  /* Refined, sophisticated palette — luxury SaaS */
+  --color-cream: #f8f7f5;
+  --color-ink: #2e2a33;
+  --color-muted: #8c8492;
+
+  /* Primary accent — deep teal (used as "brand") */
+  --color-brand-50: #eef5f5;
+  --color-brand-100: #d8e9e9;
+  --color-brand-400: #5ba3a8;
+  --color-brand-500: #4b9b9f;
+  --color-brand-600: #3f868a;
+  --color-brand-700: #346e72;
+
+  /* Secondary — warm rose / coral */
+  --color-rose-soft: #e8a3a0;
+  --color-rose-deep: #d4888b;
+  --color-peach-soft: #f3c9a8;
+
+  /* Tertiary — slate blue / periwinkle */
+  --color-slate-soft: #9b8fc4;
+  --color-slate-deep: #8b7ba8;
+
+  /* Legacy soft tokens kept (used by Spinner/EmptyState/etc.), refined values */
+  --color-teal-soft: #5ba3a8;
+  --color-blue-soft: #a9b4d4;
+  --color-purple-soft: #9b8fc4;
+  --color-pink-soft: #e8a3a0;
+  --color-lav-soft: #cdc4e2;
+
+  /* Sophisticated gradients (var names kept stable for component references):
+     "primary"  = teal → slate blue · "secondary" = rose → peach */
+  --grad-teal-purple: linear-gradient(135deg, #5ba3a8 0%, #9b8fc4 100%);
+  --grad-pink-lavender: linear-gradient(135deg, #e8a3a0 0%, #f3c9a8 100%);
+
+  /* Warm-tinted (amber) depth — soft, never harsh */
+  --shadow-glass: 0 10px 34px rgba(150, 120, 90, 0.16);
+  --shadow-soft: 0 14px 36px -14px rgba(125, 98, 70, 0.3);
 }
 
-html,
-body,
-#root {
-  height: 100%;
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system,
+      'Segoe UI', sans-serif;
+    color: var(--color-ink);
+    background-color: #f8f7f5;
+    /* Soft, premium gradient blobs (teal · slate blue · rose) over a warm cream wash */
+    background-image: radial-gradient(
+        56rem 56rem at 110% -10%,
+        rgba(91, 163, 168, 0.2),
+        transparent 60%
+      ),
+      radial-gradient(
+        50rem 50rem at -8% 6%,
+        rgba(155, 143, 196, 0.18),
+        transparent 58%
+      ),
+      radial-gradient(
+        44rem 44rem at 52% 120%,
+        rgba(232, 163, 160, 0.16),
+        transparent 60%
+      ),
+      radial-gradient(
+        90rem 90rem at 50% 40%,
+        rgba(250, 244, 236, 0.5),
+        transparent 70%
+      );
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
 }
 
-body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+@layer components {
+  /* Frosted glass — warm cream tint with a soft glow */
+  .glass-card {
+    background: rgba(253, 250, 245, 0.58);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid rgba(255, 254, 250, 0.7);
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-glass);
+  }
+  .glass-panel {
+    background: rgba(253, 250, 245, 0.74);
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border: 1px solid rgba(255, 254, 250, 0.82);
+    border-radius: 1.25rem;
+    box-shadow: var(--shadow-glass);
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 0.9rem;
+    padding: 0.6rem 1.15rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transition:
+      transform 0.18s ease,
+      box-shadow 0.18s ease,
+      background 0.18s ease,
+      filter 0.18s ease;
+    cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .btn-primary {
+    color: #fff;
+    background-image: var(--grad-teal-purple);
+    box-shadow: 0 10px 24px -9px rgba(75, 139, 152, 0.55);
+  }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.03) saturate(1.05);
+    box-shadow: 0 14px 30px -9px rgba(75, 139, 152, 0.6);
+  }
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .btn-soft {
+    color: var(--color-ink);
+    background: rgba(253, 250, 245, 0.62);
+    border: 1px solid rgba(255, 254, 250, 0.85);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 5px 16px -9px rgba(125, 98, 70, 0.35);
+  }
+  .btn-soft:hover:not(:disabled) {
+    background: rgba(255, 254, 250, 0.9);
+    transform: translateY(-1px);
+  }
+  .btn-soft:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* Inputs */
+  .field {
+    width: 100%;
+    border-radius: 0.9rem;
+    border: 1px solid rgba(150, 135, 120, 0.28);
+    background: rgba(253, 250, 245, 0.6);
+    padding: 0.6rem 0.9rem;
+    font-size: 0.875rem;
+    color: var(--color-ink);
+    outline: none;
+    backdrop-filter: blur(6px);
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease,
+      background 0.18s ease;
+  }
+  .field::placeholder {
+    color: rgba(140, 132, 146, 0.7);
+  }
+  .field:focus {
+    border-color: rgba(75, 155, 159, 0.7);
+    background: rgba(255, 254, 250, 0.88);
+    box-shadow: 0 0 0 4px rgba(91, 163, 168, 0.16);
+  }
+
+  /* Gradient text accents */
+  .text-gradient {
+    background: var(--grad-teal-purple);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .text-gradient-pink {
+    background: var(--grad-pink-lavender);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+@layer utilities {
+  .animate-float {
+    animation: float 7s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
 }

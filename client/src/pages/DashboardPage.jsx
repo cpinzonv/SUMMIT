@@ -6,7 +6,7 @@ import {
   ErrorBanner,
   EmptyState,
   gradeColor,
-  classColor,
+  classGradient,
   computeGpa,
 } from '../components/ui';
 
@@ -40,15 +40,14 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-8 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm text-slate-500">Your active classes this semester</p>
+          <h1 className="text-3xl font-extrabold tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-sm text-muted">
+            Your active classes this semester
+          </p>
         </div>
-        <Link
-          to="/classes/new"
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-        >
+        <Link to="/classes/new" className="btn btn-primary">
           + New class
         </Link>
       </div>
@@ -59,12 +58,12 @@ export default function DashboardPage() {
         <ErrorBanner message={error} />
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Stat label="Active classes" value={classes.length} />
             <Stat
               label="Current GPA"
               value={gpa == null ? '—' : gpa.toFixed(2)}
-              valueClass="text-brand-700"
+              gradient
             />
             <Stat
               label="Overall average"
@@ -76,12 +75,12 @@ export default function DashboardPage() {
 
           {classes.length === 0 ? (
             <EmptyState title="No classes yet">
-              <Link to="/classes/new" className="text-brand-600 hover:underline">
+              <Link to="/classes/new" className="font-semibold text-brand-600 hover:underline">
                 Create your first class
               </Link>
             </EmptyState>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               {classes.map((cls, i) => (
                 <ClassCard key={cls.id} cls={cls} index={i} />
               ))}
@@ -93,45 +92,57 @@ export default function DashboardPage() {
   );
 }
 
-function Stat({ label, value, valueClass = 'text-slate-900' }) {
+function Stat({ label, value, valueClass = 'text-ink', gradient = false }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${valueClass}`}>{value}</div>
+    <div className="glass-card p-5">
+      <div className="text-xs font-medium uppercase tracking-wide text-muted">
+        {label}
+      </div>
+      <div
+        className={`mt-1 text-3xl font-extrabold ${gradient ? 'text-gradient' : valueClass}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
 
 function ClassCard({ cls, index }) {
   const grade = cls.currentGrade;
+  const gradient = classGradient(cls, index);
   return (
     <Link
       to={`/classes/${cls.id}`}
-      className="block rounded-xl border border-slate-200 bg-white p-5 transition hover:border-brand-300 hover:shadow-sm"
+      className="glass-card group relative overflow-hidden p-6 transition hover:-translate-y-1 hover:shadow-[0_18px_40px_-16px_rgba(90,80,130,0.4)]"
     >
-      <div className="flex items-start justify-between">
+      {/* Soft organic gradient blob in the corner */}
+      <span
+        className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full opacity-30 blur-2xl transition group-hover:opacity-50"
+        style={{ backgroundImage: gradient }}
+      />
+      <div className="relative flex items-start justify-between">
         <div className="flex items-center gap-3">
           <span
-            className="h-9 w-1.5 rounded-full"
-            style={{ backgroundColor: classColor(cls, index) }}
+            className="h-12 w-1.5 rounded-full"
+            style={{ backgroundImage: gradient }}
           />
           <div>
-            <h3 className="font-semibold text-slate-900">{cls.name}</h3>
-            <p className="text-xs text-slate-500">
+            <h3 className="font-bold text-ink">{cls.name}</h3>
+            <p className="text-xs text-muted">
               {[cls.code, cls.term].filter(Boolean).join(' · ') || 'No code'}
             </p>
           </div>
         </div>
         <div className="text-right">
-          <div className={`text-2xl font-bold ${gradeColor(grade?.percentage)}`}>
+          <div className={`text-3xl font-extrabold ${gradeColor(grade?.percentage)}`}>
             {grade?.percentage != null ? `${grade.percentage}%` : '—'}
           </div>
-          <div className="text-xs text-slate-400">
+          <div className="text-xs font-medium text-muted">
             {grade?.letter || 'No grades'}
           </div>
         </div>
       </div>
-      <p className="mt-3 text-xs text-slate-400">
+      <p className="relative mt-4 text-xs text-muted">
         {grade?.gradedAssignments
           ? `${grade.gradedAssignments} graded`
           : 'No graded assignments yet'}

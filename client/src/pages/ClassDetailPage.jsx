@@ -7,6 +7,7 @@ import {
   EmptyState,
   Modal,
   gradeColor,
+  classGradient,
 } from '../components/ui';
 
 export default function ClassDetailPage() {
@@ -64,40 +65,50 @@ export default function ClassDetailPage() {
   if (loading) return <Spinner label="Loading class…" />;
 
   const grade = cls?.currentGrade;
+  const gradient = classGradient(cls, 0);
 
   return (
     <div>
-      <Link to="/" className="text-sm text-brand-600 hover:underline">
+      <Link to="/" className="text-sm font-semibold text-brand-600 hover:underline">
         ← Back to dashboard
       </Link>
 
-      <div className="mt-3 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{cls?.name || 'Class'}</h1>
-          <p className="text-sm text-slate-500">
-            {[cls?.code, cls?.term].filter(Boolean).join(' · ')}
-          </p>
-          {cls?.description && (
-            <p className="mt-2 max-w-prose text-sm text-slate-600">
-              {cls.description}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className={`text-3xl font-bold ${gradeColor(grade?.percentage)}`}>
-              {grade?.percentage != null ? `${grade.percentage}%` : '—'}
-            </div>
-            <div className="text-xs text-slate-400">
-              Current grade {grade?.letter ? `(${grade.letter})` : ''}
+      <div className="glass-card relative mt-3 overflow-hidden p-6">
+        <span
+          className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full opacity-30 blur-2xl"
+          style={{ backgroundImage: gradient }}
+        />
+        <div className="relative flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span
+              className="mt-1 h-14 w-1.5 rounded-full"
+              style={{ backgroundImage: gradient }}
+            />
+            <div>
+              <h1 className="text-2xl font-extrabold">{cls?.name || 'Class'}</h1>
+              <p className="text-sm text-muted">
+                {[cls?.code, cls?.term].filter(Boolean).join(' · ')}
+              </p>
+              {cls?.description && (
+                <p className="mt-2 max-w-prose whitespace-pre-line text-sm text-slate-600">
+                  {cls.description}
+                </p>
+              )}
             </div>
           </div>
-          <button
-            onClick={handleArchive}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            Archive
-          </button>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <div className={`text-3xl font-extrabold ${gradeColor(grade?.percentage)}`}>
+                {grade?.percentage != null ? `${grade.percentage}%` : '—'}
+              </div>
+              <div className="text-xs font-medium text-muted">
+                Current grade {grade?.letter ? `(${grade.letter})` : ''}
+              </div>
+            </div>
+            <button onClick={handleArchive} className="btn btn-soft">
+              Archive
+            </button>
+          </div>
         </div>
       </div>
 
@@ -105,11 +116,8 @@ export default function ClassDetailPage() {
 
       <section className="mt-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Assignments</h2>
-          <button
-            onClick={() => setModal({ type: 'assignment' })}
-            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
-          >
+          <h2 className="text-lg font-bold">Assignments</h2>
+          <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
             + Add assignment
           </button>
         </div>
@@ -119,35 +127,35 @@ export default function ClassDetailPage() {
             Use “Add assignment” to create your first one.
           </EmptyState>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+          <div className="glass-card overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-400">
-                <tr>
-                  <th className="px-4 py-2">Title</th>
-                  <th className="px-4 py-2">Due</th>
-                  <th className="px-4 py-2">Planned</th>
-                  <th className="px-4 py-2">Points</th>
-                  <th className="px-4 py-2">Grade</th>
-                  <th className="px-4 py-2 text-right">Actions</th>
+              <thead className="text-left text-xs uppercase tracking-wide text-muted">
+                <tr className="border-b border-white/50">
+                  <th className="px-5 py-3">Title</th>
+                  <th className="px-5 py-3">Due</th>
+                  <th className="px-5 py-3">Planned</th>
+                  <th className="px-5 py-3">Points</th>
+                  <th className="px-5 py-3">Grade</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-white/40">
                 {assignments.map((a) => (
-                  <tr key={a.id}>
-                    <td className="px-4 py-2">
-                      <div className="font-medium text-slate-800">{a.title}</div>
-                      <div className="text-xs text-slate-400">
+                  <tr key={a.id} className="transition hover:bg-white/40">
+                    <td className="px-5 py-3">
+                      <div className="font-semibold text-ink">{a.title}</div>
+                      <div className="text-xs text-muted">
                         {a.category || a.status?.replace('_', ' ')}
                       </div>
                     </td>
-                    <td className="px-4 py-2 text-slate-600">{fmtDate(a.dueDate)}</td>
-                    <td className="px-4 py-2 text-slate-500">{fmtDate(a.plannedDate)}</td>
-                    <td className="px-4 py-2 text-slate-500">{a.pointValue ?? '—'}</td>
-                    <td className="px-4 py-2">
+                    <td className="px-5 py-3 text-slate-600">{fmtDate(a.dueDate)}</td>
+                    <td className="px-5 py-3 text-muted">{fmtDate(a.plannedDate)}</td>
+                    <td className="px-5 py-3 text-muted">{a.pointValue ?? '—'}</td>
+                    <td className="px-5 py-3">
                       {a.grade ? (
                         <button
                           onClick={() => setModal({ type: 'grade', assignment: a })}
-                          className="font-medium text-slate-800 hover:text-brand-600"
+                          className="font-semibold text-ink transition hover:text-brand-600"
                           title="Edit grade"
                         >
                           {a.grade.pointsEarned}/{a.grade.pointsPossible}
@@ -155,23 +163,23 @@ export default function ClassDetailPage() {
                       ) : (
                         <button
                           onClick={() => setModal({ type: 'grade', assignment: a })}
-                          className="rounded bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-100"
+                          className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 transition hover:bg-brand-100"
                         >
                           Grade
                         </button>
                       )}
                     </td>
-                    <td className="px-4 py-2">
-                      <div className="flex justify-end gap-2 text-xs">
+                    <td className="px-5 py-3">
+                      <div className="flex justify-end gap-3 text-xs font-semibold">
                         <button
                           onClick={() => setModal({ type: 'assignment', assignment: a })}
-                          className="font-medium text-slate-500 hover:text-brand-600"
+                          className="text-muted transition hover:text-brand-600"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => handleDelete(a)}
-                          className="font-medium text-slate-500 hover:text-red-600"
+                          className="text-muted transition hover:text-rose-500"
                         >
                           Delete
                         </button>
@@ -295,8 +303,7 @@ function GradeModal({ assignment, onClose, onSaved }) {
   const existing = assignment.grade;
   const [form, setForm] = useState({
     pointsEarned: existing?.pointsEarned ?? '',
-    pointsPossible:
-      existing?.pointsPossible ?? assignment.pointValue ?? '',
+    pointsPossible: existing?.pointsPossible ?? assignment.pointValue ?? '',
     feedback: existing?.feedback ?? '',
   });
   const [error, setError] = useState('');
@@ -337,15 +344,8 @@ function GradeModal({ assignment, onClose, onSaved }) {
           <Input label="Points possible" type="number" value={form.pointsPossible} onChange={update('pointsPossible')} placeholder={assignment.pointValue ?? '?'} />
         </div>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-slate-600">
-            Feedback (optional)
-          </span>
-          <textarea
-            value={form.feedback}
-            onChange={update('feedback')}
-            rows={2}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-          />
+          <span className="mb-1 block text-xs font-semibold text-ink">Feedback (optional)</span>
+          <textarea value={form.feedback} onChange={update('feedback')} rows={2} className="field" />
         </label>
         <ModalActions saving={saving} disabled={form.pointsEarned === ''} onClose={onClose} label={existing ? 'Update grade' : 'Submit grade'} />
       </form>
@@ -356,18 +356,10 @@ function GradeModal({ assignment, onClose, onSaved }) {
 function ModalActions({ saving, disabled, onClose, label }) {
   return (
     <div className="flex justify-end gap-2 pt-1">
-      <button
-        type="button"
-        onClick={onClose}
-        className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
-      >
+      <button type="button" onClick={onClose} className="btn btn-soft">
         Cancel
       </button>
-      <button
-        type="submit"
-        disabled={saving || disabled}
-        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
-      >
+      <button type="submit" disabled={saving || disabled} className="btn btn-primary">
         {saving ? 'Saving…' : label}
       </button>
     </div>
@@ -377,11 +369,8 @@ function ModalActions({ saving, disabled, onClose, label }) {
 function Input({ label, ...props }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-slate-600">{label}</span>
-      <input
-        {...props}
-        className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-      />
+      <span className="mb-1 block text-xs font-semibold text-ink">{label}</span>
+      <input {...props} className="field" />
     </label>
   );
 }
