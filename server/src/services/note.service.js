@@ -2,6 +2,21 @@ import { query } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
 
+/**
+ * Notes are now rich text (HTML from the WYSIWYG editor). The editor only emits
+ * a safe subset, but this strips dangerous markup defensively in case content
+ * arrives by another path: script/style/iframe blocks, inline event handlers,
+ * and javascript: URLs.
+ */
+function sanitizeNoteHtml(html) {
+  if (!html) return html;
+  return String(html)
+    .replace(/<\s*(script|style|iframe|object|embed)[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+    .replace(/<\s*(script|style|iframe|object|embed)\b[^>]*\/?>/gi, '')
+    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2');
+}
+
 function toPublicNote(row) {
   return {
     id: row.id,
@@ -48,7 +63,7 @@ export async function createNote(userId, classId, { title, content }) {
     `INSERT INTO notes (class_id, user_id, title, content)
      VALUES ($1, $2, COALESCE(NULLIF($3, ''), 'Untitled note'), COALESCE($4, ''))
      RETURNING *`,
-    [classId, userId, title ?? null, content ?? null],
+    [classId, userId, title ?? null, sanitizeNoteHtml(content) ?? null],
   );
   return toPublicNote(rows[0]);
 }
@@ -64,7 +79,7 @@ export async function updateNote(userId, noteId, input) {
   }
   if ('content' in input) {
     sets.push(`content = $${i++}`);
-    values.push(input.content);
+    values.push(sanitizeNoteHtml(input.content));
   }
   if (sets.length === 0) return getOwnedNote(userId, noteId).then(toPublicNote);
   values.push(noteId);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState } from './ui';
-import { MarkdownEditor } from './MarkdownEditor';
+import { RichTextEditor } from './RichTextEditor';
 
 /* ---- date helpers ------------------------------------------------------- */
 function shortDate(iso) {
@@ -25,11 +25,16 @@ function fullDateTime(iso) {
     minute: '2-digit',
   });
 }
-// Plain-text preview (strip the most common Markdown markers).
+// Plain-text preview (strip HTML tags, entities, and any leftover Markdown).
 function previewText(content) {
   const t = (content || '')
-    .replace(/[#>*_`~\-]/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+    .replace(/[#>*_`~]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
   return t.length > 90 ? `${t.slice(0, 90)}…` : t;
@@ -226,7 +231,7 @@ function NoteEditorBody({ classId, note, fullHeight, onSaved, onClose, onDeleted
       {error && <ErrorBanner message={error} />}
 
       <div className={fullHeight ? 'min-h-0 flex-1' : ''}>
-        <MarkdownEditor value={content} onChange={setContent} placeholder="Write your note in Markdown…" fullHeight={fullHeight} />
+        <RichTextEditor value={content} onChange={setContent} fullHeight={fullHeight} />
       </div>
 
       <div className="flex items-center gap-2">

@@ -294,6 +294,29 @@
   .note-tool-active { background: var(--note-accent); color: #fff; }
   .note-tool-active:hover { background: var(--note-accent); color: #fff; }
 
+  /* WYSIWYG (TipTap) editor surface */
+  .note-editor {
+    border: 1px solid var(--note-border);
+    border-radius: 10px;
+    background: #fff;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .note-editor:focus-within {
+    border-color: var(--note-accent);
+    box-shadow: 0 0 0 3px rgba(32, 178, 170, 0.18);
+  }
+  .note-editor .ProseMirror {
+    outline: none;
+    min-height: 12rem;
+    padding: 0.85rem 1rem;
+    color: var(--note-text);
+  }
+  .note-editor--full,
+  .note-editor--full .ProseMirror {
+    height: 100%;
+  }
+  .note-editor--full .ProseMirror { overflow-y: auto; }
+
   /* Rendered Markdown (notes) */
   .note-prose {
     color: var(--color-ink);
