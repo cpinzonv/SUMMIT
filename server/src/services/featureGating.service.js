@@ -1,61 +1,74 @@
 /**
- * Feature gating — the single source of truth for "can this user use premium
- * Learn formats?" (quizzes, podcasts, study guides, mind maps). Flashcards are
- * always free.
+ * Feature gating — single source of truth for premium access.
  *
- * Access rule (independent of BILLING_ENABLED):
- *   - role 'admin' or 'demo'        → full access (internal / demo bypass)
- *   - is_premium = true             → full access (manual override)
- *   - an ACTIVE pro subscription    → full access (subscription_tier='pro' and
- *     subscription_status='active'), or the legacy plan='pro' flag
+ * canAccessFeature(user, feature):
+ *   - admin / demo                        → always allowed (internal + showcase)
+ *   - BILLING_ENABLED=false               → nobody else (premium is admin/demo-only
+ *                                           until billing goes live)
+ *   - BILLING_ENABLED=true + pro + active → allowed (paying subscriber)
+ *   - otherwise                           → denied
  *
- * BILLING_ENABLED only controls whether the paywall can actually sell a
- * subscription yet (Stripe is a future wire-up). When false, the paywall is a
- * friendly "coming soon"; the gate itself is always enforced.
+ * BILLING_ENABLED is the master switch: flip it on (with Stripe wired) to let
+ * paying subscribers in. The `user` argument is a DB row (snake_case columns).
  */
 import { query } from '../config/db.js';
 import { env } from '../config/env.js';
 
-export const PREMIUM_FEATURES = ['quizzes', 'podcasts', 'guides', 'mindmaps'];
+// feature key → display label (also the set of premium features).
+export const PREMIUM_FEATURES = {
+  podcasts: 'Podcasts',
+  quizzes: 'Quizzes',
+  studyGuides: 'Study Guides',
+  mindMaps: 'Mind Maps',
+  googleCalendarSync: 'Google Calendar Sync',
+};
 
-/** Does this user row have premium access? */
-export function hasPremiumAccess(u) {
-  if (!u) return false;
-  if (u.role === 'admin' || u.role === 'demo') return true;
-  if (u.is_premium) return true;
-  const proTier = u.subscription_tier === 'pro' && u.subscription_status === 'active';
-  return Boolean(proTier || u.plan === 'pro');
+/** Can this user use the given premium feature? */
+export function canAccessFeature(user, _featureName) {
+  if (!user) return false;
+  if (user.role === 'admin' || user.role === 'demo') return true;
+  if (!env.billingEnabled) return false; // pre-billing: admin/demo only
+  return user.subscription_tier === 'pro' && user.subscription_status === 'active';
 }
 
-/** Fetch the gating-relevant columns for a user. */
-async function getUserGating(userId) {
+/** Back-compat alias: overall premium access (feature-agnostic). */
+export const hasPremiumAccess = (user) => canAccessFeature(user, null);
+
+/** Per-feature status object for the client (lock icons + paywall messaging). */
+export function getFeatureStatus(user, featureName) {
+  const hasAccess = canAccessFeature(user, featureName);
+  const label = PREMIUM_FEATURES[featureName] || featureName;
+  return {
+    feature: featureName,
+    hasAccess,
+    isPremium: Boolean(user?.is_premium),
+    billingEnabled: env.billingEnabled,
+    userRole: user?.role || 'user',
+    userTier: user?.subscription_tier || 'free',
+    message: hasAccess ? '' : `${label} is available on Summit Pro.`,
+  };
+}
+
+/** Status for every premium feature, keyed by feature name. */
+export function getAllFeatureStatus(user) {
+  const features = {};
+  for (const name of Object.keys(PREMIUM_FEATURES)) features[name] = getFeatureStatus(user, name);
+  return {
+    features,
+    userRole: user?.role || 'user',
+    subscriptionTier: user?.subscription_tier || 'free',
+    subscriptionStatus: user?.subscription_status || 'none',
+    billingEnabled: env.billingEnabled,
+    premium: canAccessFeature(user, null),
+  };
+}
+
+/** Fetch the gating-relevant columns for a user id. */
+export async function getUserGating(userId) {
   const { rows } = await query(
-    `SELECT role, plan, is_premium, subscription_tier, subscription_status,
-            subscription_end_date
+    `SELECT role, plan, is_premium, subscription_tier, subscription_status, subscription_end_date
        FROM users WHERE id = $1`,
     [userId],
   );
   return rows[0] || null;
 }
-
-/**
- * Full feature status for the client. `premium` = does the user have access;
- * `features` maps each premium feature to a boolean; flashcards always true.
- */
-export async function getFeatureStatus(userId) {
-  const u = await getUserGating(userId);
-  const premium = hasPremiumAccess(u);
-  const features = { flashcards: true };
-  for (const f of PREMIUM_FEATURES) features[f] = premium;
-  return {
-    billingEnabled: env.billingEnabled,
-    premium,
-    role: u?.role || 'user',
-    subscriptionTier: u?.subscription_tier || 'free',
-    subscriptionStatus: u?.subscription_status || 'none',
-    subscriptionEndDate: u?.subscription_end_date ?? null,
-    features,
-  };
-}
-
-export { getUserGating };

@@ -14,7 +14,7 @@
  */
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { premiumGate } from '../middleware/premiumGate.js';
+import { requirePremium } from '../middleware/requirePremium.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as learn from '../controllers/learn.controller.js';
@@ -75,13 +75,13 @@ router.patch(
 );
 
 // ---- Premium formats (quizzes / guides / mind maps / podcasts) -------------
-// Generation is gated by premiumGate; reads/submissions are owner-scoped only
-// (so a user who downgrades can still revisit content they already generated).
+// Generation is gated per-feature by requirePremium; reads/submissions are
+// owner-scoped only (a downgraded user can still revisit content they made).
 
 // Quizzes
 router.post(
   '/classes/:classId/quizzes/generate',
-  premiumGate,
+  requirePremium('quizzes'),
   validate(learn.classIdParam, 'params'),
   validate(learn.quizGenSchema),
   asyncHandler(learn.genQuiz),
@@ -98,7 +98,7 @@ router.post(
 // Study guides
 router.post(
   '/classes/:classId/guides/generate',
-  premiumGate,
+  requirePremium('studyGuides'),
   validate(learn.classIdParam, 'params'),
   validate(learn.genSourceSchema),
   asyncHandler(learn.genGuide),
@@ -115,7 +115,7 @@ router.post(
 // Mind maps
 router.post(
   '/classes/:classId/mindmaps/generate',
-  premiumGate,
+  requirePremium('mindMaps'),
   validate(learn.classIdParam, 'params'),
   validate(learn.genSourceSchema),
   asyncHandler(learn.genMindMap),
@@ -126,7 +126,7 @@ router.get('/mindmaps/:mindmapId', validate(learn.mindmapIdParam, 'params'), asy
 // Podcasts
 router.post(
   '/classes/:classId/podcasts/generate',
-  premiumGate,
+  requirePremium('podcasts'),
   validate(learn.classIdParam, 'params'),
   validate(learn.genSourceSchema),
   asyncHandler(learn.genPodcast),
@@ -142,7 +142,7 @@ router.post(
 // Generate every premium format for a class in one call.
 router.post(
   '/classes/:classId/generate-all',
-  premiumGate,
+  requirePremium('quizzes'),
   validate(learn.classIdParam, 'params'),
   validate(learn.genSourceSchema),
   asyncHandler(learn.generateAll),

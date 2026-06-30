@@ -1,17 +1,18 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { getFeatureStatus } from '../services/featureGating.service.js';
+import { getUserGating, getAllFeatureStatus } from '../services/featureGating.service.js';
 
-// Feature gating status for the current user (which premium features are
-// unlocked + whether billing is live). Drives lock icons + the paywall.
+// Feature gating status for the current user — per-feature access (lock icons),
+// the user's role/tier, and whether billing is live (paywall CTA).
 const router = Router();
 router.use(requireAuth);
 
 router.get(
   '/status',
   asyncHandler(async (req, res) => {
-    res.json(await getFeatureStatus(req.user.id));
+    const u = await getUserGating(req.user.id);
+    res.json(getAllFeatureStatus(u));
   }),
 );
 

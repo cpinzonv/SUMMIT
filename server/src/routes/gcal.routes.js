@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { requirePremium } from '../middleware/requirePremium.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as gcal from '../controllers/gcal.controller.js';
@@ -9,7 +10,8 @@ router.use(requireAuth);
 
 router.get('/status', asyncHandler(gcal.status));
 router.get('/auth-url', asyncHandler(gcal.authUrl));
-router.post('/connect', validate(gcal.connectSchema), asyncHandler(gcal.connect));
+// Connecting Google Calendar is a Pro feature.
+router.post('/connect', requirePremium('googleCalendarSync'), validate(gcal.connectSchema), asyncHandler(gcal.connect));
 router.post('/disconnect', asyncHandler(gcal.disconnect));
 router.post('/enabled', validate(gcal.enabledSchema), asyncHandler(gcal.setEnabled));
 
