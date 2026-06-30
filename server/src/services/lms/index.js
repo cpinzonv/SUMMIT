@@ -27,6 +27,7 @@ import { AppError } from '../../utils/AppError.js';
 
 import * as canvas from './canvas.js';
 import * as blackboard from './blackboard.js';
+import * as googleClassroom from './googleClassroom.js';
 import { mockProvider } from './mock.js';
 
 // Providers are registered here one at a time. Everything downstream (status,
@@ -35,6 +36,7 @@ import { mockProvider } from './mock.js';
 const PROVIDERS = {
   canvas,
   blackboard,
+  google_classroom: googleClassroom,
 };
 
 export const DEFAULT_PROVIDER = 'canvas';
