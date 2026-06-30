@@ -13,6 +13,13 @@ export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  // Admins get an extra nav link. Never shown to regular users; the route and
+  // the backend are independently gated too.
+  const items =
+    user?.role === 'admin'
+      ? [...navItems, { to: '/admin', label: 'Admin' }]
+      : navItems;
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -30,7 +37,7 @@ export function Layout() {
               <span className="text-gradient">Summit</span>
             </NavLink>
             <nav className="flex gap-1">
-              {navItems.map((item) => (
+              {items.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}

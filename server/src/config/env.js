@@ -43,6 +43,9 @@ export const env = {
   anthropicApiKey: optional('ANTHROPIC_API_KEY', ''),
   anthropicModel: optional('ANTHROPIC_MODEL', 'claude-opus-4-8'),
 
+  // One-time token for the first-admin bootstrap endpoint. Unset = disabled.
+  adminSetupToken: optional('SETUP_TOKEN', ''),
+
   // Symmetric key (64 hex chars) for encrypting secrets at rest — LMS OAuth
   // tokens AND 2FA secrets/backup codes. Prefers APP_ENCRYPTION_KEY, falling
   // back to the original LMS_TOKEN_ENC_KEY for backward compatibility.

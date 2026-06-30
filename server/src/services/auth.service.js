@@ -21,6 +21,7 @@ function toPublicUser(row) {
     school: row.school,
     timezone: row.timezone,
     preferences: row.preferences ?? {},
+    role: row.role || 'user',
     twoFactorEnabled: Boolean(row.totp_enabled),
     // LMS connection status only — tokens are never exposed.
     lms: {

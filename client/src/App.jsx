@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AdminRoute } from './components/AdminRoute';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ClassDetailPage from './pages/ClassDetailPage';
@@ -10,6 +11,7 @@ import PlannerPage from './pages/PlannerPage';
 import SettingsPage from './pages/SettingsPage';
 import SchedulePage from './pages/SchedulePage';
 import LmsCallbackPage from './pages/LmsCallbackPage';
+import AdminAnalytics from './pages/AdminAnalytics';
 
 export default function App() {
   return (
@@ -33,6 +35,14 @@ export default function App() {
         <Route path="/archives" element={<Navigate to="/planner?tab=archived" replace />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/lms/callback" element={<LmsCallbackPage />} />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminAnalytics />
+            </AdminRoute>
+          }
+        />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

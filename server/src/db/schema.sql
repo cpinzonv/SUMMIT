@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS users (
 -- User settings (theme, color scheme, font size, default views, etc.).
 ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- Role for admin-only features (analytics). Everyone defaults to 'user'.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
+
 -- Two-factor auth (TOTP). Secret + backup codes are stored ENCRYPTED at rest.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret  TEXT;     -- encrypted base32 secret
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
