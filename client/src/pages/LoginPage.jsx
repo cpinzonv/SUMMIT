@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { errorMessage } from '../api/client';
 import { ErrorBanner } from '../components/ui';
+import { MountainMark } from '../components/MountainMark';
 
 export default function LoginPage() {
   const { user, login, register, loading } = useAuth();
@@ -57,16 +58,24 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div
-            className="mx-auto h-14 w-14 rounded-2xl shadow-[0_14px_34px_-8px_rgba(255,120,80,0.6)] ring-1 ring-white/60"
-            style={{ backgroundImage: 'var(--grad-teal-purple)' }}
-          />
-          <h1 className="mt-4 font-display text-3xl font-bold tracking-tight">
-            <span className="text-ink">Student</span>
-            <span className="text-gradient"> Workflow</span>
+          <div className="relative mx-auto h-16 w-16">
+            <span
+              className="absolute inset-0 rounded-full opacity-55 blur-2xl"
+              style={{ backgroundImage: 'var(--grad-teal-purple)' }}
+            />
+            <MountainMark
+              size={64}
+              className="relative drop-shadow-[0_8px_18px_rgba(255,120,80,0.35)]"
+            />
+          </div>
+          <h1 className="mt-4 font-display text-4xl font-bold tracking-tight text-gradient">
+            Summit
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            {mode === 'login' ? 'Welcome back' : 'Create your account'}
+          <p className="mt-1 text-sm font-medium text-muted">
+            Reach your summit, one semester at a time
+          </p>
+          <p className="mt-3 text-sm text-muted">
+            {mode === 'login' ? 'Welcome back — sign in to keep climbing' : 'Create your account and start the climb'}
           </p>
         </div>
 

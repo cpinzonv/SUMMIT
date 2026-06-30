@@ -24,10 +24,9 @@ export function Layout() {
           <div className="flex items-center gap-6">
             <NavLink
               to="/"
-              className="font-display text-lg font-bold tracking-tight"
+              className="font-display text-xl font-bold tracking-tight"
             >
-              <span className="text-ink">Student</span>
-              <span className="text-gradient"> Workflow</span>
+              <span className="text-gradient">Summit</span>
             </NavLink>
             <nav className="flex gap-1">
               {navItems.map((item) => (

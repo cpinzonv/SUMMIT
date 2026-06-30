@@ -83,7 +83,7 @@ export default function PlannerPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Academic plan</h1>
           <p className="mt-1 text-sm text-muted">
-            Map your path to graduation, semester by semester
+            Chart your climb to graduation, semester by semester
           </p>
         </div>
         <button onClick={() => setAdding(true)} className="btn btn-primary">
@@ -100,7 +100,7 @@ export default function PlannerPage() {
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-muted">
-              Progress to graduation
+              Climb to graduation
             </div>
             <div className="mt-1 text-3xl font-extrabold">
               <span className="text-gradient">{completed}</span>

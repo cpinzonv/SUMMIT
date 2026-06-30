@@ -44,7 +44,7 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Dashboard</h1>
           <p className="mt-1 text-sm text-muted">
-            Your active classes this semester
+            Your active classes — keep climbing toward your summit
           </p>
         </div>
         <Link to="/classes/new" className="btn btn-primary">

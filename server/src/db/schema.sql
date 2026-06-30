@@ -1,5 +1,5 @@
 -- ============================================================================
--- Student Workflow App — PostgreSQL schema
+-- Summit — PostgreSQL schema
 -- ----------------------------------------------------------------------------
 -- Entities: users (students), classes, assignments, grades, archives.
 -- Grades store raw scores; weighted GPA/grade roll-ups are computed in the app

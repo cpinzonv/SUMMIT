@@ -1,6 +1,10 @@
-# Student Workflow App
+# Summit
 
-Track classes, assignments, and grades across a semester.
+Premium student semester management — track classes, assignments, grades, notes,
+attendance, and a 4-year plan as you reach your summit each semester.
+
+> The npm package/workspace names (`@student-workflow/*`) keep the original
+> internal identifiers; "Summit" is the product name shown throughout the UI.
 
 **Stack:** Node.js + Express · PostgreSQL · React (web) · Electron (desktop) · Railway (hosting)
 
