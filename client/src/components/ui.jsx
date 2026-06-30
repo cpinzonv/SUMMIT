@@ -79,18 +79,18 @@ export function gradeColor(percentage) {
   return 'text-rose-400';
 }
 
-// Vivid, sophisticated gradient pairs — color-coded per class, cycled by index.
+// Vivid, glowy gradient pairs — color-coded per class, cycled by index.
 const GRADIENTS = [
-  'linear-gradient(135deg, #3fa1a6 0%, #8b7fd0 100%)', // teal → slate blue
-  'linear-gradient(135deg, #ef9078 0%, #f6c9a0 100%)', // coral → peach
-  'linear-gradient(135deg, #e87f9a 0%, #9b8fd0 100%)', // rose → periwinkle
-  'linear-gradient(135deg, #6f9fe0 0%, #4bb0a8 100%)', // blue → teal
-  'linear-gradient(135deg, #f6b98f 0%, #e58aa0 100%)', // peach → rose
-  'linear-gradient(135deg, #9b8fd0 0%, #4bb0a8 100%)', // periwinkle → teal
+  'linear-gradient(135deg, #ff8a4c 0%, #ff6f73 50%, #4f9fd6 100%)', // orange → coral → blue
+  'linear-gradient(135deg, #ff7e79 0%, #ffc59e 100%)', // coral → peach
+  'linear-gradient(135deg, #3fb8c0 0%, #ff8a6b 100%)', // teal → coral
+  'linear-gradient(135deg, #5aa9d6 0%, #46c2b0 100%)', // blue → teal
+  'linear-gradient(135deg, #ffb27a 0%, #ff7e9d 100%)', // amber → rose
+  'linear-gradient(135deg, #7e8fe0 0%, #46c2b0 100%)', // periwinkle → teal
 ];
 
 // Representative solid tones (for small calendar chips).
-const PALETTE = ['#3fa1a6', '#e8857e', '#8b7ba8', '#6f9fe0', '#ef9078', '#9b8fd0'];
+const PALETTE = ['#ff7a52', '#ff7e79', '#3fb8c0', '#5aa9d6', '#ff9a3d', '#7e8fe0'];
 
 export function classGradient(cls, index = 0) {
   return GRADIENTS[index % GRADIENTS.length];

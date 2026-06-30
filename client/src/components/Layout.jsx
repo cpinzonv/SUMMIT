@@ -22,14 +22,12 @@ export function Layout() {
       <header className="sticky top-0 z-30 border-b border-white/40 bg-white/45 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-6">
-            <NavLink to="/" className="flex items-center gap-2 text-lg font-extrabold">
-              <span
-                className="grid h-8 w-8 place-items-center rounded-xl text-white shadow-sm"
-                style={{ backgroundImage: 'var(--grad-teal-purple)' }}
-              >
-                🎓
-              </span>
-              <span className="text-gradient">Student Workflow</span>
+            <NavLink
+              to="/"
+              className="font-display text-lg font-bold tracking-tight"
+            >
+              <span className="text-ink">Student</span>
+              <span className="text-gradient"> Workflow</span>
             </NavLink>
             <nav className="flex gap-1">
               {navItems.map((item) => (

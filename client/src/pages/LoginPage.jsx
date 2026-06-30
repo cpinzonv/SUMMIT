@@ -58,13 +58,14 @@ export default function LoginPage() {
       <div className="relative w-full max-w-sm">
         <div className="mb-6 text-center">
           <div
-            className="mx-auto grid h-14 w-14 place-items-center rounded-2xl text-2xl text-white shadow-lg"
+            className="mx-auto h-14 w-14 rounded-2xl shadow-[0_14px_34px_-8px_rgba(255,120,80,0.6)] ring-1 ring-white/60"
             style={{ backgroundImage: 'var(--grad-teal-purple)' }}
-          >
-            🎓
-          </div>
-          <h1 className="mt-3 text-2xl font-extrabold">Student Workflow</h1>
-          <p className="text-sm text-muted">
+          />
+          <h1 className="mt-4 font-display text-3xl font-bold tracking-tight">
+            <span className="text-ink">Student</span>
+            <span className="text-gradient"> Workflow</span>
+          </h1>
+          <p className="mt-1 text-sm text-muted">
             {mode === 'login' ? 'Welcome back' : 'Create your account'}
           </p>
         </div>

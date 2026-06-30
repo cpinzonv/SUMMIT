@@ -168,7 +168,7 @@ export default function CreateClassPage() {
         />
         <div className="relative flex items-center justify-between gap-4">
           <div>
-            <h2 className="font-bold text-ink">📄 Import from syllabus</h2>
+            <h2 className="font-bold text-ink">Import from syllabus</h2>
             <p className="text-sm text-muted">
               Upload a syllabus PDF and Claude will fill in the details below.
             </p>

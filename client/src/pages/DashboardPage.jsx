@@ -125,12 +125,16 @@ function ClassCard({ cls, index }) {
     >
       {/* Unique gradient wash tinting the whole card */}
       <span
-        className="pointer-events-none absolute inset-0 opacity-[0.16] transition group-hover:opacity-25"
+        className="pointer-events-none absolute inset-0 opacity-[0.24] transition group-hover:opacity-[0.34]"
         style={{ backgroundImage: gradient }}
       />
-      {/* Soft organic gradient glow in the corner */}
+      {/* Soft glowing blobs filling the frosted card */}
       <span
-        className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full opacity-60 blur-2xl transition group-hover:opacity-80"
+        className="pointer-events-none absolute -right-12 -top-14 h-48 w-48 rounded-full opacity-80 blur-3xl transition group-hover:opacity-100"
+        style={{ backgroundImage: gradient }}
+      />
+      <span
+        className="pointer-events-none absolute -bottom-16 -left-10 h-40 w-40 rounded-full opacity-50 blur-3xl"
         style={{ backgroundImage: gradient }}
       />
       <div className="relative flex items-start justify-between">

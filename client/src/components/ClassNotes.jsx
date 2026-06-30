@@ -46,7 +46,7 @@ export function ClassNotes({ classId }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="🔍 Search notes…"
+          placeholder="Search notes…"
           className="field max-w-xs"
         />
         <button onClick={() => setEditing({ isNew: true, title: '', content: '' })} className="btn btn-primary ml-auto">

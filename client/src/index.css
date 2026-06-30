@@ -1,44 +1,40 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
 @import 'tailwindcss';
 
 @theme {
-  /* Refined, warm, vibrant palette — luxury SaaS */
-  --color-cream: #f7f2ec;
-  --color-ink: #2e2a33;
-  --color-muted: #8c8492;
+  /* Type */
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
 
-  /* Primary accent — deep teal (used as "brand") */
+  /* Warm, luxe palette */
+  --color-cream: #f4efe9;
+  --color-ink: #2a2630;
+  --color-muted: #8a8190;
+
+  /* Primary accent — deep teal/blue (brand) */
   --color-brand-50: #eaf6f6;
-  --color-brand-100: #cfeaea;
-  --color-brand-400: #4fabb0;
-  --color-brand-500: #3fa1a6;
-  --color-brand-600: #34888d;
-  --color-brand-700: #2b6e72;
+  --color-brand-100: #cdebec;
+  --color-brand-400: #3fb1b8;
+  --color-brand-500: #2f9fa8;
+  --color-brand-600: #2a868f;
+  --color-brand-700: #246e76;
 
-  /* Secondary — warm rose / coral */
-  --color-coral: #ef9078;
-  --color-rose-soft: #e8857e;
-  --color-rose-deep: #d4707a;
-  --color-peach-soft: #f6c9a0;
+  /* Warm secondaries */
+  --color-coral: #ff7a52;
+  --color-orange: #ff9a3d;
+  --color-rose-soft: #ff7e79;
+  --color-rose-deep: #ef5d6b;
+  --color-peach-soft: #ffc59e;
+  --color-blue-soft: #5aa9d6;
+  --color-slate-soft: #7e8fe0;
 
-  /* Tertiary — slate blue / periwinkle */
-  --color-slate-soft: #9b8fd0;
-  --color-slate-deep: #8b7ba8;
-  --color-blue-soft: #6f9fe0;
+  /* Vivid, glowy gradients (var names kept stable for component refs):
+     "primary" = coral/orange → blue · "secondary" = coral → peach */
+  --grad-teal-purple: linear-gradient(135deg, #ff8a4c 0%, #ff6f73 45%, #4f9fd6 100%);
+  --grad-pink-lavender: linear-gradient(135deg, #ff7e79 0%, #ffc59e 100%);
 
-  /* Legacy soft tokens kept (used by Spinner/EmptyState/etc.) */
-  --color-teal-soft: #4fabb0;
-  --color-purple-soft: #9b8fd0;
-  --color-pink-soft: #e8857e;
-  --color-lav-soft: #c6bbe8;
-
-  /* Vivid, sophisticated gradients (var names kept stable for component refs):
-     "primary" = teal → slate blue · "secondary" = coral → peach */
-  --grad-teal-purple: linear-gradient(135deg, #3fa1a6 0%, #8b7fd0 100%);
-  --grad-pink-lavender: linear-gradient(135deg, #ef9078 0%, #f6c9a0 100%);
-
-  /* Warm amber-tinted depth — soft, never harsh */
-  --shadow-glass: 0 14px 40px rgba(180, 130, 80, 0.2);
+  /* Warm amber depth + glow */
+  --shadow-glass: 0 20px 54px -22px rgba(214, 130, 78, 0.42);
   --shadow-soft: 0 18px 44px -16px rgba(150, 100, 60, 0.34);
 }
 
@@ -50,64 +46,87 @@
   }
 
   body {
-    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system,
-      'Segoe UI', sans-serif;
+    font-family: var(--font-sans);
     color: var(--color-ink);
-    background-color: #f4ede5;
-    /* Vivid, dreamy, warm gradient blobs (orange · blue · coral · teal · peach) —
-       saturated enough to color the frosted glass that sits over them. */
+    background-color: #f1e9e1;
+    /* Deep, saturated, dreamy blobs — orange · blue · coral · teal */
     background-image: radial-gradient(
-        42rem 42rem at 6% -6%,
-        rgba(245, 165, 100, 0.42),
+        46rem 46rem at 4% -8%,
+        rgba(255, 150, 70, 0.5),
         transparent 56%
       ),
       radial-gradient(
-        46rem 46rem at 92% 6%,
-        rgba(118, 160, 224, 0.34),
+        48rem 48rem at 96% 4%,
+        rgba(74, 150, 214, 0.42),
         transparent 58%
       ),
       radial-gradient(
-        52rem 52rem at 74% 78%,
-        rgba(233, 128, 124, 0.34),
+        52rem 52rem at 78% 92%,
+        rgba(255, 110, 110, 0.4),
         transparent 60%
       ),
       radial-gradient(
-        46rem 46rem at 14% 90%,
-        rgba(96, 178, 178, 0.32),
+        46rem 46rem at 10% 96%,
+        rgba(58, 190, 184, 0.38),
         transparent 60%
       ),
       radial-gradient(
-        40rem 40rem at 50% 44%,
-        rgba(246, 196, 158, 0.28),
+        40rem 40rem at 48% 46%,
+        rgba(255, 200, 160, 0.3),
         transparent 66%
       );
     background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
 }
 
 @layer components {
-  /* Frosted colored glass — warm translucent white with a top sheen */
-  .glass-card {
-    background: rgba(255, 252, 248, 0.52);
-    backdrop-filter: blur(22px) saturate(165%);
-    -webkit-backdrop-filter: blur(22px) saturate(165%);
-    border: 1px solid rgba(255, 255, 255, 0.78);
-    border-radius: 1.25rem;
+  /* Frosted glass with a luminous gradient frame + warm glow */
+  .glass-card,
+  .glass-panel {
+    position: relative;
+    border-radius: 1.35rem;
+    background: rgba(255, 251, 246, 0.5);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
     box-shadow:
       var(--shadow-glass),
-      inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      inset 0 1px 0 rgba(255, 255, 255, 0.75),
+      inset 0 0 36px rgba(255, 235, 220, 0.25);
   }
   .glass-panel {
-    background: rgba(255, 252, 248, 0.68);
-    backdrop-filter: blur(24px) saturate(170%);
-    -webkit-backdrop-filter: blur(24px) saturate(170%);
-    border: 1px solid rgba(255, 255, 255, 0.85);
-    border-radius: 1.25rem;
-    box-shadow:
-      var(--shadow-glass),
-      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    background: rgba(255, 251, 246, 0.66);
+  }
+  /* The glowing hairline frame (bright top-left → warm/cool edges) */
+  .glass-card::after,
+  .glass-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.25px;
+    background: linear-gradient(
+      140deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.25) 35%,
+      rgba(255, 160, 120, 0.55) 70%,
+      rgba(90, 169, 214, 0.6) 100%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
   }
 
   /* Buttons */
@@ -116,8 +135,8 @@
     align-items: center;
     justify-content: center;
     gap: 0.4rem;
-    border-radius: 0.9rem;
-    padding: 0.6rem 1.15rem;
+    border-radius: 0.95rem;
+    padding: 0.62rem 1.2rem;
     font-weight: 600;
     font-size: 0.875rem;
     line-height: 1.25rem;
@@ -132,27 +151,33 @@
   .btn-primary {
     color: #fff;
     background-image: var(--grad-teal-purple);
-    box-shadow: 0 12px 26px -8px rgba(75, 130, 180, 0.6);
+    box-shadow:
+      0 12px 28px -8px rgba(255, 120, 80, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
   }
   .btn-primary:hover:not(:disabled) {
     transform: translateY(-1px);
     filter: brightness(1.05) saturate(1.08);
-    box-shadow: 0 16px 32px -8px rgba(75, 130, 180, 0.65);
+    box-shadow:
+      0 18px 36px -8px rgba(255, 120, 80, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
   }
   .btn-primary:disabled {
     opacity: 0.5;
     cursor: default;
   }
-  /* Soft button — tinted teal glass, not gray */
+  /* Soft button — warm glassy, glowing edge */
   .btn-soft {
     color: var(--color-brand-700);
-    background: rgba(79, 171, 176, 0.12);
-    border: 1px solid rgba(79, 171, 176, 0.32);
+    background: rgba(255, 251, 246, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(8px);
-    box-shadow: 0 6px 18px -10px rgba(63, 161, 166, 0.5);
+    box-shadow:
+      0 6px 18px -10px rgba(214, 130, 78, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
   }
   .btn-soft:hover:not(:disabled) {
-    background: rgba(79, 171, 176, 0.2);
+    background: rgba(255, 255, 255, 0.88);
     transform: translateY(-1px);
   }
   .btn-soft:disabled {
@@ -160,29 +185,32 @@
     cursor: default;
   }
 
-  /* Inputs — warm translucent, teal-tinted edge + focus glow */
+  /* Inputs */
   .field {
     width: 100%;
-    border-radius: 0.9rem;
-    border: 1px solid rgba(79, 171, 176, 0.28);
-    background: rgba(255, 252, 248, 0.6);
-    padding: 0.6rem 0.9rem;
+    border-radius: 0.95rem;
+    border: 1px solid rgba(255, 160, 120, 0.3);
+    background: rgba(255, 251, 246, 0.6);
+    padding: 0.62rem 0.9rem;
     font-size: 0.875rem;
     color: var(--color-ink);
     outline: none;
     backdrop-filter: blur(6px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
     transition:
       border-color 0.18s ease,
       box-shadow 0.18s ease,
       background 0.18s ease;
   }
   .field::placeholder {
-    color: rgba(140, 132, 146, 0.7);
+    color: rgba(138, 129, 144, 0.7);
   }
   .field:focus {
-    border-color: rgba(63, 161, 166, 0.75);
-    background: rgba(255, 255, 255, 0.85);
-    box-shadow: 0 0 0 4px rgba(79, 171, 176, 0.18);
+    border-color: rgba(255, 138, 90, 0.7);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow:
+      0 0 0 4px rgba(255, 138, 90, 0.16),
+      0 8px 22px -12px rgba(255, 120, 80, 0.4);
   }
 
   /* Rendered Markdown (notes) */
@@ -207,7 +235,7 @@
   .note-prose ol { list-style: decimal; }
   .note-prose li { margin: 0.15em 0; }
   .note-prose code {
-    background: rgba(63, 161, 166, 0.12);
+    background: rgba(255, 138, 90, 0.14);
     border-radius: 0.35rem;
     padding: 0.05em 0.35em;
     font-size: 0.85em;
