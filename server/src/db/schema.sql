@@ -772,3 +772,15 @@ ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS cloze_parts      JSONB;
 ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS image_url        TEXT;
 ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS occlusion_shapes JSONB;
 ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS latex_content    TEXT;
+
+-- ----------------------------------------------------------------------------
+-- premium_whitelist — users an admin grants full premium access (close friends,
+-- testers) without a subscription. One row per user; bypasses the paywall.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS premium_whitelist (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  reason          TEXT,
+  whitelisted_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+  whitelisted_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);

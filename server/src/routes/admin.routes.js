@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { adminOnly } from '../middleware/adminOnly.js';
+import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as admin from '../controllers/admin.controller.js';
 import * as authController from '../controllers/auth.controller.js';
@@ -21,5 +22,10 @@ router.get('/analytics/activity', asyncHandler(admin.activity));
 router.get('/analytics/lms', asyncHandler(admin.lms));
 // Back-compat: the original referral-sources endpoint (now admin-gated).
 router.get('/analytics/referral-sources', asyncHandler(authController.referralAnalytics));
+
+// Premium whitelist — grant comp access to specific users (close friends/testers).
+router.get('/whitelist', asyncHandler(admin.whitelistList));
+router.post('/whitelist/add', validate(admin.whitelistAddSchema), asyncHandler(admin.whitelistAdd));
+router.post('/whitelist/remove', validate(admin.whitelistRemoveSchema), asyncHandler(admin.whitelistRemove));
 
 export default router;

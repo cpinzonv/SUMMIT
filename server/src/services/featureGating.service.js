@@ -27,7 +27,8 @@ export const PREMIUM_FEATURES = {
 export function canAccessFeature(user, _featureName) {
   if (!user) return false;
   if (user.role === 'admin' || user.role === 'demo') return true;
-  if (!env.billingEnabled) return false; // pre-billing: admin/demo only
+  if (user.is_whitelisted) return true; // admin-granted comp access
+  if (!env.billingEnabled) return false; // pre-billing: admin/demo/whitelist only
   return user.subscription_tier === 'pro' && user.subscription_status === 'active';
 }
 
@@ -63,12 +64,56 @@ export function getAllFeatureStatus(user) {
   };
 }
 
-/** Fetch the gating-relevant columns for a user id. */
+/** Fetch the gating-relevant columns for a user id, incl. whitelist membership. */
 export async function getUserGating(userId) {
   const { rows } = await query(
-    `SELECT role, plan, is_premium, subscription_tier, subscription_status, subscription_end_date
-       FROM users WHERE id = $1`,
+    `SELECT u.role, u.plan, u.is_premium, u.subscription_tier, u.subscription_status,
+            u.subscription_end_date,
+            (w.user_id IS NOT NULL) AS is_whitelisted
+       FROM users u
+       LEFT JOIN premium_whitelist w ON w.user_id = u.id
+      WHERE u.id = $1`,
     [userId],
   );
   return rows[0] || null;
+}
+
+// ---- Whitelist management (admin) ------------------------------------------
+
+export async function isUserWhitelisted(userId) {
+  const { rows } = await query('SELECT 1 FROM premium_whitelist WHERE user_id = $1', [userId]);
+  return rows.length > 0;
+}
+
+/** Whitelist a user (by id). Idempotent — re-adding updates the reason/grantor. */
+export async function addToWhitelist({ userId, reason, whitelistedBy }) {
+  const { rows } = await query(
+    `INSERT INTO premium_whitelist (user_id, reason, whitelisted_by)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (user_id) DO UPDATE SET reason = EXCLUDED.reason, whitelisted_by = EXCLUDED.whitelisted_by
+     RETURNING *`,
+    [userId, reason ?? null, whitelistedBy ?? null],
+  );
+  return rows[0];
+}
+
+export async function removeFromWhitelist(userId) {
+  const { rowCount } = await query('DELETE FROM premium_whitelist WHERE user_id = $1', [userId]);
+  return rowCount > 0;
+}
+
+/** List whitelisted users with their email/name + reason/date. */
+export async function listWhitelist() {
+  const { rows } = await query(
+    `SELECT w.user_id, u.email, u.full_name AS name, w.reason, w.whitelisted_at
+       FROM premium_whitelist w JOIN users u ON u.id = w.user_id
+      ORDER BY w.whitelisted_at DESC`,
+  );
+  return rows.map((r) => ({
+    userId: r.user_id,
+    email: r.email,
+    name: r.name,
+    reason: r.reason,
+    whitelistedAt: r.whitelisted_at,
+  }));
 }

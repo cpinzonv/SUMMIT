@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import * as analytics from '../services/admin.service.js';
+import * as gating from '../services/featureGating.service.js';
 import { query } from '../config/db.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
@@ -17,6 +19,47 @@ export async function activity(req, res) {
 }
 export async function lms(req, res) {
   res.json(await analytics.lms());
+}
+
+// ---- Premium whitelist (admin only) ----------------------------------------
+
+export const whitelistAddSchema = z
+  .object({
+    email: z.string().email().toLowerCase().optional(),
+    userId: z.string().uuid().optional(),
+    reason: z.string().max(300).optional(),
+  })
+  .refine((o) => o.email || o.userId, { message: 'email or userId is required' });
+export const whitelistRemoveSchema = z
+  .object({ email: z.string().email().toLowerCase().optional(), userId: z.string().uuid().optional() })
+  .refine((o) => o.email || o.userId, { message: 'email or userId is required' });
+
+/** Resolve an {email|userId} body to a user id, or 404. */
+async function resolveUserId({ email, userId }) {
+  if (userId) {
+    const { rows } = await query('SELECT id FROM users WHERE id = $1', [userId]);
+    if (!rows[0]) throw AppError.notFound('No user with that id.');
+    return rows[0].id;
+  }
+  const { rows } = await query('SELECT id FROM users WHERE email = $1', [email]);
+  if (!rows[0]) throw AppError.notFound('No user with that email.');
+  return rows[0].id;
+}
+
+export async function whitelistAdd(req, res) {
+  const userId = await resolveUserId(req.body);
+  await gating.addToWhitelist({ userId, reason: req.body.reason, whitelistedBy: req.user.id });
+  res.status(201).json({ success: true, entry: (await gating.listWhitelist()).find((w) => w.userId === userId) });
+}
+
+export async function whitelistRemove(req, res) {
+  const userId = await resolveUserId(req.body);
+  const removed = await gating.removeFromWhitelist(userId);
+  res.json({ success: true, removed });
+}
+
+export async function whitelistList(req, res) {
+  res.json({ whitelisted: await gating.listWhitelist() });
 }
 
 /**

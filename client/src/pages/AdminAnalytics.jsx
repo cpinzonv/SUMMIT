@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState } from '../components/ui';
+import { PremiumWhitelist } from '../components/PremiumWhitelist';
 
 const REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
 
@@ -260,6 +261,9 @@ export default function AdminAnalytics() {
           </ul>
         )}
       </Panel>
+
+      {/* Premium whitelist management */}
+      <PremiumWhitelist />
     </div>
   );
 }
