@@ -3,6 +3,7 @@ import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState } from './ui';
 import { EmptyHero, NotepadIllustration } from './EmptyHero';
 import { RichTextEditor } from './RichTextEditor';
+import { useDraggable } from '../hooks/useDraggable';
 
 /* ---- date helpers ------------------------------------------------------- */
 function shortDate(iso) {
@@ -239,6 +240,16 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
   const fadeTimer = useRef(null);
   const menuRef = useRef(null);
 
+  // Draggable floating-window state (modal mode). Start roughly centered.
+  const windowRef = useRef(null);
+  const headerRef = useRef(null);
+  const [initialPos] = useState(() => {
+    const w = Math.min(window.innerWidth * 0.92, 520);
+    const h = Math.min(window.innerHeight * 0.76, 600);
+    return { x: Math.max(8, (window.innerWidth - w) / 2), y: Math.max(8, Math.min(window.innerHeight * 0.1, (window.innerHeight - h) / 2)) };
+  });
+  const pos = useDraggable({ windowRef, handleRef: headerRef, initial: initialPos });
+
   const persist = useCallback(async (t, c) => {
     if (t === savedRef.current.title && c === savedRef.current.content) return;
     if (!idRef.current && !t.trim() && isContentEmpty(c)) return; // don't create an empty note
@@ -301,11 +312,17 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
   const savedNote = () => ({ ...note, id: idRef.current, title, content });
   const archived = Boolean(note.archivedAt);
 
-  const TopBar = (
-    <div className="flex items-center justify-end gap-1.5">
-      <span className={`mr-auto text-xs transition-opacity ${status === 'idle' ? 'opacity-0' : 'opacity-100'}`} style={{ color: 'rgba(45,55,72,0.5)' }}>
-        {status === 'saving' ? 'Saving…' : status === 'saved' ? '✓ Saved' : status === 'error' ? 'Save failed' : ''}
-      </span>
+  // Plain-text length for the footer char count (content is HTML).
+  const charCount = content.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').trim().length;
+
+  const statusEl = (
+    <span className={`text-xs transition-opacity ${status === 'idle' ? 'opacity-0' : 'opacity-100'}`} style={{ color: 'rgba(45,55,72,0.5)' }}>
+      {status === 'saving' ? 'Saving…' : status === 'saved' ? '✓ Saved' : status === 'error' ? 'Save failed' : ''}
+    </span>
+  );
+
+  const actions = (
+    <>
       <div ref={menuRef} className="relative">
         <button type="button" onClick={() => setMenuOpen((o) => !o)} aria-label="Note options" className="grid h-8 w-8 place-items-center rounded-full transition hover:bg-black/5" style={{ color: 'var(--note-text)' }}>
           <DotsIcon className="h-4 w-4" />
@@ -335,36 +352,59 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
       <button type="button" onClick={close} aria-label="Close" className="grid h-8 w-8 place-items-center rounded-full text-xl leading-none transition hover:bg-black/5" style={{ color: 'rgba(45,55,72,0.6)' }}>
         ×
       </button>
-    </div>
+    </>
   );
 
-  const Body = (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {TopBar}
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Untitled note"
-        className="note-input text-lg font-bold"
-        autoFocus
-      />
-      <div className="min-h-0 flex-1">
-        <RichTextEditor value={content} onChange={setContent} fullHeight />
-      </div>
-    </div>
-  );
-
+  // Full-screen mode: distraction-free, full bleed.
   if (mode === 'full') {
     return (
       <div className="fixed inset-0 z-[60] flex flex-col p-5 sm:p-8" style={{ background: 'var(--note-bg)' }}>
-        <div className="mx-auto flex h-full w-full max-w-3xl flex-col">{Body}</div>
+        <div className="mx-auto flex h-full w-full max-w-3xl flex-col">
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="flex items-center justify-end gap-1.5">
+              <span className="mr-auto">{statusEl}</span>
+              {actions}
+            </div>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Untitled note" className="note-input text-lg font-bold" autoFocus />
+            <div className="min-h-0 flex-1"><RichTextEditor value={content} onChange={setContent} fullHeight /></div>
+          </div>
+        </div>
       </div>
     );
   }
+
+  // Modal mode: a compact, draggable, frosted-glass floating window — no
+  // dimming backdrop, so you can see/use the app behind it (e.g. while
+  // recording a lecture).
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-sm" onClick={close}>
-      <div className="note-surface flex flex-col p-6" style={{ width: '85vw', maxWidth: 900, height: '80vh' }} onClick={(e) => e.stopPropagation()}>
-        {Body}
+    <div
+      ref={windowRef}
+      className="note-float animate-pop fixed z-50 flex w-[min(92vw,520px)] flex-col overflow-hidden"
+      style={{ left: pos.x, top: pos.y, height: 'min(76vh, 600px)' }}
+    >
+      {/* Draggable header — holds the title + actions. */}
+      <div ref={headerRef} className="flex cursor-grab select-none items-center gap-2 border-b border-black/5 px-3 py-2 active:cursor-grabbing">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Untitled note"
+          className="min-w-0 flex-1 cursor-text bg-transparent px-1 text-sm font-bold outline-none placeholder:text-black/25"
+          style={{ color: 'var(--note-text)' }}
+          autoFocus
+        />
+        {statusEl}
+        {actions}
+      </div>
+
+      {/* Editor */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+        <RichTextEditor value={content} onChange={setContent} fullHeight />
+      </div>
+
+      {/* Footer — char count + done. */}
+      <div className="flex items-center justify-between border-t border-black/5 px-3 py-1.5" style={{ color: 'rgba(45,55,72,0.5)' }}>
+        <span className="text-xs">{charCount} character{charCount === 1 ? '' : 's'}</span>
+        <button type="button" onClick={close} className="btn btn-primary !px-3 !py-1 text-xs">Done</button>
       </div>
     </div>
   );
