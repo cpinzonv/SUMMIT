@@ -14,6 +14,7 @@ import {
   isGlassColor,
   CLASS_COLOR_PRESETS,
 } from '../components/ui';
+import { EmptyHero, AssignmentsIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
 import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
 import { suggestHours } from '../lib/workload';
@@ -252,9 +253,13 @@ export default function ClassDetailPage() {
         </div>
 
         {assignments.length === 0 ? (
-          <EmptyState title="No assignments yet">
-            Use “Add assignment” to create your first one.
-          </EmptyState>
+          <EmptyHero
+            illustration={<AssignmentsIllustration />}
+            headline="No assignments yet"
+            subheading="Assignments will appear here as they're added. Stay on top of your deadlines."
+            ctaLabel="Add your first assignment"
+            onCta={() => setModal({ type: 'assignment' })}
+          />
         ) : (
           <>
           <div className="glass-card overflow-hidden">

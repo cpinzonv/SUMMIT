@@ -71,6 +71,38 @@ export function CalendarIllustration() {
   );
 }
 
+/** Document with a checklist + a checkmark badge (Assignments). */
+export function AssignmentsIllustration() {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs('asgn')}
+      <ellipse cx="100" cy="172" rx="52" ry="9" fill="#4FC3DC" opacity="0.12" />
+      {/* document */}
+      <g filter="url(#asgn-glow)" transform="rotate(-5 100 100)">
+        <rect x="56" y="38" width="88" height="118" rx="10" fill="#fff" stroke="rgba(27,76,92,0.12)" />
+        <rect x="56" y="38" width="88" height="22" rx="10" fill="url(#asgn-grad)" opacity="0.9" />
+        {/* checklist rows: small box + line */}
+        {[0, 1, 2].map((i) => {
+          const y = 78 + i * 22;
+          const done = i === 0;
+          return (
+            <g key={i}>
+              <rect x="68" y={y} width="12" height="12" rx="3" fill={done ? '#4FC3DC' : 'none'} stroke="#4FC3DC" strokeWidth="2" />
+              {done && <path d={`M70.5 ${y + 6} l2.5 2.5 l4.5 -5`} fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
+              <line x1="88" y1={y + 6} x2={i === 2 ? 116 : 130} y2={y + 6} stroke="rgba(27,76,92,0.2)" strokeWidth="3" strokeLinecap="round" />
+            </g>
+          );
+        })}
+      </g>
+      {/* floating checkmark badge */}
+      <g transform="translate(132 120)">
+        <circle r="20" fill="url(#asgn-grad)" filter="url(#asgn-glow)" />
+        <path d="M-8 1 l5 5 l10 -11" fill="none" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+      </g>
+    </svg>
+  );
+}
+
 /** Notepad with ruled lines + a pencil (Notes). */
 export function NotepadIllustration() {
   return (
