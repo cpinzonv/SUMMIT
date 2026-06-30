@@ -39,7 +39,6 @@ export default function ClassDetailPage() {
   // Active modal: { type: 'assignment', assignment? } or { type: 'grade', assignment }
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('assignments');
-  const [notesSub, setNotesSub] = useState('notes'); // Notes vs. Chatbot sub-tab
   const [toast, setToast] = useState(null);
   // Plays the archive exit animation on the header before navigating away.
   const [archiving, setArchiving] = useState(false);
@@ -225,27 +224,9 @@ export default function ClassDetailPage() {
 
       {tab === 'notes' && (
         <div className="mt-5">
-          <div className="mb-4 flex gap-1.5">
-            {[
-              { key: 'notes', label: 'Notes' },
-              { key: 'chatbot', label: '✨ Chatbot' },
-            ].map((s) => (
-              <button
-                key={s.key}
-                onClick={() => setNotesSub(s.key)}
-                className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
-                  notesSub === s.key ? 'bg-white/75 text-brand-700 shadow-sm' : 'text-muted hover:bg-white/50 hover:text-ink'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-          {notesSub === 'chatbot' ? (
-            <NotesChatbot classId={id} className={cls?.name} />
-          ) : (
-            <ClassNotes classId={id} />
-          )}
+          <ClassNotes classId={id} />
+          {/* Floating "ask your notes" chat bubble (bottom-right). */}
+          <NotesChatbot classId={id} className={cls?.name} />
         </div>
       )}
       {tab === 'files' && (
