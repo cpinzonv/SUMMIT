@@ -50,6 +50,14 @@ export const env = {
   anthropicApiKey: optional('ANTHROPIC_API_KEY', ''),
   anthropicModel: optional('ANTHROPIC_MODEL', 'claude-opus-4-8'),
 
+  // Optional: ElevenLabs text-to-speech for podcast audio. Without it, podcasts
+  // still generate a script/transcript but the audio is marked "pending".
+  elevenLabs: {
+    apiKey: optional('ELEVENLABS_API_KEY', ''),
+    voiceId: optional('ELEVENLABS_VOICE_ID', 'JBFqnCBsd6RMkjVDRZzb'), // a default narrator voice
+    model: optional('ELEVENLABS_MODEL', 'eleven_multilingual_v2'),
+  },
+
   // One-time token for the first-admin bootstrap endpoint. Unset = disabled.
   adminSetupToken: optional('SETUP_TOKEN', ''),
 

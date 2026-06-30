@@ -44,6 +44,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{
 -- Role for admin-only features (analytics). Everyone defaults to 'user'.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';
 
+-- Subscription plan. 'free' = flashcards only; 'pro' = all Learn formats
+-- (quizzes, podcasts, study guides, mind maps). No billing yet — promote with
+-- UPDATE users SET plan='pro' ...; admins are treated as pro by premiumGate.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
+
 -- OAuth social login (Google / Apple / GitHub). A user may sign up with email
 -- OR a provider, and may LINK additional providers to one account (matched by
 -- verified email). auth_method records how the account was first created.

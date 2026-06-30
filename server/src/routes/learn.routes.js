@@ -14,6 +14,7 @@
  */
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
+import { premiumGate } from '../middleware/premiumGate.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as learn from '../controllers/learn.controller.js';
@@ -67,6 +68,80 @@ router.patch(
   validate(learn.sessionIdParam, 'params'),
   validate(learn.endSessionSchema),
   asyncHandler(learn.endSession),
+);
+
+// ---- Premium formats (quizzes / guides / mind maps / podcasts) -------------
+// Generation is gated by premiumGate; reads/submissions are owner-scoped only
+// (so a user who downgrades can still revisit content they already generated).
+
+// Quizzes
+router.post(
+  '/classes/:classId/quizzes/generate',
+  premiumGate,
+  validate(learn.classIdParam, 'params'),
+  validate(learn.quizGenSchema),
+  asyncHandler(learn.genQuiz),
+);
+router.get('/classes/:classId/quizzes', validate(learn.classIdParam, 'params'), asyncHandler(learn.listQuizzes));
+router.get('/quizzes/:quizId', validate(learn.quizIdParam, 'params'), asyncHandler(learn.getQuiz));
+router.post(
+  '/quizzes/:quizId/submit',
+  validate(learn.quizIdParam, 'params'),
+  validate(learn.submitQuizSchema),
+  asyncHandler(learn.submitQuiz),
+);
+
+// Study guides
+router.post(
+  '/classes/:classId/guides/generate',
+  premiumGate,
+  validate(learn.classIdParam, 'params'),
+  validate(learn.genSourceSchema),
+  asyncHandler(learn.genGuide),
+);
+router.get('/classes/:classId/guides', validate(learn.classIdParam, 'params'), asyncHandler(learn.listGuides));
+router.get('/guides/:guideId', validate(learn.guideIdParam, 'params'), asyncHandler(learn.getGuide));
+router.post(
+  '/guides/:guideId/read',
+  validate(learn.guideIdParam, 'params'),
+  validate(learn.markGuideSchema),
+  asyncHandler(learn.markGuide),
+);
+
+// Mind maps
+router.post(
+  '/classes/:classId/mindmaps/generate',
+  premiumGate,
+  validate(learn.classIdParam, 'params'),
+  validate(learn.genSourceSchema),
+  asyncHandler(learn.genMindMap),
+);
+router.get('/classes/:classId/mindmaps', validate(learn.classIdParam, 'params'), asyncHandler(learn.listMindMaps));
+router.get('/mindmaps/:mindmapId', validate(learn.mindmapIdParam, 'params'), asyncHandler(learn.getMindMap));
+
+// Podcasts
+router.post(
+  '/classes/:classId/podcasts/generate',
+  premiumGate,
+  validate(learn.classIdParam, 'params'),
+  validate(learn.genSourceSchema),
+  asyncHandler(learn.genPodcast),
+);
+router.get('/classes/:classId/podcasts', validate(learn.classIdParam, 'params'), asyncHandler(learn.listPodcasts));
+router.post(
+  '/podcasts/:podcastId/listen',
+  validate(learn.podcastIdParam, 'params'),
+  validate(learn.listenSchema),
+  asyncHandler(learn.listenPodcast),
+);
+
+// Generate every premium format for a class in one call.
+router.post(
+  '/classes/:classId/generate-all',
+  premiumGate,
+  validate(learn.classIdParam, 'params'),
+  validate(learn.genSourceSchema),
+  asyncHandler(learn.generateAll),
 );
 
 export default router;

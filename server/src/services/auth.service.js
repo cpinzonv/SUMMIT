@@ -22,6 +22,7 @@ function toPublicUser(row) {
     timezone: row.timezone,
     preferences: row.preferences ?? {},
     role: row.role || 'user',
+    plan: row.plan || 'free',
     twoFactorEnabled: Boolean(row.totp_enabled),
     // How the account was first created, whether it can log in with a password,
     // and which social providers are linked (drives the Settings UI / future
