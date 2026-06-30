@@ -263,9 +263,14 @@ export default function ClassDetailPage() {
       <section className="mt-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">Assignments</h2>
-          <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
-            + Add assignment
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setModal({ type: 'gradeSim' })} className="btn btn-soft">
+              🎯 What if?
+            </button>
+            <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
+              + Add assignment
+            </button>
+          </div>
         </div>
 
         {assignments.length === 0 ? (
@@ -406,6 +411,9 @@ export default function ClassDetailPage() {
           onConfirm={doDelete}
           onClose={() => setModal(null)}
         />
+      )}
+      {modal?.type === 'gradeSim' && (
+        <GradeSimModal classId={id} onClose={() => setModal(null)} />
       )}
       {modal?.type === 'lmsImport' && (
         <LmsImportModal
@@ -625,6 +633,123 @@ function ClassEditModal({ cls, onClose, onSaved }) {
         {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
         <ModalActions saving={saving} onClose={onClose} label="Save changes" />
       </form>
+    </Modal>
+  );
+}
+
+/** "What if?" grade simulator: pick a target, see what's needed on remaining work. */
+function GradeSimModal({ classId, onClose }) {
+  const [target, setTarget] = useState('A');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const run = async (t) => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await api.post(`/api/classes/${classId}/grade-simulation`, { targetGrade: t });
+      setResult(data);
+    } catch (err) {
+      setError(errorMessage(err, 'Could not run the simulation.'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Run once on open and whenever the target changes.
+  useEffect(() => {
+    run(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
+
+  const message = (() => {
+    if (!result) return null;
+    const cur = result.currentPercent == null ? 'no grades yet' : `${result.currentPercent}%`;
+    const tgt = `${typeof result.targetGrade === 'string' ? result.targetGrade : ''} (${result.targetPercent}%)`.trim();
+    switch (result.status) {
+      case 'all_done':
+        return `All work is graded — your grade is locked at ${cur}. There's no remaining work to change it.`;
+      case 'already_achieved':
+        return `You've already secured ${tgt}. You currently have ${cur}; even low scores on the remaining ${result.remainingPoints} pts keep you at or above target.`;
+      case 'impossible':
+        return `Reaching ${tgt} isn't possible with the remaining ${result.remainingPoints} pts — you'd need to average ${result.requiredGradeOnRemaining}% (over 100%). You currently have ${cur}.`;
+      case 'reachable':
+        return `You currently have ${cur}. To get ${tgt}, you need to average ${result.requiredGradeOnRemaining}% on the remaining ${result.remainingPoints} pts of work.`;
+      default:
+        return null;
+    }
+  })();
+
+  const tone =
+    result?.status === 'impossible'
+      ? 'text-rose-600'
+      : result?.status === 'already_achieved'
+        ? 'text-emerald-600'
+        : 'text-ink';
+
+  return (
+    <Modal title="What if? — grade simulator" onClose={onClose}>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-ink">Target final grade</span>
+          <div className="flex flex-wrap gap-1.5">
+            {['A', 'B', 'C', 'D'].map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setTarget(g)}
+                className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${
+                  target === g ? 'bg-brand-500 text-white' : 'bg-white/60 text-muted hover:bg-white/90'
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+            <input
+              type="number"
+              min="0"
+              max="100"
+              placeholder="%"
+              onChange={(e) => e.target.value && setTarget(Number(e.target.value))}
+              className="field !w-20"
+              title="Or enter a target percentage"
+            />
+          </div>
+        </label>
+
+        {error && <ErrorBanner message={error} />}
+
+        {loading ? (
+          <Spinner label="Calculating…" />
+        ) : result ? (
+          <>
+            <div className="rounded-2xl border border-white/50 bg-white/45 p-4">
+              <p className={`text-sm font-semibold ${tone}`}>{message}</p>
+            </div>
+
+            {result.remainingAssignments.length > 0 && (
+              <div>
+                <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+                  Remaining work ({result.remainingPoints} pts)
+                </h3>
+                <div className="max-h-44 space-y-1 overflow-y-auto">
+                  {result.remainingAssignments.map((a) => (
+                    <div key={a.id} className="flex justify-between rounded-lg border border-white/50 bg-white/45 px-3 py-1.5 text-sm">
+                      <span className="truncate text-ink">{a.title}</span>
+                      <span className="shrink-0 text-muted">{a.pointValue} pts</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : null}
+
+        <div className="flex justify-end">
+          <button type="button" onClick={onClose} className="btn btn-soft">Close</button>
+        </div>
+      </div>
     </Modal>
   );
 }

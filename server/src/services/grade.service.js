@@ -2,8 +2,86 @@ import { query, withTransaction } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { letterGrade } from '../utils/grade.js';
 import { generateSessionDates } from '../utils/sessions.js';
+import { getOwnedClass } from './class.service.js';
 
 const round1 = (n) => Math.round(n * 10) / 10;
+
+// Target percentage for a letter (round thresholds students expect). Numeric
+// targets are used as-is.
+const LETTER_TARGET = { 'A+': 97, A: 90, 'A-': 90, 'B+': 87, B: 80, 'B-': 80, 'C+': 77, C: 70, 'C-': 70, 'D+': 67, D: 60, 'D-': 60, F: 50 };
+
+function resolveTargetPercent(target) {
+  if (typeof target === 'number') return target;
+  const s = String(target).trim().toUpperCase();
+  if (s in LETTER_TARGET) return LETTER_TARGET[s];
+  const n = Number(s.replace('%', ''));
+  if (!Number.isNaN(n)) return n;
+  throw AppError.badRequest('Enter a target grade like "A", "B+", or 90.');
+}
+
+/**
+ * "What if?" grade simulation (points-based, matching the class grade model):
+ * given a target final grade, work out the average score needed on the remaining
+ * (ungraded) assignments. Handles the already-achieved / impossible / all-done
+ * edge cases.
+ */
+export async function simulateGrade(userId, classId, target) {
+  const cls = await getOwnedClass(userId, classId); // 404s if not owned
+  const targetPercent = resolveTargetPercent(target);
+
+  const { rows: gradedRows } = await query(
+    `SELECT COALESCE(SUM(g.points_earned), 0) AS earned,
+            COALESCE(SUM(g.points_possible), 0) AS possible
+       FROM assignments a JOIN grades g ON g.assignment_id = a.id
+      WHERE a.class_id = $1`,
+    [classId],
+  );
+  const earned = Number(gradedRows[0].earned);
+  const possible = Number(gradedRows[0].possible);
+
+  const { rows: remainingRows } = await query(
+    `SELECT a.id, a.title, a.point_value
+       FROM assignments a
+       LEFT JOIN grades g ON g.assignment_id = a.id
+      WHERE a.class_id = $1 AND g.id IS NULL AND a.point_value IS NOT NULL AND a.point_value > 0
+      ORDER BY a.due_date NULLS LAST, a.created_at`,
+    [classId],
+  );
+  const remainingAssignments = remainingRows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    pointValue: Number(r.point_value),
+  }));
+  const remainingPoints = remainingAssignments.reduce((s, a) => s + a.pointValue, 0);
+
+  const currentPercent = possible > 0 ? round1((earned / possible) * 100) : null;
+  const totalPoints = possible + remainingPoints;
+
+  let status;
+  let requiredGradeOnRemaining = null;
+  if (remainingPoints === 0) {
+    status = 'all_done';
+  } else {
+    const requiredPoints = (targetPercent / 100) * totalPoints - earned;
+    const required = round1((requiredPoints / remainingPoints) * 100);
+    requiredGradeOnRemaining = required;
+    if (required <= 0) status = 'already_achieved';
+    else if (required > 100) status = 'impossible';
+    else status = 'reachable';
+  }
+
+  return {
+    className: cls.name,
+    currentPercent,
+    currentLetter: letterGrade(currentPercent),
+    targetGrade: target,
+    targetPercent,
+    requiredGradeOnRemaining,
+    remainingPoints,
+    remainingAssignments,
+    status,
+  };
+}
 
 /**
  * Compute a class's current grade. The assignment component is point-based

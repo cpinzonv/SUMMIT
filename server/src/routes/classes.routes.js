@@ -10,6 +10,7 @@ import * as syllabus from '../controllers/syllabus.controller.js';
 import * as notes from '../controllers/notes.controller.js';
 import * as attendance from '../controllers/attendance.controller.js';
 import * as files from '../controllers/files.controller.js';
+import * as grades from '../controllers/grades.controller.js';
 
 // Syllabus uploads: PDF, DOCX (Word), JPG, PNG. Kept in memory; 32MB cap
 // (the Claude API request limit).
@@ -125,6 +126,14 @@ router.post(
   validate(classes.classIdParam, 'params'),
   validate(notes.chatbotSchema),
   asyncHandler(notes.chatbot),
+);
+
+// "What if?" grade simulation for a class.
+router.post(
+  '/:id/grade-simulation',
+  validate(classes.classIdParam, 'params'),
+  validate(grades.gradeSimSchema),
+  asyncHandler(grades.simulate),
 );
 
 // Files nested under a class (download/delete by file id live in files.routes).
