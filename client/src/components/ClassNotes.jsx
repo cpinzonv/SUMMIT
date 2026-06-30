@@ -249,6 +249,12 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
     }
   }, [classId, onChanged]);
 
+  // Always hold the LATEST title/content/persist so the unmount flush below
+  // saves what's actually on screen. (A stale mount-time closure here would
+  // overwrite the note with its initial empty values when you navigate away.)
+  const latestRef = useRef({ title, content, persist });
+  latestRef.current = { title, content, persist };
+
   // Debounced auto-save on edits.
   useEffect(() => {
     if (skipFirst.current) { skipFirst.current = false; return; }
@@ -256,8 +262,12 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
     return () => clearTimeout(h);
   }, [title, content, persist]);
 
-  // Flush pending save on unmount.
-  useEffect(() => () => { persist(title, content); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Flush any pending save on unmount (e.g. navigating away via the router),
+  // using the latest values — never the stale ones captured at mount.
+  useEffect(() => () => {
+    const { title: t, content: c, persist: p } = latestRef.current;
+    p(t, c);
+  }, []);
 
   const close = () => { persist(title, content); onClose(); };
 
