@@ -17,6 +17,12 @@ const VIEWS = [
   { key: 'month', label: 'Month' },
   { key: 'week', label: 'Week' },
   { key: 'day', label: 'Day' },
+  { key: 'year', label: 'Year' },
+];
+
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
 const PRIORITY_RANK = { high: 3, medium: 2, low: 1, none: 0 };
@@ -151,9 +157,16 @@ export default function CalendarPage() {
 
   const shift = (dir) =>
     setCursor((c) => {
+      if (view === 'year') return new Date(c.getFullYear() + dir, c.getMonth(), 1);
       if (view === 'month') return new Date(c.getFullYear(), c.getMonth() + dir, 1);
       return addDays(c, dir * (view === 'week' ? 7 : 1));
     });
+
+  // Jump from the year grid into a specific month.
+  const openMonth = (monthIndex) => {
+    setCursor(new Date(cursor.getFullYear(), monthIndex, 1));
+    setView('month');
+  };
 
   // ---- Drag and drop: move an assignment's date to the dropped-on day -----
   async function moveEvent(ev, targetKey) {
@@ -221,6 +234,7 @@ export default function CalendarPage() {
   };
 
   const label = useMemo(() => {
+    if (view === 'year') return String(cursor.getFullYear());
     if (view === 'month')
       return cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     if (view === 'week') {
@@ -287,8 +301,10 @@ export default function CalendarPage() {
         <MonthView cursor={cursor} byDay={byDay} todayKey={todayKey} act={act} dnd={dnd} />
       ) : view === 'week' ? (
         <WeekView cursor={cursor} byDay={byDay} todayKey={todayKey} act={act} dnd={dnd} />
-      ) : (
+      ) : view === 'day' ? (
         <DayView cursor={cursor} byDay={byDay} act={act} />
+      ) : (
+        <YearView year={cursor.getFullYear()} byDay={byDay} todayKey={todayKey} onPickMonth={openMonth} />
       )}
 
       {selected && <EventModal ev={selected} onClose={() => setSelected(null)} />}
@@ -329,6 +345,86 @@ function Dot({ p }) {
 }
 
 /* ---- Month ------------------------------------------------------------- */
+/** Year view: a 3×4 grid of 12 mini-months; days with assignments show a dot
+ *  colored by the highest-priority item that day. Click a month to zoom in. */
+function YearView({ year, byDay, todayKey, onPickMonth }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {MONTH_NAMES.map((name, m) => (
+        <MiniMonth
+          key={m}
+          year={year}
+          month={m}
+          name={name}
+          byDay={byDay}
+          todayKey={todayKey}
+          onClick={() => onPickMonth(m)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function topPriorityDot(events) {
+  if (!events || events.length === 0) return null;
+  let best = 'none';
+  for (const ev of events) {
+    const p = ev.a.priority || 'none';
+    if (PRIORITY_RANK[p] > PRIORITY_RANK[best]) best = p;
+  }
+  return PRIORITY_DOT[best];
+}
+
+function MiniMonth({ year, month, name, byDay, todayKey, onClick }) {
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Open ${name} ${year}`}
+      className="glass-card p-3 text-left transition hover:-translate-y-0.5 hover:shadow-lg"
+    >
+      <div className="mb-1.5 flex items-baseline justify-between">
+        <span className="text-sm font-bold text-ink">{name}</span>
+        <span className="text-[10px] font-semibold uppercase text-muted">{year}</span>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 text-center">
+        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+          <span key={i} className="text-[9px] font-semibold text-muted">{d}</span>
+        ))}
+        {cells.map((d, i) => {
+          if (d == null) return <span key={i} />;
+          const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          const events = byDay.get(key);
+          const dot = topPriorityDot(events);
+          const isToday = key === todayKey;
+          return (
+            <span
+              key={i}
+              className={`relative grid h-5 place-items-center rounded text-[10px] ${
+                isToday ? 'bg-brand-100 font-bold text-brand-700' : 'text-slate-600'
+              }`}
+            >
+              {d}
+              {dot && (
+                <span
+                  className={`absolute bottom-0 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${dot}`}
+                  title={`${events.length} item${events.length === 1 ? '' : 's'}`}
+                />
+              )}
+            </span>
+          );
+        })}
+      </div>
+    </button>
+  );
+}
+
 function MonthView({ cursor, byDay, todayKey, act, dnd }) {
   const cells = useMemo(() => {
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
