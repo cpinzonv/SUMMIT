@@ -14,8 +14,8 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [form, setForm] = useState({
-    email: 'demo@student.app',
-    password: 'password123',
+    email: '',
+    password: '',
     fullName: '',
     referralSource: '',
     referralSourceDetail: '',
@@ -200,10 +200,6 @@ export default function LoginPage() {
           </p>
         </form>
         )}
-
-        <p className="mt-4 text-center text-xs text-muted">
-          Demo: demo@student.app / password123
-        </p>
       </div>
     </div>
   );
