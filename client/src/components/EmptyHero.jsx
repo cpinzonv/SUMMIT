@@ -128,3 +128,49 @@ export function NotepadIllustration() {
     </svg>
   );
 }
+
+/** Stacked books with an open book on top (classes / Learn). */
+export function BookIllustration() {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs('book')}
+      <ellipse cx="100" cy="170" rx="58" ry="9" fill="#FF6B4A" opacity="0.12" />
+      {/* two stacked closed books */}
+      <g filter="url(#book-glow)">
+        <rect x="46" y="128" width="108" height="20" rx="5" fill="#4FC3DC" />
+        <rect x="46" y="128" width="10" height="20" fill="#2a93ab" opacity="0.6" />
+        <rect x="54" y="110" width="104" height="20" rx="5" fill="#FFB4A2" />
+        <rect x="54" y="110" width="10" height="20" fill="#e2410b" opacity="0.4" />
+      </g>
+      {/* open book on top */}
+      <g filter="url(#book-glow)">
+        <path d="M100 58 C82 46 62 48 50 54 L50 104 C62 98 82 96 100 106 Z" fill="#fff" stroke="rgba(27,76,92,0.14)" />
+        <path d="M100 58 C118 46 138 48 150 54 L150 104 C138 98 118 96 100 106 Z" fill="url(#book-grad)" />
+        <line x1="62" y1="66" x2="90" y2="72" stroke="rgba(27,76,92,0.18)" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="62" y1="78" x2="90" y2="84" stroke="rgba(27,76,92,0.14)" strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="110" y1="72" x2="138" y2="66" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" opacity="0.75" />
+        <line x1="110" y1="84" x2="138" y2="78" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" opacity="0.5" />
+      </g>
+    </svg>
+  );
+}
+
+/** A four-point sparkle + a couple of small ones (AI-generated Learn content). */
+export function SparkleIllustration() {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs('spark')}
+      <ellipse cx="100" cy="170" rx="46" ry="8" fill="#4FC3DC" opacity="0.12" />
+      {/* big four-point sparkle */}
+      <path
+        d="M100 44 C104 78 108 82 142 86 C108 90 104 94 100 128 C96 94 92 90 58 86 C92 82 96 78 100 44 Z"
+        fill="url(#spark-grad)"
+        filter="url(#spark-glow)"
+      />
+      <path d="M100 64 C102 82 104 84 122 86 C104 88 102 90 100 108 C98 90 96 88 78 86 C96 84 98 82 100 64 Z" fill="#fff" opacity="0.35" />
+      {/* small accent sparkles */}
+      <path d="M150 118 C151 128 152 129 162 130 C152 131 151 132 150 142 C149 132 148 131 138 130 C148 129 149 128 150 118 Z" fill="#FFB4A2" />
+      <path d="M52 54 C53 61 54 62 61 63 C54 64 53 65 52 72 C51 65 50 64 43 63 C50 62 51 61 52 54 Z" fill="#4FC3DC" />
+    </svg>
+  );
+}

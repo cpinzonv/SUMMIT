@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Spinner, ErrorBanner, EmptyState } from '../ui';
+import { Spinner, ErrorBanner } from '../ui';
+import { EmptyHero, SparkleIllustration } from '../EmptyHero';
 import { renderMarkdown } from '../../utils/markdown';
 
 /** Study guides: list, generate (premium), and read (markdown + TOC + print). */
@@ -49,7 +50,13 @@ export function GuideTab({ classId, flash }) {
       </div>
       {error && <ErrorBanner message={error} />}
       {guides.length === 0 ? (
-        <EmptyState title="No study guides yet">Generate a summarized guide of key concepts from this class.</EmptyState>
+        <EmptyHero
+          illustration={<SparkleIllustration />}
+          headline="No study guides yet"
+          subheading="Generate a summarized guide of the key concepts from this class's material."
+          ctaLabel="✦ Generate study guide"
+          onCta={generate}
+        />
       ) : (
         <div className="space-y-2">
           {guides.map((g) => (

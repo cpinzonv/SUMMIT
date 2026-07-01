@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Modal, Spinner, ErrorBanner, EmptyState } from '../ui';
+import { Modal, Spinner, ErrorBanner } from '../ui';
+import { EmptyHero, SparkleIllustration } from '../EmptyHero';
 import { Labeled } from './common';
 import { printHtml } from '../../lib/learnExport';
 
@@ -38,7 +39,13 @@ export function QuizTab({ classId, flash }) {
       </div>
       {error && <ErrorBanner message={error} />}
       {quizzes.length === 0 ? (
-        <EmptyState title="No quizzes yet">Generate a multiple-choice quiz from this class's material.</EmptyState>
+        <EmptyHero
+          illustration={<SparkleIllustration />}
+          headline="No quizzes yet"
+          subheading="Generate a multiple-choice quiz from this class's notes and transcripts."
+          ctaLabel="✦ Generate quiz"
+          onCta={() => setGenerating(true)}
+        />
       ) : (
         <div className="space-y-2">
           {quizzes.map((q) => (

@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
   Spinner,
   ErrorBanner,
-  EmptyState,
   Toast,
   gradeColor,
   classGradient,
@@ -13,11 +12,13 @@ import {
   isGlassColor,
   computeGpa,
 } from '../components/ui';
+import { EmptyHero, BookIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
 
 export default function DashboardPage() {
   const { preferences, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -214,11 +215,13 @@ export default function DashboardPage() {
           )}
 
           {classes.length === 0 ? (
-            <EmptyState title="No classes yet">
-              <Link to="/classes/new" className="font-semibold text-brand-600 hover:underline">
-                Create your first class
-              </Link>
-            </EmptyState>
+            <EmptyHero
+              illustration={<BookIllustration />}
+              headline="No classes yet"
+              subheading="Add your courses to track grades, assignments, and attendance — all in one place."
+              ctaLabel="Create your first class"
+              onCta={() => navigate('/classes/new')}
+            />
           ) : preferences.defaultDashboardView === 'list' ? (
             <div className="glass-card divide-y divide-white/40 overflow-hidden">
               {classes.map((cls, i) => (

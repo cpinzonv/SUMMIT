@@ -1,9 +1,15 @@
-import { EmptyState } from '../ui';
+import { EmptyHero, BookIllustration } from '../EmptyHero';
 
 /** A fuller breakdown of the user's learning stats (the header shows the highlights). */
 export function StatsTab({ stats }) {
   if (!stats || stats.totalCards === 0) {
-    return <EmptyState title="No study data yet">Create some flashcards and start a review session to see your progress here.</EmptyState>;
+    return (
+      <EmptyHero
+        illustration={<BookIllustration />}
+        headline="No study data yet"
+        subheading="Create some flashcards and start a review session to see your progress and streaks here."
+      />
+    );
   }
   const rows = [
     ['New', stats.newCards, '#94a3b8'],

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Spinner, ErrorBanner, EmptyState } from '../ui';
+import { Spinner, ErrorBanner } from '../ui';
+import { EmptyHero, SparkleIllustration } from '../EmptyHero';
 import { exportSvg } from '../../lib/learnExport';
 
 /** Mind maps: list, generate (premium), and view as a pan/zoomable SVG graph. */
@@ -49,7 +50,13 @@ export function MindMapTab({ classId, flash }) {
       </div>
       {error && <ErrorBanner message={error} />}
       {maps.length === 0 ? (
-        <EmptyState title="No mind maps yet">Generate a visual concept map from this class's material.</EmptyState>
+        <EmptyHero
+          illustration={<SparkleIllustration />}
+          headline="No mind maps yet"
+          subheading="Generate a visual concept map from this class's notes and transcripts."
+          ctaLabel="✦ Generate mind map"
+          onCta={generate}
+        />
       ) : (
         <div className="space-y-2">
           {maps.map((m) => (

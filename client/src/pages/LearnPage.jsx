@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Spinner, ErrorBanner, EmptyState, Toast } from '../components/ui';
+import { Spinner, ErrorBanner, Toast } from '../components/ui';
+import { EmptyHero, BookIllustration } from '../components/EmptyHero';
 import { UpgradePanel } from '../components/learn/common';
 import { PaywallModal } from '../components/learn/PaywallModal';
 import { FlashcardsTab } from '../components/learn/FlashcardsTab';
@@ -39,6 +41,7 @@ function StatChip({ label, value, accent }) {
 
 export default function LearnPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   // Per-feature access comes from /api/features/status; user.premium is the fast
   // overall flag. featureStatus.features[<feature>].hasAccess drives the locks.
   const [featureStatus, setFeatureStatus] = useState(null);
@@ -99,7 +102,16 @@ export default function LearnPage() {
         </div>
       );
     }
-    if (!classId) return <EmptyState title="No classes yet">Add a class first to start studying.</EmptyState>;
+    if (!classId)
+      return (
+        <EmptyHero
+          illustration={<BookIllustration />}
+          headline="No classes yet"
+          subheading="Add a class first — then study it with flashcards, quizzes, podcasts, and more."
+          ctaLabel="Add a class"
+          onCta={() => navigate('/classes/new')}
+        />
+      );
     if (locked) return <UpgradePanel feature={activeTab.label} billingEnabled={billingEnabled} />;
     const props = { classId, className: selectedClass?.name, flash, refreshStats };
     switch (tab) {
@@ -137,7 +149,13 @@ export default function LearnPage() {
       {error && <ErrorBanner message={error} />}
 
       {classes.length === 0 ? (
-        <EmptyState title="No classes yet">Add a class first — then study it with flashcards and more.</EmptyState>
+        <EmptyHero
+          illustration={<BookIllustration />}
+          headline="No classes yet"
+          subheading="Add a class first — then study it with flashcards, quizzes, podcasts, and more."
+          ctaLabel="Add a class"
+          onCta={() => navigate('/classes/new')}
+        />
       ) : (
         <>
           <div className="glass-panel flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
