@@ -499,6 +499,42 @@
     .deck-particle { display: none; }
   }
 
+  /* Quick-add "+" on calendar day cells — subtle, hidden until the cell is
+     hovered (or always faintly visible on touch devices). */
+  .day-add-btn {
+    opacity: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(255, 107, 53, 0.15);
+    border: 1px solid rgba(255, 107, 53, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: rgba(255, 107, 53, 0.6);
+    transition:
+      opacity 100ms ease-in-out,
+      background 100ms ease-in-out,
+      border-color 100ms ease-in-out,
+      color 100ms ease-in-out;
+  }
+  .day-cell:hover .day-add-btn { opacity: 1; }
+  .day-add-btn:hover {
+    background: rgba(255, 107, 53, 0.25);
+    border-color: rgba(255, 107, 53, 0.5);
+    color: rgba(255, 107, 53, 0.8);
+  }
+  .day-add-btn:focus-visible {
+    opacity: 1;
+    outline: 2px solid rgba(255, 107, 53, 0.55);
+    outline-offset: 1px;
+  }
+  /* Touch devices have no hover — keep the + gently visible so it stays tappable. */
+  @media (hover: none) {
+    .day-add-btn { opacity: 0.55; }
+  }
+
   /* Frosted-glass floating window (draggable note editor). Thin 1px border,
      heavy backdrop blur, soft shadow — sits over the app for multitasking. */
   .note-float {

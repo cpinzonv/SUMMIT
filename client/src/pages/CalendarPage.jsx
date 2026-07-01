@@ -80,6 +80,8 @@ export default function CalendarPage() {
   const [view, setView] = useState(() => preferences.defaultCalendarView || 'month');
   const [selected, setSelected] = useState(null); // details modal (single click)
   const [editing, setEditing] = useState(null); // edit modal (double click)
+  const [adding, setAdding] = useState(null); // quick-add modal — holds the day key
+  const [classes, setClasses] = useState([]); // for the quick-add class picker
   const [toast, setToast] = useState(null);
   const [cursor, setCursor] = useState(() => {
     const n = new Date();
@@ -95,6 +97,7 @@ export default function CalendarPage() {
   const loadEvents = useCallback(async () => {
     try {
       const { data } = await api.get('/api/classes');
+      setClasses(data.classes);
       const lists = await Promise.all(
         data.classes.map((c) =>
           api
@@ -139,6 +142,8 @@ export default function CalendarPage() {
       clearTimeout(clickTimer.current);
       setEditing(ev);
     },
+    // Quick-add: open the add modal pre-filled with this day's date.
+    add: (dayKey) => setAdding(dayKey),
   };
 
   useEffect(() => {
@@ -323,8 +328,108 @@ export default function CalendarPage() {
           }}
         />
       )}
+      {adding && (
+        <QuickAddModal
+          dayKey={adding}
+          classes={classes}
+          onClose={() => setAdding(null)}
+          onCreated={(msg) => {
+            setAdding(null);
+            setToast({ type: 'success', msg });
+            loadEvents();
+          }}
+        />
+      )}
       {toast && <Toast toast={toast} />}
     </div>
+  );
+}
+
+/** Quick-add an assignment to a specific day (date pre-filled from the cell). */
+function QuickAddModal({ dayKey, classes, onClose, onCreated }) {
+  const activeClasses = useMemo(() => classes.filter((c) => !c.archivedAt), [classes]);
+  const [classId, setClassId] = useState(activeClasses[0]?.id || '');
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState(dayKey);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const titleRef = useRef(null);
+
+  useEffect(() => {
+    titleRef.current?.focus();
+  }, []);
+
+  const pretty = new Date(`${dayKey}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!classId || !title.trim()) return;
+    setSaving(true);
+    setErr('');
+    try {
+      await api.post(`/api/classes/${classId}/assignments`, {
+        title: title.trim(),
+        dueDate: new Date(`${date}T00:00:00`).toISOString(),
+      });
+      onCreated('Assignment added');
+    } catch (e2) {
+      setErr(errorMessage(e2, 'Could not add assignment'));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Quick add assignment" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        <p className="text-sm text-muted">
+          Adding to <span className="font-semibold text-ink">{pretty}</span>
+        </p>
+        {err && <ErrorBanner message={err} />}
+        {activeClasses.length === 0 ? (
+          <p className="rounded-xl border border-white/60 bg-white/45 px-4 py-3 text-sm text-muted">
+            Add a class first — assignments belong to a class.
+          </p>
+        ) : (
+          <>
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-ink">Title</span>
+              <input
+                ref={titleRef}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="field"
+                placeholder="e.g. Problem set 4"
+                required
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-ink">Class</span>
+                <select value={classId} onChange={(e) => setClassId(e.target.value)} className="field">
+                  {activeClasses.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-ink">Due date</span>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field" />
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={onClose} className="btn btn-soft">Cancel</button>
+              <button type="submit" disabled={saving || !title.trim()} className="btn btn-primary">
+                {saving ? 'Adding…' : 'Add assignment'}
+              </button>
+            </div>
+          </>
+        )}
+      </form>
+    </Modal>
   );
 }
 
@@ -429,6 +534,26 @@ function MiniMonth({ year, month, name, byDay, todayKey, onClick }) {
   );
 }
 
+/** Subtle "+" that fades in on day-cell hover to quick-add on that date. */
+function DayAddButton({ dayKey, act, className = '' }) {
+  return (
+    <button
+      type="button"
+      className={`day-add-btn absolute z-10 ${className}`}
+      aria-label="Add assignment on this day"
+      title="Add assignment"
+      onClick={(e) => {
+        e.stopPropagation();
+        act.add(dayKey);
+      }}
+    >
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    </button>
+  );
+}
+
 function MonthView({ cursor, byDay, todayKey, act, dnd }) {
   const cells = useMemo(() => {
     const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
@@ -455,8 +580,9 @@ function MonthView({ cursor, byDay, todayKey, act, dnd }) {
               key={i}
               onDragOver={dnd.overDate(key)}
               onDrop={dnd.dropDate(key)}
-              className={`min-h-[96px] border-b border-r border-white/30 p-1.5 transition ${inMonth ? '' : 'bg-white/10'} ${isOver ? 'bg-brand-50/60 shadow-[inset_0_0_0_2px_rgba(63,161,166,0.6)]' : ''}`}
+              className={`day-cell relative min-h-[96px] border-b border-r border-white/30 p-1.5 transition ${inMonth ? '' : 'bg-white/10'} ${isOver ? 'bg-brand-50/60 shadow-[inset_0_0_0_2px_rgba(63,161,166,0.6)]' : ''}`}
             >
+              <DayAddButton dayKey={key} act={act} className="left-1 top-1" />
               <div className={`mb-1 flex justify-end text-xs ${isToday ? 'font-extrabold' : inMonth ? 'text-slate-500' : 'text-slate-300'}`}>
                 <span
                   className={isToday ? 'grid h-5 w-5 place-items-center rounded-full text-white' : ''}
@@ -526,8 +652,9 @@ function WeekView({ cursor, byDay, todayKey, act, dnd }) {
               key={key}
               onDragOver={dnd.overDate(key)}
               onDrop={dnd.dropDate(key)}
-              className={`min-h-[24rem] border-r border-white/30 transition last:border-r-0 ${isOver ? 'bg-brand-50/60 shadow-[inset_0_0_0_2px_rgba(63,161,166,0.6)]' : ''}`}
+              className={`day-cell relative min-h-[24rem] border-r border-white/30 transition last:border-r-0 ${isOver ? 'bg-brand-50/60 shadow-[inset_0_0_0_2px_rgba(63,161,166,0.6)]' : ''}`}
             >
+              <DayAddButton dayKey={key} act={act} className="right-1 top-1" />
               <div className="border-b border-white/40 px-2 py-2 text-center">
                 <div className="text-[11px] font-medium text-muted">{DOW[d.getDay()]}</div>
                 <div
