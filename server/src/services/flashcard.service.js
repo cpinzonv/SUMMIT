@@ -56,6 +56,7 @@ export function toPublicCard(row) {
     latexContent: row.latex_content ?? null,
     sourceType: row.source_type ?? null,
     sourceId: row.source_id ?? null,
+    deckId: row.deck_id ?? null,
     generatedBy: row.generated_by,
     userEdited: row.user_edited,
     tags: row.tags ?? [],
@@ -74,6 +75,65 @@ export function toPublicCard(row) {
         }
       : {}),
   };
+}
+
+/* ---- Decks ---------------------------------------------------------------- */
+
+/** A class's decks with their (non-archived-agnostic) card counts, newest first. */
+export async function listClassDecks(userId, classId) {
+  await getOwnedClass(userId, classId);
+  const { rows } = await query(
+    `SELECT d.id, d.name, d.description, d.source_note_id, d.created_at,
+            count(f.id)::int AS card_count
+       FROM decks d
+       LEFT JOIN flashcards f ON f.deck_id = d.id
+      WHERE d.class_id = $1 AND d.user_id = $2
+      GROUP BY d.id
+      ORDER BY d.created_at DESC`,
+    [classId, userId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    sourceNoteId: r.source_note_id,
+    cardCount: r.card_count,
+    createdAt: r.created_at,
+  }));
+}
+
+/** Cards in a deck (owner-scoped via the deck), with mastery + next-review. */
+export async function listDeckCards(userId, deckId) {
+  const { rows: deckRows } = await query('SELECT id FROM decks WHERE id = $1 AND user_id = $2', [deckId, userId]);
+  if (!deckRows[0]) throw AppError.notFound('Deck not found');
+  const { rows } = await query(
+    `SELECT f.*,
+            m.status AS mastery_status, m.mastery_percent, m.total_reviews,
+            lr.next_review_at
+       FROM flashcards f
+       LEFT JOIN mastery_levels m ON m.card_id = f.id AND m.user_id = f.user_id
+       LEFT JOIN LATERAL (
+         SELECT next_review_at FROM card_reviews r
+          WHERE r.card_id = f.id ORDER BY reviewed_at DESC LIMIT 1
+       ) lr ON true
+      WHERE f.deck_id = $1 AND f.user_id = $2
+      ORDER BY f.created_at DESC`,
+    [deckId, userId],
+  );
+  return rows.map(toPublicCard);
+}
+
+/** Reuse the deck for a note (by source_note_id) or create it. Returns the deck id. */
+async function getOrCreateDeckForNote(userId, classId, note, db = { query }) {
+  const { rows } = await db.query(
+    `INSERT INTO decks (class_id, user_id, name, source_note_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (class_id, source_note_id) WHERE source_note_id IS NOT NULL
+       DO UPDATE SET name = EXCLUDED.name
+     RETURNING id`,
+    [classId, userId, note.title?.trim() || 'Untitled note', note.id],
+  );
+  return rows[0].id;
 }
 
 /** Fetch a card scoped to its owner, or 404. */
@@ -267,16 +327,12 @@ async function gatherContext(userId, classId, sourceType) {
  * Generate flashcards from a class's material and persist them.
  * @returns {Promise<object[]>} the created cards (public shape)
  */
-export async function generateCards(userId, classId, { count = 15, sourceType = null } = {}) {
-  const cls = await getOwnedClass(userId, classId);
-  const context = await gatherContext(userId, classId, sourceType);
-  if (!context) {
-    throw new AppError(400, 'Add notes or transcripts to this class first, then generate cards.', {
-      code: 'no_material',
-    });
-  }
-
-  const n = Math.min(Math.max(count, 1), 40);
+/**
+ * Call Claude for one context block and insert the resulting cards, optionally
+ * filed under a deck and attributed to a source note. Returns the created cards.
+ */
+async function generateIntoDeck(userId, classId, cls, context, count, { deckId = null, sourceId = null, sourceType = null } = {}) {
+  const n = Math.min(Math.max(count, 1), 100);
   const system =
     `You are an expert flashcard author for a student's "${cls.name}" class. Using ONLY the ` +
     `material below, write up to ${n} high-quality cards in a MIX of formats:\n` +
@@ -329,17 +385,56 @@ export async function generateCards(userId, classId, { count = 15, sourceType = 
     const { rows } = await query(
       `INSERT INTO flashcards
          (class_id, user_id, question, answer, explanation, tags, difficulty,
-          source_type, generated_by, card_type, latex_content)
-       VALUES ($1,$2,$3,$4,$5,$6,$7::card_difficulty,$8::flashcard_source,'claude',$9,$10)
+          source_type, source_id, deck_id, generated_by, card_type, latex_content)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::card_difficulty,$8::flashcard_source,$9,$10,'claude',$11,$12)
        RETURNING *`,
       [
         classId, userId, q, answer, c.explanation || null,
         Array.isArray(c.tags) ? c.tags.slice(0, 8) : [],
         ['easy', 'medium', 'hard'].includes(c.difficulty) ? c.difficulty : 'medium',
-        sourceType, type, latex,
+        sourceType, sourceId, deckId, type, latex,
       ],
     );
     created.push(toPublicCard(rows[0]));
   }
   return created;
+}
+
+/**
+ * Generate flashcards for a class. When `notes` (note IDs) are provided, cards
+ * are generated per note and filed under a deck named after each note;
+ * otherwise a single combined generation runs (no deck).
+ */
+export async function generateCards(userId, classId, { count = 15, sourceType = null, notes = null } = {}) {
+  const cls = await getOwnedClass(userId, classId);
+  const noteIds = Array.isArray(notes) ? notes.filter(Boolean) : [];
+
+  if (noteIds.length) {
+    const { rows: noteRows } = await query(
+      `SELECT id, title, content FROM notes
+        WHERE class_id = $1 AND id = ANY($2::uuid[]) AND archived_at IS NULL`,
+      [classId, noteIds],
+    );
+    const usable = noteRows.filter((nte) => htmlToText(nte.content));
+    if (!usable.length) {
+      throw new AppError(400, 'The selected notes have no text to generate from. Add content, then generate.', { code: 'no_material' });
+    }
+    const per = Math.max(1, Math.round(count / usable.length));
+    const all = [];
+    for (const note of usable) {
+      const deckId = await getOrCreateDeckForNote(userId, classId, note);
+      const context = `## Note: ${note.title}\n${htmlToText(note.content)}`.slice(0, MAX_CONTEXT_CHARS);
+      const created = await generateIntoDeck(userId, classId, cls, context, per, {
+        deckId, sourceId: note.id, sourceType: 'note',
+      });
+      all.push(...created);
+    }
+    return all;
+  }
+
+  const context = await gatherContext(userId, classId, sourceType);
+  if (!context) {
+    throw new AppError(400, 'Add notes or transcripts to this class first, then generate cards.', { code: 'no_material' });
+  }
+  return generateIntoDeck(userId, classId, cls, context, count, { sourceType });
 }
