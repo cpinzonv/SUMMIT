@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as authService from '../services/auth.service.js';
+import * as passwordResetService from '../services/passwordReset.service.js';
 
 // Allowed "How'd you hear about us?" values (kept in sync with the client form).
 export const REFERRAL_SOURCES = [
@@ -37,6 +38,15 @@ export const refreshSchema = z.object({
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email().toLowerCase(),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
   newPassword: z.string().min(8, 'New password must be at least 8 characters'),
 });
 
@@ -82,4 +92,21 @@ export async function changePassword(req, res) {
     req.body.newPassword,
   );
   res.json({ ok: true });
+}
+
+/**
+ * Start a password reset. Responds identically whether or not the email is
+ * registered, so it never reveals which addresses have accounts.
+ */
+export async function forgotPassword(req, res) {
+  await passwordResetService.requestPasswordReset(req.body.email);
+  res.json({
+    message: 'If an account exists for that email, a reset link is on its way.',
+  });
+}
+
+/** Complete a password reset using the token from the emailed link. */
+export async function resetPassword(req, res) {
+  await passwordResetService.resetPassword(req.body.token, req.body.newPassword);
+  res.json({ message: 'Password reset successfully. You can now log in.' });
 }

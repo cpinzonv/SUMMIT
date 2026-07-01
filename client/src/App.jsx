@@ -3,6 +3,7 @@ import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminRoute } from './components/AdminRoute';
 import LoginPage from './pages/LoginPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
 import DashboardPage from './pages/DashboardPage';
 import ClassDetailPage from './pages/ClassDetailPage';
@@ -19,6 +20,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route path="/auth/callback" element={<OAuthCallbackPage />} />
 
       <Route

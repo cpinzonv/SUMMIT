@@ -113,6 +113,21 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  /**
+   * Request a password-reset email. Resolves with the server's (generic)
+   * message; never reveals whether the email is registered.
+   */
+  const forgotPassword = useCallback(async (email) => {
+    const { data } = await api.post('/api/auth/forgot-password', { email });
+    return data.message;
+  }, []);
+
+  /** Complete a password reset with the token from the emailed link. */
+  const resetPassword = useCallback(async (token, newPassword) => {
+    const { data } = await api.post('/api/auth/reset-password', { token, newPassword });
+    return data.message;
+  }, []);
+
   const logout = useCallback(async () => {
     const refreshToken = getRefreshToken();
     try {
@@ -152,7 +167,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, preferences, login, completeTwoFactor, loginWithTokens, register, logout, savePreferences, refreshUser }}
+      value={{ user, loading, preferences, login, completeTwoFactor, loginWithTokens, register, forgotPassword, resetPassword, logout, savePreferences, refreshUser }}
     >
       {children}
     </AuthContext.Provider>

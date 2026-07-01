@@ -195,6 +195,27 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 
 -- ----------------------------------------------------------------------------
+-- password_resets — one row per outstanding "forgot password" request. Like
+-- refresh_tokens, we store only the SHA-256 HASH of the reset token (the raw
+-- token lives only in the emailed link), so a DB leak can't be used to reset
+-- accounts. Rows are single-use: deleted on successful reset, and expired rows
+-- (expires_at < now) are pruned opportunistically. email is denormalized so we
+-- can rate-limit / audit even if the user row is later removed.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS password_resets (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  email        TEXT NOT NULL,
+  reset_token  TEXT NOT NULL UNIQUE,               -- SHA-256 of the raw token
+  expires_at   TIMESTAMPTZ NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_resets_user_id ON password_resets(user_id);
+-- Supports the periodic "delete WHERE expires_at < now()" cleanup sweep.
+CREATE INDEX IF NOT EXISTS idx_password_resets_expires_at ON password_resets(expires_at);
+
+-- ----------------------------------------------------------------------------
 -- classes — a course a student is taking in a given term, plus syllabus data.
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS classes (

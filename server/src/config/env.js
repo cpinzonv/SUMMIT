@@ -58,6 +58,21 @@ export const env = {
     model: optional('ELEVENLABS_MODEL', 'eleven_multilingual_v2'),
   },
 
+  // Transactional email (password-reset links). OPTIONAL, same pattern as the
+  // AI/LMS features: without SMTP creds, isEmailConfigured() is false and the
+  // reset flow logs the link to the server console instead of sending it (handy
+  // in dev). Configure SMTP_HOST/PORT/USER/PASS in prod (e.g. Postmark, SES,
+  // Resend SMTP, Gmail app password). `from` is the visible sender address.
+  email: {
+    host: optional('SMTP_HOST', ''),
+    port: Number(optional('SMTP_PORT', '587')),
+    // true for port 465 (implicit TLS); false uses STARTTLS on 587.
+    secure: optional('SMTP_SECURE', 'false') === 'true',
+    user: optional('SMTP_USER', ''),
+    pass: optional('SMTP_PASS', ''),
+    from: optional('EMAIL_FROM', 'Summit <no-reply@summit.app>'),
+  },
+
   // One-time token for the first-admin bootstrap endpoint. Unset = disabled.
   adminSetupToken: optional('SETUP_TOKEN', ''),
 

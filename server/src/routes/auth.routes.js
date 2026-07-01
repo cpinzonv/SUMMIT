@@ -26,6 +26,20 @@ router.post(
   asyncHandler(authController.loginTwoFactor),
 );
 
+// Password reset — both are public (the user can't log in). forgot-password is
+// rate-limited per email inside the service; reset-password validates the token.
+router.post(
+  '/forgot-password',
+  validate(authController.forgotPasswordSchema),
+  asyncHandler(authController.forgotPassword),
+);
+
+router.post(
+  '/reset-password',
+  validate(authController.resetPasswordSchema),
+  asyncHandler(authController.resetPassword),
+);
+
 router.post(
   '/refresh',
   validate(authController.refreshSchema),

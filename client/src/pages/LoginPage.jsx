@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { errorMessage } from '../api/client';
 import { ErrorBanner } from '../components/ui';
 import { MountainMark } from '../components/MountainMark';
 import { SocialAuthButtons } from '../components/SocialAuthButtons';
+import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
+
+// Show the "Forgot password?" link and start a cooldown once a user has fumbled
+// their password this many times, to nudge them toward recovery and slow
+// brute-force guessing from the UI.
+const ATTEMPTS_BEFORE_HELP = 3;
+const COOLDOWN_SECONDS = 15;
 
 export default function LoginPage() {
   const { user, login, completeTwoFactor, register, loading } = useAuth();
@@ -22,9 +29,25 @@ export default function LoginPage() {
   });
   // An OAuth attempt that failed bounces back to /login with a message in state.
   const [error, setError] = useState(location.state?.oauthError || '');
+  // A completed password reset redirects here with a friendly notice.
+  const [notice, setNotice] = useState(location.state?.notice || '');
   const [submitting, setSubmitting] = useState(false);
   const [twoFactor, setTwoFactor] = useState(null); // { challengeToken } when 2FA prompt is shown
   const [code, setCode] = useState('');
+
+  // Failed-login tracking → surfaces the "Forgot password?" affordance and a
+  // short cooldown after repeated misses.
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [cooldown, setCooldown] = useState(0);
+  const [showForgot, setShowForgot] = useState(false);
+  const showForgotLink = failedAttempts >= ATTEMPTS_BEFORE_HELP;
+
+  // Tick the cooldown down to zero once armed.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
 
   // Already authenticated → skip the form.
   if (!loading && user) return <Navigate to={from} replace />;
@@ -35,6 +58,7 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setNotice('');
     setSubmitting(true);
     try {
       if (mode === 'login') {
@@ -44,6 +68,7 @@ export default function LoginPage() {
           setSubmitting(false);
           return; // show the 2FA code step instead of navigating
         }
+        setFailedAttempts(0); // success clears the counter
       } else {
         await register({
           email: form.email,
@@ -58,6 +83,15 @@ export default function LoginPage() {
       navigate(from, { replace: true });
     } catch (err) {
       setError(errorMessage(err, 'Authentication failed'));
+      // Count login failures only (not registration) and arm a cooldown once
+      // the user has crossed the help threshold.
+      if (mode === 'login') {
+        setFailedAttempts((n) => {
+          const next = n + 1;
+          if (next >= ATTEMPTS_BEFORE_HELP) setCooldown(COOLDOWN_SECONDS);
+          return next;
+        });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +175,22 @@ export default function LoginPage() {
           </form>
         ) : (
         <form onSubmit={handleSubmit} className="glass-panel space-y-4 p-6">
+          {notice && (
+            <div className="rounded-2xl border border-teal-500/40 bg-teal-500/10 px-4 py-3 text-sm font-medium text-teal-700 backdrop-blur">
+              {notice}
+            </div>
+          )}
           <ErrorBanner message={error} />
+
+          {mode === 'login' && showForgotLink && (
+            <button
+              type="button"
+              onClick={() => setShowForgot(true)}
+              className="-mt-1 self-start text-sm font-semibold text-brand-600 hover:underline"
+            >
+              Forgot password?
+            </button>
+          )}
 
           <SocialAuthButtons />
 
@@ -177,12 +226,18 @@ export default function LoginPage() {
             </>
           )}
 
-          <button type="submit" disabled={submitting} className="btn btn-primary w-full">
+          <button
+            type="submit"
+            disabled={submitting || (mode === 'login' && cooldown > 0)}
+            className="btn btn-primary w-full"
+          >
             {submitting
               ? 'Please wait…'
-              : mode === 'login'
-                ? 'Sign in'
-                : 'Create account'}
+              : mode === 'login' && cooldown > 0
+                ? `Try again in ${cooldown}s`
+                : mode === 'login'
+                  ? 'Sign in'
+                  : 'Create account'}
           </button>
 
           <p className="text-center text-sm text-muted">
@@ -192,6 +247,7 @@ export default function LoginPage() {
               onClick={() => {
                 setMode((m) => (m === 'login' ? 'register' : 'login'));
                 setError('');
+                setNotice('');
               }}
               className="font-semibold text-brand-600 hover:underline"
             >
@@ -205,6 +261,13 @@ export default function LoginPage() {
           Demo: demo@student.app / password123
         </p>
       </div>
+
+      {showForgot && (
+        <ForgotPasswordModal
+          initialEmail={form.email}
+          onClose={() => setShowForgot(false)}
+        />
+      )}
     </div>
   );
 }
