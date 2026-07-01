@@ -566,9 +566,9 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
 }
 
 /**
- * Custom "What if?" grade-simulator icon: a minimal line-art target (coral +
- * orange concentric rings) with a teal arrow piercing the bullseye toward the
- * upper-right — Summit's warm→cool gradient in clean 2px linework.
+ * Custom "What if?" grade-simulator icon: a minimal line-art calculator — a
+ * coral body with an orange display and a teal keypad — in Summit's warm→cool
+ * palette and clean 2px linework.
  */
 function WhatIfIcon({ className = '' }) {
   return (
@@ -581,12 +581,19 @@ function WhatIfIcon({ className = '' }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="9" stroke="#FF6B6B" />
-      <circle cx="12" cy="12" r="5" stroke="#FFA500" />
-      {/* arrow through the centre, pointing up-right */}
-      <path d="M8.5 15.5 L19 5" stroke="#20B2AA" />
-      <path d="M13.5 5 L19 5 L19 10.5" stroke="#20B2AA" />
-      <circle cx="12" cy="12" r="1.25" fill="#20B2AA" stroke="none" />
+      {/* calculator body */}
+      <rect x="5" y="2.5" width="14" height="19" rx="2.5" stroke="#FF6B6B" />
+      {/* display */}
+      <rect x="8" y="5.5" width="8" height="3.2" rx="1" stroke="#FFA500" />
+      {/* keypad — 3×3, with a coral "equals" key at the corner */}
+      {[13, 16.5].map((cy) =>
+        [9, 12, 15].map((cx) => (
+          <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r="0.9" fill="#20B2AA" stroke="none" />
+        )),
+      )}
+      <circle cx="9" cy="20" r="0.9" fill="#20B2AA" stroke="none" />
+      <circle cx="12" cy="20" r="0.9" fill="#20B2AA" stroke="none" />
+      <circle cx="15" cy="20" r="0.9" fill="#FF6B6B" stroke="none" />
     </svg>
   );
 }
