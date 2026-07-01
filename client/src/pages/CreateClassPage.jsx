@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Spinner, Toggle } from '../components/ui';
+import { TimePicker } from '../components/TimePicker';
 
 const ROW_INPUT =
   'rounded-lg border border-white/70 bg-white/60 px-2.5 py-1.5 text-sm text-ink outline-none backdrop-blur transition focus:border-brand-400 focus:bg-white/85';
@@ -239,13 +240,7 @@ export default function CreateClassPage() {
                 </button>
               );
             })}
-            <input
-              type="time"
-              value={meetingTime}
-              onChange={(e) => setMeetingTime(e.target.value)}
-              className="field ml-1 max-w-[8rem]"
-              aria-label="Meeting time"
-            />
+            <TimePicker value={meetingTime} onChange={setMeetingTime} className="ml-1" />
           </div>
           <p className="mt-1.5 text-xs text-muted">
             Used to auto-generate attendance sessions across the term.

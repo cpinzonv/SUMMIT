@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState, gradeColor, Toggle } from './ui';
+import { TimePicker } from './TimePicker';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const STATUSES = [
@@ -270,10 +271,10 @@ function ScheduleForm({ classId, schedule, onSaved, onCancel }) {
           })}
         </div>
       </div>
-      <label className="block max-w-[12rem]">
+      <div className="block">
         <span className="mb-1 block text-sm font-semibold text-ink">Time (optional)</span>
-        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
-      </label>
+        <TimePicker value={time} onChange={setTime} />
+      </div>
 
       <div className="rounded-2xl border border-white/60 bg-white/40 p-4">
         <div className="flex items-center justify-between gap-4">
