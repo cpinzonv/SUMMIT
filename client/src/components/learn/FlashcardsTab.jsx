@@ -211,8 +211,8 @@ function CardTile({ card, onEdit, onDelete }) {
           <button onClick={onDelete} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-white/50 hover:text-rose-500" aria-label="Delete card">🗑</button>
         </div>
       </div>
-      <button onClick={() => setFlipped((f) => !f)} className="text-left text-sm">
-        <CardFace card={card} revealed={flipped} />
+      <button onClick={() => setFlipped((f) => !f)} className="flex max-h-[300px] w-full flex-col overflow-hidden text-left text-sm">
+        <CardFace card={card} revealed={flipped} preview />
         {!flipped && <p className="mt-1 text-xs text-muted/70">Click to reveal</p>}
       </button>
       {card.tags?.length > 0 && (
@@ -554,11 +554,15 @@ function ReviewSession({ classId, deckId = null, className, onClose }) {
             </div>
             <p className="text-center text-xs font-medium text-muted">Card {idx + 1} of {total}</p>
             <div
-              className="flex min-h-[10rem] items-center justify-center rounded-2xl bg-white/50 p-5 text-center sm:min-h-[8rem]"
+              className="flex max-h-[26rem] min-h-[10rem] overflow-y-auto overscroll-contain rounded-2xl bg-white/50 p-6 text-center sm:min-h-[8rem]"
               onTouchStart={onTouchStart}
               onTouchEnd={onTouchEnd}
             >
-              <CardFace card={card} revealed={revealed} />
+              {/* m-auto centers short cards vertically but collapses to top-aligned
+                  when content overflows, so long answers stay fully scrollable. */}
+              <div className="m-auto w-full">
+                <CardFace card={card} revealed={revealed} />
+              </div>
             </div>
             {!revealed ? (
               <button className="btn btn-primary min-h-[3rem] w-full" onClick={() => setRevealed(true)}>Show answer</button>

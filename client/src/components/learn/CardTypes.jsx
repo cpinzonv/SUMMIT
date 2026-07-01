@@ -51,25 +51,28 @@ export function parseCloze(text) {
   return parts;
 }
 
-function BasicCard({ card, revealed }) {
+function BasicCard({ card, revealed, preview = false }) {
+  const clamp = preview ? 'line-clamp-4' : '';
   return (
-    <div>
-      <p className="text-xl font-semibold text-ink sm:text-lg">{card.question}</p>
+    <div className="w-full break-words hyphens-auto">
+      <p className={`text-xl font-semibold text-ink sm:text-lg ${clamp}`}>{card.question}</p>
       {revealed && (
         <div className="animate-reveal mt-3 border-t border-white/50 pt-3">
-          <p className="text-lg text-ink sm:text-base">{card.answer}</p>
-          {card.explanation && <p className="mt-2 text-sm text-muted">{card.explanation}</p>}
+          <p className={`text-lg text-ink sm:text-base ${clamp}`}>{card.answer}</p>
+          {card.explanation && (
+            <p className={`mt-2 text-sm text-muted ${preview ? 'line-clamp-3' : ''}`}>{card.explanation}</p>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function ClozeCard({ card, revealed }) {
+function ClozeCard({ card, revealed, preview = false }) {
   const parts = useMemo(() => parseCloze(card.question), [card.question]);
   return (
-    <div>
-      <p className="text-xl font-semibold leading-relaxed text-ink sm:text-lg">
+    <div className="w-full break-words hyphens-auto">
+      <p className={`text-xl font-semibold leading-relaxed text-ink sm:text-lg ${preview ? 'line-clamp-4' : ''}`}>
         {parts.map((p, i) =>
           p.isCloze ? (
             <span key={i} className={revealed ? 'rounded bg-teal-400/20 px-1 font-bold text-teal-700' : 'font-bold text-brand-600'}>
@@ -80,15 +83,17 @@ function ClozeCard({ card, revealed }) {
           ),
         )}
       </p>
-      {revealed && card.explanation && <p className="animate-reveal mt-3 border-t border-white/50 pt-3 text-sm text-muted">{card.explanation}</p>}
+      {revealed && card.explanation && (
+        <p className={`animate-reveal mt-3 border-t border-white/50 pt-3 text-sm text-muted ${preview ? 'line-clamp-3' : ''}`}>{card.explanation}</p>
+      )}
     </div>
   );
 }
 
 function MathCard({ card, revealed }) {
   return (
-    <div>
-      <div className="text-lg text-ink">
+    <div className="w-full break-words hyphens-auto">
+      <div className="max-w-full overflow-x-auto text-lg text-ink">
         <BlockMath math={stripDelims(card.question)} />
       </div>
       {revealed && (
@@ -132,12 +137,12 @@ function ImageOcclusionCard({ card, revealed }) {
   );
 }
 
-export function CardFace({ card, revealed }) {
+export function CardFace({ card, revealed, preview = false }) {
   switch (card.cardType) {
-    case 'cloze': return <ClozeCard card={card} revealed={revealed} />;
+    case 'cloze': return <ClozeCard card={card} revealed={revealed} preview={preview} />;
     case 'math': return <MathCard card={card} revealed={revealed} />;
     case 'image': return <ImageOcclusionCard card={card} revealed={revealed} />;
-    default: return <BasicCard card={card} revealed={revealed} />;
+    default: return <BasicCard card={card} revealed={revealed} preview={preview} />;
   }
 }
 
