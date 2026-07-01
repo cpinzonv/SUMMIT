@@ -135,9 +135,9 @@ export function CanvasBadge(props) {
 
 export function EmptyState({ title, children }) {
   return (
-    <div className="rounded-2xl border border-dashed border-purple-soft/50 bg-white/40 px-6 py-12 text-center backdrop-blur">
-      <p className="font-semibold text-ink">{title}</p>
-      {children && <div className="mt-1 text-sm text-muted">{children}</div>}
+    <div className="glass-panel animate-fade-up px-6 py-12 text-center">
+      <p className="font-display text-lg font-bold text-ink">{title}</p>
+      {children && <div className="mx-auto mt-1.5 max-w-sm text-sm text-muted">{children}</div>}
     </div>
   );
 }
