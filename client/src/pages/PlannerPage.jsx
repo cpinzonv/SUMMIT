@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import {
   Spinner,
   ErrorBanner,
@@ -18,7 +19,7 @@ const STATUS_BADGE = {
   completed: 'bg-emerald-100 text-emerald-700',
 };
 const STATUS_LABEL = { planned: 'Planned', in_progress: 'In Progress', completed: 'Completed' };
-const GRAD_GOAL = 120; // typical bachelor's credit requirement
+const DEFAULT_GRAD_GOAL = 120; // fallback when the user hasn't set a requirement
 
 const fmtDay = (d) =>
   d
@@ -30,6 +31,8 @@ const fmtDay = (d) =>
     : null;
 
 export default function PlannerPage() {
+  const { user } = useAuth();
+  const gradGoal = user?.graduationCredits ?? DEFAULT_GRAD_GOAL;
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +110,7 @@ export default function PlannerPage() {
   };
 
   const completed = summary?.completedCredits ?? 0;
-  const pct = Math.min(100, Math.round((completed / GRAD_GOAL) * 100));
+  const pct = Math.min(100, Math.round((completed / gradGoal) * 100));
 
   return (
     <div>
@@ -165,7 +168,7 @@ export default function PlannerPage() {
                 </div>
                 <div className="mt-1 text-3xl font-extrabold">
                   <span className="text-gradient">{completed}</span>
-                  <span className="text-muted"> / {GRAD_GOAL} credits</span>
+                  <span className="text-muted"> / {gradGoal} credits</span>
                 </div>
               </div>
               <div className="text-right text-sm text-muted">

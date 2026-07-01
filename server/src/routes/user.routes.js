@@ -14,6 +14,14 @@ router.patch(
   asyncHandler(user.updatePreferences),
 );
 
+// Graduation requirements (total credits + optional per-semester target).
+router.get('/graduation-settings', asyncHandler(user.getGraduationSettings));
+router.patch(
+  '/graduation-settings',
+  validate(user.graduationSettingsSchema),
+  asyncHandler(user.updateGraduationSettings),
+);
+
 // Two-factor authentication setup/management (the user is authenticated).
 router.post('/2fa/setup', asyncHandler(user.twofaSetup));
 router.post('/2fa/confirm', validate(user.twofaConfirmSchema), asyncHandler(user.twofaConfirm));

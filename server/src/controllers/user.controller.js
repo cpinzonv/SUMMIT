@@ -21,6 +21,30 @@ export async function updatePreferences(req, res) {
   res.json({ preferences });
 }
 
+/* ---- Graduation requirements ------------------------------------------- */
+export const graduationSettingsSchema = z.object({
+  graduationCredits: z
+    .number({ invalid_type_error: 'Must be a positive number' })
+    .int('Must be a whole number')
+    .positive('Must be a positive number')
+    .max(1000, 'That looks too high'),
+  semesterCredits: z
+    .number({ invalid_type_error: 'Must be a positive number' })
+    .int('Must be a whole number')
+    .positive('Must be a positive number')
+    .max(100, 'That looks too high')
+    .nullable()
+    .optional(),
+});
+
+export async function getGraduationSettings(req, res) {
+  res.json(await userService.getGraduationSettings(req.user.id));
+}
+
+export async function updateGraduationSettings(req, res) {
+  res.json(await userService.updateGraduationSettings(req.user.id, req.body));
+}
+
 /* ---- Two-factor authentication ----------------------------------------- */
 export const twofaConfirmSchema = z.object({ code: z.string().min(1, 'Enter the 6-digit code') });
 export const twofaDisableSchema = z.object({ password: z.string().min(1, 'Password is required') });

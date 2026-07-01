@@ -110,6 +110,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_token_expires_at   TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_sync_enabled       BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gcal_synced_at          TIMESTAMPTZ;
 
+-- Graduation requirements: total credits needed to graduate (drives the
+-- Planner's climb-to-graduation progress) and an optional per-semester target.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS graduation_credits      INTEGER NOT NULL DEFAULT 120;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS semester_credits        INTEGER;
+
 DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
 CREATE TRIGGER trg_users_updated_at
   BEFORE UPDATE ON users

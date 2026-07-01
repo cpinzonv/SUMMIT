@@ -5,6 +5,7 @@ import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Toast, Toggle, Modal, Spinner, classGradient, gradeColor } from '../components/ui';
 import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
 import { gcalApi, summarizeGcalSync } from '../lib/gcal';
+import SettingsGraduationSection from '../components/SettingsGraduationSection';
 
 const TABS = [
   { key: 'account', label: 'Account' },
@@ -324,6 +325,7 @@ function PreferencesTab({ prefs, set }) {
         </Row>
       </Section>
 
+      <SettingsGraduationSection />
       <LmsConnections />
       <GoogleCalendarSection />
     </>

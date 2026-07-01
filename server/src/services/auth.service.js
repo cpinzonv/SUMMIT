@@ -22,6 +22,9 @@ function toPublicUser(row) {
     school: row.school,
     timezone: row.timezone,
     preferences: row.preferences ?? {},
+    // Graduation requirements — drive the Planner's climb-to-graduation goal.
+    graduationCredits: row.graduation_credits ?? 120,
+    semesterCredits: row.semester_credits ?? null,
     role: row.role || 'user',
     plan: row.plan || 'free',
     // Feature gating: `premium` is the computed access flag (admin/demo/is_premium/
