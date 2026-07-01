@@ -56,7 +56,7 @@ function BasicCard({ card, revealed }) {
     <div>
       <p className="text-xl font-semibold text-ink sm:text-lg">{card.question}</p>
       {revealed && (
-        <div className="mt-3 border-t border-white/50 pt-3">
+        <div className="animate-reveal mt-3 border-t border-white/50 pt-3">
           <p className="text-lg text-ink sm:text-base">{card.answer}</p>
           {card.explanation && <p className="mt-2 text-sm text-muted">{card.explanation}</p>}
         </div>
@@ -80,7 +80,7 @@ function ClozeCard({ card, revealed }) {
           ),
         )}
       </p>
-      {revealed && card.explanation && <p className="mt-3 border-t border-white/50 pt-3 text-sm text-muted">{card.explanation}</p>}
+      {revealed && card.explanation && <p className="animate-reveal mt-3 border-t border-white/50 pt-3 text-sm text-muted">{card.explanation}</p>}
     </div>
   );
 }
@@ -92,7 +92,7 @@ function MathCard({ card, revealed }) {
         <BlockMath math={stripDelims(card.question)} />
       </div>
       {revealed && (
-        <div className="mt-3 border-t border-white/50 pt-3">
+        <div className="animate-reveal mt-3 border-t border-white/50 pt-3">
           <div className="text-ink"><BlockMath math={stripDelims(card.latexContent || card.answer)} /></div>
           {card.explanation && <p className="mt-2 text-sm text-muted"><RichText text={card.explanation} /></p>}
         </div>

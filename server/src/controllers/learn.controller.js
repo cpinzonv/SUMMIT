@@ -52,8 +52,12 @@ export const updateCardSchema = z
   .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 
 export const generateSchema = z.object({
-  count: z.number().int().min(1).max(40).optional(),
+  count: z.number().int().min(1).max(100).optional(),
   sourceType: sourceType.optional(),
+  // Accepted (and currently ignored server-side) so the client can send the
+  // user's generation options; defaults are used until wired up.
+  style: z.enum(['default', 'occlusion', 'cloze', 'qa']).optional(),
+  notes: z.array(z.string()).optional(),
 });
 
 export const reviewSchema = z.object({
