@@ -535,6 +535,97 @@
     .day-add-btn { opacity: 0.55; }
   }
 
+  /* ---- Flip-clock time picker -------------------------------------------- */
+  .flip-clock {
+    display: inline-block;
+  }
+  .flip-clock-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    perspective: 500px; /* gives the flip some depth */
+  }
+  /* The digit/AM-PM card: glassmorphic, thin coral border, bold monospace. */
+  .flip-card {
+    min-width: 3.25rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 122, 82, 0.35);
+    box-shadow: 0 6px 18px -10px rgba(214, 130, 78, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    font-family: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+    font-size: 2.5rem; /* ~40px, scales down on mobile below */
+    font-weight: 700;
+    line-height: 1.1;
+    color: #1e293b;
+    text-align: center;
+    cursor: default;
+    transform-origin: center;
+    will-change: transform;
+  }
+  .flip-card[role='button'] { cursor: pointer; }
+  .flip-card:focus-visible {
+    outline: 2px solid rgba(255, 122, 82, 0.6);
+    outline-offset: 2px;
+  }
+  /* Plays once each time the value changes — a quick top-down flip. */
+  .flip-anim { animation: flipDigit 180ms ease-out; }
+  @keyframes flipDigit {
+    0% { transform: rotateX(-90deg); opacity: 0.4; }
+    100% { transform: rotateX(0deg); opacity: 1; }
+  }
+  .flip-colon {
+    align-self: center;
+    margin-top: 1.75rem; /* line up with the card centers (past the arrow) */
+    font-family: ui-monospace, monospace;
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #64748b;
+  }
+  /* Up/down arrows — subtle, coral on hover. */
+  .flip-arrow {
+    display: grid;
+    place-items: center;
+    height: 1.5rem;
+    width: 2.25rem;
+    border-radius: 0.6rem;
+    color: rgba(255, 122, 82, 0.55);
+    transition: color 120ms ease, background 120ms ease;
+    cursor: pointer;
+  }
+  .flip-arrow:hover {
+    color: rgba(255, 122, 82, 0.95);
+    background: rgba(255, 122, 82, 0.12);
+  }
+  /* Edit-mode input — matches the card footprint, coral focus ring. */
+  .flip-input {
+    width: 3.25rem;
+    padding: 0.5rem 0.25rem;
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 122, 82, 0.5);
+    font-family: ui-monospace, monospace;
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #1e293b;
+    text-align: center;
+    outline: none;
+  }
+  .flip-input:focus {
+    border-color: rgba(255, 122, 82, 0.85);
+    box-shadow: 0 0 0 3px rgba(255, 122, 82, 0.25);
+  }
+  @media (max-width: 480px) {
+    .flip-card, .flip-input, .flip-colon { font-size: 2rem; }
+    .flip-card, .flip-input { min-width: 2.75rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .flip-anim { animation: none; }
+  }
+
   /* Frosted-glass floating window (draggable note editor). Thin 1px border,
      heavy backdrop blur, soft shadow — sits over the app for multitasking. */
   .note-float {
