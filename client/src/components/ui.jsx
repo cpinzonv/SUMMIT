@@ -133,6 +133,26 @@ export function CanvasBadge(props) {
   return <LmsBadge source="canvas" {...props} />;
 }
 
+/** Priority accents: red = High, orange = Medium, slate = Low. */
+const PRIORITY_BADGES = {
+  high: { label: 'High', cls: 'bg-rose-100 text-rose-600' },
+  medium: { label: 'Medium', cls: 'bg-orange-100 text-orange-600' },
+  low: { label: 'Low', cls: 'bg-slate-200 text-slate-600' },
+};
+
+/** Small inline badge for an assignment's priority. Renders nothing for 'none'. */
+export function PriorityBadge({ priority, className = '' }) {
+  const b = PRIORITY_BADGES[priority];
+  if (!b) return null;
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls} ${className}`}
+    >
+      {b.label}
+    </span>
+  );
+}
+
 export function EmptyState({ title, children }) {
   return (
     <div className="glass-panel animate-fade-up px-6 py-12 text-center">
