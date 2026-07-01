@@ -20,12 +20,33 @@ function fmtDue(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** "Synced from Canvas" pill — marks read-only, Canvas-sourced rows. */
+/**
+ * Subtle "Canvas" source tag — a tiny, understated glass chip (thin border,
+ * muted teal-gray, a small link glyph) that marks Canvas-sourced rows without
+ * drawing attention.
+ */
 function CanvasTag() {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-white/60 bg-white/70 px-2 py-0.5 text-[10px] font-bold text-ink backdrop-blur">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#e2410b' }} />
-      🔗 Synced from Canvas
+    <span
+      className="inline-flex items-center gap-1 rounded border border-slate-300/40 bg-white/30 px-1.5 py-px text-[10px] font-medium leading-none text-slate-400 backdrop-blur-sm"
+      title="Synced from Canvas"
+    >
+      <svg
+        width="8"
+        height="8"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+        <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+        <line x1="8" y1="12" x2="16" y2="12" />
+      </svg>
+      Canvas
     </span>
   );
 }
