@@ -61,6 +61,10 @@ export function toPublicCard(row) {
     userEdited: row.user_edited,
     tags: row.tags ?? [],
     difficulty: row.difficulty,
+    // Study-action state: suspended cards are hidden from study; buried cards
+    // return once bury_until passes.
+    isSuspended: row.is_suspended ?? false,
+    buryUntil: row.bury_until ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     // Present when joined with mastery_levels (list view).
@@ -253,6 +257,32 @@ export async function deleteCard(userId, cardId) {
     userId,
   ]);
   if (!rowCount) throw AppError.notFound('Flashcard not found');
+}
+
+/** Bury a card: hide it from study until `bury_until` (default: +1 day). */
+export async function buryCard(userId, cardId) {
+  const { rows } = await query(
+    `UPDATE flashcards
+        SET bury_until = now() + interval '1 day'
+      WHERE id = $1 AND user_id = $2
+      RETURNING *`,
+    [cardId, userId],
+  );
+  if (!rows[0]) throw AppError.notFound('Flashcard not found');
+  return toPublicCard(rows[0]);
+}
+
+/** Suspend a card: hide it from all study sessions until unsuspended. */
+export async function suspendCard(userId, cardId) {
+  const { rows } = await query(
+    `UPDATE flashcards
+        SET is_suspended = true
+      WHERE id = $1 AND user_id = $2
+      RETURNING *`,
+    [cardId, userId],
+  );
+  if (!rows[0]) throw AppError.notFound('Flashcard not found');
+  return toPublicCard(rows[0]);
 }
 
 // ---- Claude generation -----------------------------------------------------

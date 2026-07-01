@@ -582,6 +582,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_decks_class_note
 ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS deck_id UUID REFERENCES decks(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_flashcards_deck ON flashcards(deck_id);
 
+-- Study actions: suspend hides a card from study until unsuspended; bury hides
+-- it until bury_until passes ("study later", typically +1 day).
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS bury_until   TIMESTAMPTZ;
+
 -- ----------------------------------------------------------------------------
 -- card_reviews — one row per review. The SM-2 state AFTER the review is stored
 -- inline so the latest row per card is the current schedule.

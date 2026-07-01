@@ -116,6 +116,15 @@ export async function removeCard(req, res) {
   res.status(204).end();
 }
 
+// Study actions: bury (return in ~1 day) and suspend (hide until unsuspended).
+export async function buryCard(req, res) {
+  res.json({ card: await flashcards.buryCard(req.user.id, req.params.cardId) });
+}
+
+export async function suspendCard(req, res) {
+  res.json({ card: await flashcards.suspendCard(req.user.id, req.params.cardId) });
+}
+
 export async function due(req, res) {
   const rows = await learn.getDueCards(req.user.id, {
     classId: req.query.classId,
