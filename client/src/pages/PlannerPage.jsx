@@ -11,6 +11,7 @@ import {
   gradeColor,
 } from '../components/ui';
 import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
+import { ScheduleView } from './SchedulePage';
 
 const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
 const STATUS_BADGE = {
@@ -39,6 +40,10 @@ export default function PlannerPage() {
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [params, setParams] = useSearchParams();
+  // Primary view: the class roadmap ("classes") or the weekly timetable ("schedule").
+  const view = params.get('view') === 'schedule' ? 'schedule' : 'classes';
+  const setView = (v) => setParams(v === 'schedule' ? { view: 'schedule' } : {}, { replace: true });
+  // Secondary tab under Classes: planning vs archived courses.
   const tab = params.get('tab') === 'archived' ? 'archived' : 'planning';
   const setTab = (t) => setParams(t === 'archived' ? { tab: 'archived' } : {}, { replace: true });
 
@@ -118,17 +123,41 @@ export default function PlannerPage() {
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Academic plan</h1>
           <p className="mt-1 text-sm text-muted">
-            Chart your climb to graduation, semester by semester
+            {view === 'schedule'
+              ? 'Your weekly class timetable'
+              : 'Chart your climb to graduation, semester by semester'}
           </p>
         </div>
-        {tab === 'planning' && (
+        {view === 'classes' && tab === 'planning' && (
           <button onClick={() => setAdding(true)} className="btn btn-primary">
             + Add course
           </button>
         )}
       </div>
 
-      {/* Tabs */}
+      {/* Primary view toggle: class roadmap vs. weekly schedule */}
+      <div className="mb-6 flex gap-1.5">
+        {[
+          { key: 'classes', label: 'Classes' },
+          { key: 'schedule', label: 'Schedule' },
+        ].map((v) => (
+          <button
+            key={v.key}
+            onClick={() => setView(v.key)}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+              view === v.key ? 'bg-white/75 text-brand-700 shadow-sm' : 'text-muted hover:bg-white/50 hover:text-ink'
+            }`}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'schedule' ? (
+        <ScheduleView />
+      ) : (
+      <>
+      {/* Classes sub-tabs: Planning vs. Archived */}
       <div className="mb-6 flex gap-1.5">
         {[
           { key: 'planning', label: 'Planning' },
@@ -294,6 +323,8 @@ export default function PlannerPage() {
             </div>
           ))}
         </div>
+      )}
+      </>
       )}
 
       {adding && (
