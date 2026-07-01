@@ -816,3 +816,47 @@ CREATE TABLE IF NOT EXISTS premium_whitelist (
   whitelisted_by  UUID REFERENCES users(id) ON DELETE SET NULL,
   whitelisted_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ----------------------------------------------------------------------------
+-- Classic SM-2 (Woźniak 1990) scheduling. The current schedule now lives ON the
+-- flashcards row (card_reviews stays as an append-only history log for stats).
+-- `sm2_interval` is named to avoid the reserved word `interval`.
+-- ----------------------------------------------------------------------------
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS ease_factor      NUMERIC(4,2) NOT NULL DEFAULT 2.5;
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS sm2_interval     INTEGER NOT NULL DEFAULT 0;   -- days until next review
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS repetitions      INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS next_review_date TIMESTAMPTZ;                  -- NULL = brand-new, due now
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS daily_position   INTEGER;                      -- order in today's queue
+CREATE INDEX IF NOT EXISTS idx_flashcards_next_review ON flashcards(user_id, next_review_date);
+
+-- Per-deck study configuration: deadline, daily limits, interleaving.
+CREATE TABLE IF NOT EXISTS deck_settings (
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deck_id                UUID NOT NULL UNIQUE REFERENCES decks(id) ON DELETE CASCADE,
+  user_id                UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deadline               TIMESTAMPTZ,
+  daily_new_card_limit   INTEGER NOT NULL DEFAULT 20,
+  max_cards_per_session  INTEGER NOT NULL DEFAULT 30,
+  interleaving_enabled   BOOLEAN NOT NULL DEFAULT false,
+  user_daily_study_limit INTEGER NOT NULL DEFAULT 100,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_deck_settings_user ON deck_settings(user_id);
+DROP TRIGGER IF EXISTS trg_deck_settings_updated_at ON deck_settings;
+CREATE TRIGGER trg_deck_settings_updated_at
+  BEFORE UPDATE ON deck_settings FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Per-deck, per-day study tracking (drives limits + on-track calculations).
+CREATE TABLE IF NOT EXISTS deck_study_stats (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deck_id             UUID NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+  user_id             UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date                DATE NOT NULL DEFAULT CURRENT_DATE,
+  new_cards_added     INTEGER NOT NULL DEFAULT 0,
+  cards_reviewed      INTEGER NOT NULL DEFAULT 0,
+  total_interactions  INTEGER NOT NULL DEFAULT 0,
+  average_ease_factor NUMERIC(4,2),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_deck_stats_day ON deck_study_stats(deck_id, user_id, date);
