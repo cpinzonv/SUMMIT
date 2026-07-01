@@ -8,6 +8,7 @@ import {
   Modal,
   Toast,
   LmsBadge,
+  PriorityBadge,
   gradeColor,
   classGradient,
   classAccent,
@@ -283,6 +284,7 @@ export default function ClassDetailPage() {
                     <td className="px-5 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-ink">{a.title}</span>
+                        <PriorityBadge priority={a.priority} />
                         {a.externalSource && <LmsBadge source={a.externalSource} />}
                         {overdue && (
                           <span className="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">
