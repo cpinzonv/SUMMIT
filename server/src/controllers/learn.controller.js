@@ -125,16 +125,10 @@ export async function due(req, res) {
     deckId: req.query.deckId,
     limit: req.query.limit,
   });
-  // Reuse the public card shape (rows carry the joined columns), adding the
-  // current scheduling phase so the review UI knows which badges to show.
+  // Public card shape already carries the SM-2 schedule (ease/interval/
+  // repetitions/nextReviewDate); just add the owning class name.
   res.json({
-    cards: rows.map((r) => ({
-      ...flashcards.toPublicCard(r),
-      className: r.class_name,
-      phase: r.phase,
-      learningStep: r.learning_step,
-      lapses: r.lapses,
-    })),
+    cards: rows.map((r) => ({ ...flashcards.toPublicCard(r), className: r.class_name })),
   });
 }
 
