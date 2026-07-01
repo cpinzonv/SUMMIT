@@ -107,6 +107,26 @@ export async function autoArchive(req, res) {
   res.json({ archived, count: archived.length });
 }
 
+// POST /api/classes/:id/link-canvas — { course_id }. Verifies via the Canvas
+// API using the server admin credentials, then stores the link.
+export const linkCanvasSchema = z.object({
+  course_id: z.string().trim().min(1, 'Enter your Canvas course ID').max(200),
+});
+
+export async function linkCanvas(req, res) {
+  const updated = await classService.linkClassCanvas(
+    req.user.id,
+    req.params.id,
+    req.body.course_id,
+  );
+  res.json({ ok: true, linked_canvas_course: updated.linkedLmsCourseId, class: updated });
+}
+
+export async function canvasAssignments(req, res) {
+  const result = await classService.getClassCanvasAssignments(req.user.id, req.params.id);
+  res.json(result);
+}
+
 export async function linkLms(req, res) {
   const updated = await classService.linkClassLms(req.user.id, req.params.id, {
     lms: req.body.lms,

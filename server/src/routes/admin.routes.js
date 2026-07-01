@@ -23,6 +23,9 @@ router.get('/analytics/lms', asyncHandler(admin.lms));
 // Back-compat: the original referral-sources endpoint (now admin-gated).
 router.get('/analytics/referral-sources', asyncHandler(authController.referralAnalytics));
 
+// LMS admin config — store the server-wide Canvas base URL + API key (encrypted).
+router.post('/lms/configure', validate(admin.lmsConfigureSchema), asyncHandler(admin.configureLms));
+
 // Premium whitelist — grant comp access to specific users (close friends/testers).
 router.get('/whitelist', asyncHandler(admin.whitelistList));
 router.post('/whitelist/add', validate(admin.whitelistAddSchema), asyncHandler(admin.whitelistAdd));

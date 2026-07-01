@@ -169,6 +169,28 @@ CREATE TRIGGER trg_lms_connections_updated_at
   BEFORE UPDATE ON lms_connections
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- ----------------------------------------------------------------------------
+-- lms_credentials — SERVER-WIDE admin config for an LMS (currently the Canvas
+-- base URL + API token). One row per LMS (unique), configured once by an admin
+-- in Settings. encrypted_data is AES-256-GCM ciphertext (see utils/crypto.js,
+-- keyed by APP_ENCRYPTION_KEY) holding the JSON { baseUrl, apiKey } — the API
+-- key is never stored in plaintext and is only decrypted at call time.
+-- Distinct from lms_connections above, which are per-USER OAuth tokens.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS lms_credentials (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lms            TEXT NOT NULL UNIQUE,            -- 'canvas' (one config per LMS per server)
+  encrypted_data TEXT NOT NULL,                   -- v1:… AES-256-GCM payload
+  created_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS trg_lms_credentials_updated_at ON lms_credentials;
+CREATE TRIGGER trg_lms_credentials_updated_at
+  BEFORE UPDATE ON lms_credentials
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 -- Backfill: migrate any existing single-connection (Canvas) link from the legacy
 -- users.lms_* columns into lms_connections. Idempotent — safe to re-run.
 INSERT INTO lms_connections

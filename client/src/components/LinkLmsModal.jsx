@@ -20,20 +20,31 @@ export function LinkLmsModal({ cls, onClose, onLinked }) {
 
   const meta = LMS_META[lms] || {};
 
+  const isCanvas = lms === 'canvas';
+
   const submit = async (e) => {
     e.preventDefault();
     setError('');
     setStatus('saving');
     try {
-      const { data } = await api.post(`/api/classes/${cls.id}/link-lms`, {
-        lms,
-        course_id: courseId.trim(),
-      });
+      // Canvas verifies the connection server-side (checks the admin API key and
+      // that the course resolves) before saving. Other platforms just store the
+      // manual link for now.
+      const { data } = isCanvas
+        ? await api.post(`/api/classes/${cls.id}/link-canvas`, { course_id: courseId.trim() })
+        : await api.post(`/api/classes/${cls.id}/link-lms`, { lms, course_id: courseId.trim() });
       setStatus('success');
       // Brief success beat, then hand the updated class back to the caller.
-      setTimeout(() => onLinked?.(data.class), 700);
+      setTimeout(() => onLinked?.(data.class), 800);
     } catch (err) {
-      setError(errorMessage(err, 'Could not link this class. Please try again.'));
+      setError(
+        errorMessage(
+          err,
+          isCanvas
+            ? 'Could not connect to Canvas. Check the course ID and try again.'
+            : 'Could not link this class. Please try again.',
+        ),
+      );
       setStatus('idle');
     }
   };
@@ -49,10 +60,13 @@ export function LinkLmsModal({ cls, onClose, onLinked }) {
             <span aria-hidden>✓</span>
           </div>
           <div>
-            <h4 className="text-base font-bold text-ink">Linked to {lmsLabel(lms)}</h4>
+            <h4 className="text-base font-bold text-ink">
+              {isCanvas ? `Connected to Canvas course ${courseId.trim()}` : `Linked to ${lmsLabel(lms)}`}
+            </h4>
             <p className="mt-1 text-sm text-muted">
               <span className="font-semibold text-ink">{cls.name}</span> is now linked to course{' '}
-              <span className="font-semibold text-ink">{courseId.trim()}</span>.
+              <span className="font-semibold text-ink">{courseId.trim()}</span>
+              {isCanvas ? ' — the connection was verified.' : '.'}
             </p>
           </div>
         </div>
@@ -95,9 +109,16 @@ export function LinkLmsModal({ cls, onClose, onLinked }) {
           <button
             type="submit"
             disabled={status === 'saving' || !courseId.trim()}
-            className="btn btn-primary w-full"
+            className="btn btn-primary flex w-full items-center justify-center gap-2"
           >
-            {status === 'saving' ? 'Connecting…' : 'Connect'}
+            {status === 'saving' && (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+            )}
+            {status === 'saving'
+              ? isCanvas
+                ? 'Verifying with Canvas…'
+                : 'Connecting…'
+              : 'Connect'}
           </button>
         </form>
       )}

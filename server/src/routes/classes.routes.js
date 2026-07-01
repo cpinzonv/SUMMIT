@@ -112,6 +112,21 @@ router.post(
   asyncHandler(classes.linkLms),
 );
 
+// Canvas: verify + link a class to a Canvas course (uses server admin creds).
+router.post(
+  '/:id/link-canvas',
+  validate(classes.classIdParam, 'params'),
+  validate(classes.linkCanvasSchema),
+  asyncHandler(classes.linkCanvas),
+);
+
+// Canvas: fetch raw assignments for a Canvas-linked class (connection check).
+router.get(
+  '/:id/canvas/assignments',
+  validate(classes.classIdParam, 'params'),
+  asyncHandler(classes.canvasAssignments),
+);
+
 // Assignments nested under a class.
 router.post(
   '/:id/assignments',

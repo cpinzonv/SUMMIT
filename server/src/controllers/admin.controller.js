@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as analytics from '../services/admin.service.js';
 import * as gating from '../services/featureGating.service.js';
+import * as lmsCredentials from '../services/lmsCredentials.service.js';
 import { query } from '../config/db.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
@@ -60,6 +61,22 @@ export async function whitelistRemove(req, res) {
 
 export async function whitelistList(req, res) {
   res.json({ whitelisted: await gating.listWhitelist() });
+}
+
+// POST /api/admin/lms/configure — store the server-wide Canvas admin config.
+export const lmsConfigureSchema = z.object({
+  lms: z.literal('canvas'),
+  canvas_base_url: z.string().trim().min(1, 'Canvas base URL is required'),
+  canvas_api_key: z.string().trim().min(1, 'Canvas API key is required'),
+});
+
+export async function configureLms(req, res) {
+  const result = await lmsCredentials.configureLms(req.user.id, {
+    lms: req.body.lms,
+    canvasBaseUrl: req.body.canvas_base_url,
+    canvasApiKey: req.body.canvas_api_key,
+  });
+  res.json(result);
 }
 
 /**

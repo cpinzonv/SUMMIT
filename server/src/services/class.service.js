@@ -1,6 +1,7 @@
 import { query, withTransaction } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { computeClassGrade } from './grade.service.js';
+import { getCanvasClient } from './lmsCredentials.service.js';
 
 /** Map a classes row to the API shape (camelCase, grouped syllabus data). */
 export function toPublicClass(row) {
@@ -160,6 +161,44 @@ export async function linkClassLms(userId, classId, { lms, courseId }) {
     [lms, courseId, classId],
   );
   return toPublicClass(rows[0]);
+}
+
+/**
+ * Link a class to a Canvas course, verifying the connection first. Uses the
+ * server-wide admin Canvas credentials: checks the token works (verifyConnection)
+ * and that the course id actually resolves, then stores the link. Throws a clear
+ * AppError (400/404) if Canvas isn't configured, the key is bad, or the course
+ * isn't found — nothing is written unless verification passes.
+ */
+export async function linkClassCanvas(userId, classId, courseId) {
+  await getOwnedClass(userId, classId); // 404s if not owned
+
+  const client = await getCanvasClient(); // 400 if Canvas isn't configured
+  await client.verifyConnection(); // 400 if the API key is invalid
+  await client.getCourse(courseId); // 404 if the course id doesn't resolve
+
+  const { rows } = await query(
+    `UPDATE classes SET linked_lms = 'canvas', linked_lms_course_id = $1
+       WHERE id = $2 RETURNING *`,
+    [String(courseId), classId],
+  );
+  console.info(`[lms] class ${classId} linked to canvas course ${courseId} by user ${userId}`);
+  return toPublicClass(rows[0]);
+}
+
+/**
+ * Fetch raw assignments from Canvas for a class already linked to a Canvas
+ * course. (Validates the connection works; no data is synced into Summit yet.)
+ */
+export async function getClassCanvasAssignments(userId, classId) {
+  const cls = await getOwnedClass(userId, classId);
+  if (cls.linked_lms !== 'canvas' || !cls.linked_lms_course_id) {
+    throw AppError.badRequest('Link this class to a Canvas course first.');
+  }
+  const client = await getCanvasClient();
+  const assignments = await client.getAssignments(cls.linked_lms_course_id);
+  console.info(`[lms] fetched ${assignments.length} canvas assignments for class ${classId} (user ${userId})`);
+  return { courseId: cls.linked_lms_course_id, count: assignments.length, assignments };
 }
 
 /** List the user's active (non-archived) classes, each with grade + attendance. */
