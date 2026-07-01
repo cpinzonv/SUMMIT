@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Summit">
+  <defs>
+    <linearGradient id="s" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff9a3c"/>
+      <stop offset="0.55" stop-color="#ff6f5e"/>
+      <stop offset="1" stop-color="#ff5e72"/>
+    </linearGradient>
+  </defs>
+  <!-- coral/orange rounded tile -->
+  <rect width="64" height="64" rx="15" fill="url(#s)"/>
+  <!-- clean two-peak Summit silhouette (white), legible down to 16px -->
+  <path d="M10 48 L26 25.5 L33.5 34.5 L43 19 L54 48 Z" fill="#ffffff"/>
+  <!-- subtle snow-line notch on the taller peak -->
+  <path d="M39 25 L43 19 L47 25" fill="none" stroke="#ff6f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+</svg>
