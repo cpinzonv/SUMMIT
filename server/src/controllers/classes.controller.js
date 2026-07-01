@@ -78,7 +78,15 @@ export async function update(req, res) {
 }
 
 export async function list(req, res) {
-  const classes = await classService.listCurrentClasses(req.user.id);
+  // ?include=archived → active + archived (the Planner); ?archived=true →
+  // archived only; default → active only (Dashboard/Schedule).
+  const scope =
+    req.query.include === 'archived' || req.query.include === 'all'
+      ? 'all'
+      : req.query.archived === 'true'
+        ? 'archived'
+        : 'active';
+  const classes = await classService.listCurrentClasses(req.user.id, { scope });
   res.json({ classes });
 }
 

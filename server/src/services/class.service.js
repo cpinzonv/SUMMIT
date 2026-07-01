@@ -144,11 +144,22 @@ export async function updateClass(userId, classId, input) {
   return toPublicClass(rows[0]);
 }
 
-/** List the user's active (non-archived) classes, each with grade + attendance. */
-export async function listCurrentClasses(userId) {
+/**
+ * List the user's classes, each enriched with grade + attendance. `scope`:
+ *   'active'   (default) — archived_at IS NULL (Dashboard/Schedule)
+ *   'archived' — only archived classes
+ *   'all'      — active + archived (the Planner's class dashboard)
+ */
+export async function listCurrentClasses(userId, { scope = 'active' } = {}) {
+  const filter =
+    scope === 'all'
+      ? ''
+      : scope === 'archived'
+        ? 'AND archived_at IS NOT NULL'
+        : 'AND archived_at IS NULL';
   const { rows } = await query(
     `SELECT * FROM classes
-     WHERE user_id = $1 AND archived_at IS NULL
+     WHERE user_id = $1 ${filter}
      ORDER BY created_at DESC`,
     [userId],
   );
