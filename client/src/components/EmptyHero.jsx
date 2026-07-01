@@ -128,3 +128,36 @@ export function NotepadIllustration() {
     </svg>
   );
 }
+
+/** Clock face with a gradient ring + tick marks (Schedule / meeting times). */
+export function ScheduleIllustration() {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs('sched')}
+      <ellipse cx="100" cy="172" rx="52" ry="9" fill="#4FC3DC" opacity="0.12" />
+      {/* clock face */}
+      <g filter="url(#sched-glow)">
+        <circle cx="100" cy="96" r="58" fill="#fff" stroke="rgba(27,76,92,0.12)" />
+        <circle cx="100" cy="96" r="58" fill="none" stroke="url(#sched-grad)" strokeWidth="6" opacity="0.9" />
+        {/* tick marks at 12 / 3 / 6 / 9 */}
+        {[0, 90, 180, 270].map((deg) => (
+          <line
+            key={deg}
+            x1="100"
+            y1="48"
+            x2="100"
+            y2="56"
+            stroke="rgba(27,76,92,0.35)"
+            strokeWidth="3"
+            strokeLinecap="round"
+            transform={`rotate(${deg} 100 96)`}
+          />
+        ))}
+        {/* hands: coral hour (up) + teal minute (to ~4 o'clock) */}
+        <line x1="100" y1="96" x2="100" y2="64" stroke="#FF6B4A" strokeWidth="5" strokeLinecap="round" />
+        <line x1="100" y1="96" x2="126" y2="110" stroke="#4FC3DC" strokeWidth="5" strokeLinecap="round" />
+        <circle cx="100" cy="96" r="5.5" fill="#1B4C5C" />
+      </g>
+    </svg>
+  );
+}

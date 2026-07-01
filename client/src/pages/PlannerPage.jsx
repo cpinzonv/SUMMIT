@@ -138,7 +138,7 @@ export default function PlannerPage() {
       {/* Primary view toggle: class roadmap vs. weekly schedule */}
       <div className="mb-6 flex gap-1.5">
         {[
-          { key: 'classes', label: 'Classes' },
+          { key: 'classes', label: 'Planning' },
           { key: 'schedule', label: 'Schedule' },
         ].map((v) => (
           <button
@@ -157,10 +157,10 @@ export default function PlannerPage() {
         <ScheduleView />
       ) : (
       <>
-      {/* Classes sub-tabs: Planning vs. Archived */}
+      {/* Planning sub-tabs: active vs. archived courses */}
       <div className="mb-6 flex gap-1.5">
         {[
-          { key: 'planning', label: 'Planning' },
+          { key: 'planning', label: 'Active' },
           {
             key: 'archived',
             label: `Archived${archivedItems.length ? ` (${archivedItems.length})` : ''}`,

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import { Spinner, ErrorBanner, EmptyState, classGradient } from '../components/ui';
+import { Spinner, ErrorBanner, classGradient } from '../components/ui';
+import { EmptyHero, ScheduleIllustration } from '../components/EmptyHero';
 
 /**
  * Weekly timetable: time on the Y axis (8am–6pm), weekdays on the X axis. Class
@@ -134,9 +135,13 @@ export function ScheduleView() {
       )}
 
       {blocks.length === 0 ? (
-        <EmptyState title="No meeting times yet">
-          Add meeting days and times to your classes to see them here.
-        </EmptyState>
+        <EmptyHero
+          illustration={<ScheduleIllustration />}
+          headline="No meeting times yet"
+          subheading="Add class meeting days and times to visualize your weekly schedule."
+          ctaLabel="+ Add class times"
+          onCta={() => navigate('/')}
+        />
       ) : (
         <div className="glass-card overflow-x-auto p-4">
           {/* Desktop / wide: time-grid. Hidden on small screens. */}
