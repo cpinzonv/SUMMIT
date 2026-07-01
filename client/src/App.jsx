@@ -11,7 +11,6 @@ import CreateClassPage from './pages/CreateClassPage';
 import PlannerPage from './pages/PlannerPage';
 import LearnPage from './pages/LearnPage';
 import SettingsPage from './pages/SettingsPage';
-import SchedulePage from './pages/SchedulePage';
 import LmsCallbackPage from './pages/LmsCallbackPage';
 import AdminAnalytics from './pages/AdminAnalytics';
 
@@ -31,7 +30,8 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/classes/new" element={<CreateClassPage />} />
         <Route path="/classes/:id" element={<ClassDetailPage />} />
-        <Route path="/schedule" element={<SchedulePage />} />
+        {/* Schedule now lives inside the Planner as the "Schedule" sub-view. */}
+        <Route path="/schedule" element={<Navigate to="/planner?view=schedule" replace />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/planner" element={<PlannerPage />} />
         <Route path="/learn" element={<LearnPage />} />

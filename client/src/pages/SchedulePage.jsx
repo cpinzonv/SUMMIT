@@ -92,7 +92,11 @@ function markConflicts(blocks) {
   return blocks;
 }
 
-export default function SchedulePage() {
+/**
+ * The weekly timetable body (no page heading), so it can be embedded — e.g. as
+ * the Planner's "Schedule" sub-view. All timetable/conflict logic is unchanged.
+ */
+export function ScheduleView() {
   const navigate = useNavigate();
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -122,11 +126,6 @@ export default function SchedulePage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-extrabold tracking-tight">Schedule</h1>
-        <p className="mt-1 text-sm text-muted">Your weekly class timetable</p>
-      </div>
-
       <ErrorBanner message={error} />
       {hasConflicts && (
         <div className="mb-4 rounded-2xl border border-rose-300/50 bg-rose-50/70 px-4 py-2.5 text-sm font-medium text-rose-700">

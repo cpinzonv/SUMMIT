@@ -5,7 +5,6 @@ import { SettingsMenu } from './SettingsMenu';
 // Settings now lives in the top-right gear menu (see SettingsMenu), not the nav.
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
-  { to: '/schedule', label: 'Schedule' },
   { to: '/calendar', label: 'Calendar' },
   { to: '/planner', label: 'Planner' },
   { to: '/learn', label: 'Learn' },
