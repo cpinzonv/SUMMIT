@@ -443,6 +443,11 @@
     }
   }
 
+  /* Flashcard answer reveal: fade in + slide up, 500ms (reuses fade-up). */
+  .animate-reveal {
+    animation: fade-up 0.5s ease-out;
+  }
+
   /* Scale-in pop (floating windows). */
   .animate-pop {
     animation: pop 0.18s ease-out;

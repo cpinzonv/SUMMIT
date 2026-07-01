@@ -38,6 +38,8 @@ const isDue = (card) =>
 
 export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   const [cards, setCards] = useState([]);
+  const [decks, setDecks] = useState([]);
+  const [activeDeck, setActiveDeck] = useState(null); // null = all decks
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reviewing, setReviewing] = useState(false);
@@ -47,8 +49,12 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/api/learn/classes/${classId}/cards`);
-      setCards(data.cards);
+      const [cardsRes, decksRes] = await Promise.all([
+        api.get(`/api/learn/classes/${classId}/cards`),
+        api.get(`/api/learn/classes/${classId}/decks`),
+      ]);
+      setCards(cardsRes.data.cards);
+      setDecks(decksRes.data.decks);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -65,7 +71,10 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
     refreshStats?.();
   }, [load, refreshStats]);
 
-  const dueCount = cards.filter(isDue).length;
+  // Scope the grid + "Study" to the selected deck (null = all cards).
+  const shownCards = activeDeck ? cards.filter((c) => c.deckId === activeDeck) : cards;
+  const dueCount = shownCards.filter(isDue).length;
+  const activeDeckName = activeDeck ? decks.find((d) => d.id === activeDeck)?.name : null;
 
   if (loading) return <Spinner label="Loading cards…" />;
 
@@ -80,17 +89,33 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
             onClick={() => setReviewing(true)}
             title={dueCount === 0 ? 'Nothing due right now' : undefined}
           >
-            Study due ({dueCount})
+            {activeDeckName ? `Study this deck (${dueCount})` : `Study due (${dueCount})`}
           </button>
           <button className="btn btn-soft" onClick={() => setGenerating(true)}>✦ Generate with AI</button>
           <button className="btn btn-soft" onClick={() => setEditorCard(null)}>+ Add card</button>
           <details className="relative">
             <summary className="btn btn-soft cursor-pointer list-none">⬇ Export</summary>
             <div className="glass-panel absolute right-0 z-10 mt-1 w-44 p-1 text-sm">
-              <button className="menu-item" onClick={() => exportDeck(cards, className, 'tsv')}>Anki deck (.txt)</button>
-              <button className="menu-item" onClick={() => exportDeck(cards, className, 'csv')}>CSV spreadsheet</button>
+              <button className="menu-item" onClick={() => exportDeck(shownCards, className, 'tsv')}>Anki deck (.txt)</button>
+              <button className="menu-item" onClick={() => exportDeck(shownCards, className, 'csv')}>CSV spreadsheet</button>
             </div>
           </details>
+        </div>
+      )}
+
+      {/* Deck selector — group cards by source note (Anki-style). */}
+      {decks.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <DeckChip label="All cards" count={cards.length} active={!activeDeck} onClick={() => setActiveDeck(null)} />
+          {decks.map((d) => (
+            <DeckChip
+              key={d.id}
+              label={d.name}
+              count={d.cardCount}
+              active={activeDeck === d.id}
+              onClick={() => setActiveDeck(d.id)}
+            />
+          ))}
         </div>
       )}
 
@@ -102,9 +127,11 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
           onGenerate={() => setGenerating(true)}
           onAddManual={() => setEditorCard(null)}
         />
+      ) : shownCards.length === 0 ? (
+        <div className="glass-card p-8 text-center text-sm text-muted">No cards in this deck yet.</div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {cards.map((card) => (
+          {shownCards.map((card) => (
             <CardTile
               key={card.id}
               card={card}
@@ -142,11 +169,28 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
       {reviewing && (
         <ReviewSession
           classId={classId}
+          deckId={activeDeck}
           className={className}
           onClose={() => { setReviewing(false); afterChange(); }}
         />
       )}
     </div>
+  );
+}
+
+/** Selectable deck pill with a card count. */
+function DeckChip({ label, count, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold transition ${
+        active ? 'bg-white/80 text-brand-700 shadow-sm' : 'bg-white/45 text-muted hover:bg-white/70 hover:text-ink'
+      }`}
+    >
+      <span className="max-w-[12rem] truncate">{label}</span>
+      <span className={`rounded-full px-1.5 text-[11px] ${active ? 'bg-brand-500/15 text-brand-700' : 'bg-black/5 text-muted'}`}>{count}</span>
+    </button>
   );
 }
 
@@ -273,19 +317,58 @@ function CardEditorModal({ classId, card, onClose, onSaved }) {
   );
 }
 
+const CARD_STYLES = [
+  { value: 'default', label: 'Default' },
+  { value: 'occlusion', label: 'Occlusion' },
+  { value: 'cloze', label: 'Cloze' },
+  { value: 'qa', label: 'Q&A' },
+];
+
 function GenerateModal({ classId, onClose, onGenerated }) {
-  const [count, setCount] = useState(15);
-  const [sourceType, setSourceType] = useState('');
+  const [notes, setNotes] = useState(null); // null = loading
+  const [selected, setSelected] = useState(() => new Set());
+  const [style, setStyle] = useState('default');
+  const [quantity, setQuantity] = useState(20);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+
+  // Load this class's notes so the user can pick which to generate from.
+  useEffect(() => {
+    let active = true;
+    api
+      .get(`/api/classes/${classId}/notes`)
+      .then(({ data }) => {
+        if (!active) return;
+        setNotes(data.notes);
+        setSelected(new Set(data.notes.map((n) => n.id))); // all on by default
+      })
+      .catch(() => active && setNotes([]));
+    return () => {
+      active = false;
+    };
+  }, [classId]);
+
+  const toggle = (id) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const allSelected = notes && notes.length > 0 && selected.size === notes.length;
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(notes.map((n) => n.id)));
 
   const go = async () => {
     setBusy(true);
     setErr('');
     try {
       const { data } = await api.post(`/api/learn/classes/${classId}/generate`, {
-        count: Number(count),
-        ...(sourceType ? { sourceType } : {}),
+        // count drives generation today; style + notes are passed for the
+        // backend to honor later (currently ignored server-side).
+        count: Number(quantity),
+        quantity: Number(quantity),
+        style,
+        notes: [...selected],
       });
       onGenerated(data.cards.length);
     } catch (e) {
@@ -296,17 +379,69 @@ function GenerateModal({ classId, onClose, onGenerated }) {
 
   return (
     <Modal title="Generate flashcards with AI" onClose={onClose}>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {err && <ErrorBanner message={err} />}
-        <p className="text-sm text-muted">Claude reads this class's notes & transcripts and writes study cards.</p>
-        <div className="flex gap-3">
-          <Labeled label="How many"><input type="number" min={1} max={40} className="field" value={count} onChange={(e) => setCount(e.target.value)} /></Labeled>
-          <Labeled label="From">
-            <select className="field" value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
-              <option value="">Notes & transcripts</option><option value="note">Notes only</option><option value="transcript">Transcripts only</option>
-            </select>
-          </Labeled>
+        <p className="text-sm text-muted">Choose what to study from and how the cards should look.</p>
+
+        {/* Which notes */}
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-sm font-semibold text-ink">Notes to include</span>
+            {notes?.length > 0 && (
+              <button type="button" onClick={toggleAll} className="text-xs font-semibold text-brand-600 hover:underline">
+                {allSelected ? 'Clear all' : 'Select all'}
+              </button>
+            )}
+          </div>
+          {notes === null ? (
+            <p className="text-sm text-muted">Loading notes…</p>
+          ) : notes.length === 0 ? (
+            <p className="rounded-xl border border-white/60 bg-white/40 px-3 py-2 text-sm text-muted">
+              No notes yet — Claude will use this class's transcripts.
+            </p>
+          ) : (
+            <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-xl border border-white/60 bg-white/40 p-1.5">
+              {notes.map((n) => (
+                <label key={n.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-white/60">
+                  <input type="checkbox" checked={selected.has(n.id)} onChange={() => toggle(n.id)} className="h-4 w-4 accent-brand-500" />
+                  <span className="truncate text-ink">{n.title?.trim() || 'Untitled note'}</span>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Card style */}
+        <Labeled label="Card style">
+          <select className="field" value={style} onChange={(e) => setStyle(e.target.value)}>
+            {CARD_STYLES.map((s) => (
+              <option key={s.value} value={s.value}>{s.label}</option>
+            ))}
+          </select>
+        </Labeled>
+
+        {/* Quantity slider */}
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-sm font-semibold text-ink">Number of cards</span>
+            <span className="text-sm font-bold text-brand-600">{quantity}</span>
+          </div>
+          <input
+            type="range"
+            min={5}
+            max={100}
+            step={5}
+            value={quantity}
+            onChange={(e) => setQuantity(Number(e.target.value))}
+            className="w-full accent-brand-500"
+            aria-label="Number of cards to generate"
+          />
+          <div className="mt-0.5 flex justify-between text-[11px] text-muted">
+            <span>5</span>
+            <span>100</span>
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2 pt-1">
           <button className="btn btn-soft" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" disabled={busy} onClick={go}>{busy ? 'Generating…' : 'Generate'}</button>
@@ -316,7 +451,7 @@ function GenerateModal({ classId, onClose, onGenerated }) {
   );
 }
 
-function ReviewSession({ classId, className, onClose }) {
+function ReviewSession({ classId, deckId = null, className, onClose }) {
   const [queue, setQueue] = useState(null);
   const [idx, setIdx] = useState(0);
   const [revealed, setRevealed] = useState(false);
@@ -333,7 +468,7 @@ function ReviewSession({ classId, className, onClose }) {
     (async () => {
       try {
         const [dueRes, sessRes] = await Promise.all([
-          api.get('/api/learn/due', { params: { classId } }),
+          api.get('/api/learn/due', { params: { classId, ...(deckId ? { deckId } : {}) } }),
           api.post('/api/learn/sessions', { classId }),
         ]);
         setQueue(dueRes.data.cards);

@@ -248,12 +248,16 @@ export async function reviewCard(userId, cardId, { rating, timeSpentSeconds, ses
 // ---- Due queue -------------------------------------------------------------
 
 /** Cards due for review (never-reviewed cards are always due). Optional class filter. */
-export async function getDueCards(userId, { classId = null, limit = 50 } = {}) {
+export async function getDueCards(userId, { classId = null, deckId = null, limit = 50 } = {}) {
   const params = [userId];
   let classFilter = '';
   if (classId) {
     params.push(classId);
     classFilter = `AND f.class_id = $${params.length}`;
+  }
+  if (deckId) {
+    params.push(deckId);
+    classFilter += ` AND f.deck_id = $${params.length}`;
   }
   params.push(Math.min(Math.max(limit, 1), 200));
   const { rows } = await query(

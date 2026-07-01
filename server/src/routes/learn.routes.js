@@ -41,6 +41,18 @@ router.post(
   asyncHandler(learn.generate),
 );
 
+// Decks — list a class's decks, and the cards within a deck.
+router.get(
+  '/classes/:classId/decks',
+  validate(learn.classIdParam, 'params'),
+  asyncHandler(learn.listDecks),
+);
+router.get(
+  '/decks/:deckId/cards',
+  validate(learn.deckIdParam, 'params'),
+  asyncHandler(learn.deckCards),
+);
+
 router.patch(
   '/cards/:cardId',
   validate(learn.cardIdParam, 'params'),

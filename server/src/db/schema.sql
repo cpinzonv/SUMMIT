@@ -561,6 +561,28 @@ CREATE TRIGGER trg_flashcards_updated_at
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ----------------------------------------------------------------------------
+-- decks — Anki-style grouping of a class's flashcards. Typically one deck per
+-- source note (source_note_id), so cards generated from a note land together.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS decks (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id       UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  description    TEXT,
+  source_note_id UUID,                                   -- note this deck came from
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_decks_class ON decks(class_id);
+-- One deck per (class, source note) so re-generating a note reuses its deck.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_decks_class_note
+  ON decks(class_id, source_note_id) WHERE source_note_id IS NOT NULL;
+
+-- Which deck a card belongs to (nullable → "no deck"/legacy cards).
+ALTER TABLE flashcards ADD COLUMN IF NOT EXISTS deck_id UUID REFERENCES decks(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_flashcards_deck ON flashcards(deck_id);
+
+-- ----------------------------------------------------------------------------
 -- card_reviews — one row per review. The SM-2 state AFTER the review is stored
 -- inline so the latest row per card is the current schedule.
 -- ----------------------------------------------------------------------------

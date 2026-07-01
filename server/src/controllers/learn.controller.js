@@ -13,6 +13,7 @@ const sourceType = z.enum(['note', 'file', 'transcript']);
 // ---- validation schemas ----
 export const classIdParam = z.object({ classId: z.string().uuid('Invalid class id') });
 export const cardIdParam = z.object({ cardId: z.string().uuid('Invalid card id') });
+export const deckIdParam = z.object({ deckId: z.string().uuid('Invalid deck id') });
 export const sessionIdParam = z.object({ sessionId: z.string().uuid('Invalid session id') });
 
 export const listQuery = z.object({
@@ -52,8 +53,12 @@ export const updateCardSchema = z
   .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 
 export const generateSchema = z.object({
-  count: z.number().int().min(1).max(40).optional(),
+  count: z.number().int().min(1).max(100).optional(),
   sourceType: sourceType.optional(),
+  // Accepted (and currently ignored server-side) so the client can send the
+  // user's generation options; defaults are used until wired up.
+  style: z.enum(['default', 'occlusion', 'cloze', 'qa']).optional(),
+  notes: z.array(z.string()).optional(),
 });
 
 export const reviewSchema = z.object({
@@ -65,6 +70,7 @@ export const reviewSchema = z.object({
 
 export const dueQuery = z.object({
   classId: z.string().uuid().optional(),
+  deckId: z.string().uuid().optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
 });
 
@@ -92,6 +98,14 @@ export async function generate(req, res) {
   res.status(201).json({ cards });
 }
 
+// Decks — Anki-style grouping of a class's cards (typically one per source note).
+export async function listDecks(req, res) {
+  res.json({ decks: await flashcards.listClassDecks(req.user.id, req.params.classId) });
+}
+export async function deckCards(req, res) {
+  res.json({ cards: await flashcards.listDeckCards(req.user.id, req.params.deckId) });
+}
+
 export async function updateCard(req, res) {
   const card = await flashcards.updateCard(req.user.id, req.params.cardId, req.body);
   res.json({ card });
@@ -105,6 +119,7 @@ export async function removeCard(req, res) {
 export async function due(req, res) {
   const rows = await learn.getDueCards(req.user.id, {
     classId: req.query.classId,
+    deckId: req.query.deckId,
     limit: req.query.limit,
   });
   // Reuse the public card shape (rows carry the joined columns), adding the
