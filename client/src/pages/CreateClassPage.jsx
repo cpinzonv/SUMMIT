@@ -2,11 +2,29 @@ import { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Spinner, Toggle } from '../components/ui';
+import FlipClockPicker from '../components/FlipClockPicker';
 
 const ROW_INPUT =
   'rounded-lg border border-white/70 bg-white/60 px-2.5 py-1.5 text-sm text-ink outline-none backdrop-blur transition focus:border-brand-400 focus:bg-white/85';
 
 const MEETING_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+// "HH:MM" (24h) string ⇄ the flip picker's { hours (1-12), minutes, ampm }.
+function parseTime(str) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(str || '');
+  const h24 = m ? Number(m[1]) : 9;
+  const minutes = m ? Number(m[2]) : 0;
+  return {
+    hours: h24 % 12 === 0 ? 12 : h24 % 12,
+    minutes,
+    ampm: h24 >= 12 ? 'PM' : 'AM',
+  };
+}
+function toTime24({ hours, minutes, ampm }) {
+  let h = hours % 12;
+  if (ampm === 'PM') h += 12;
+  return `${String(h).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
 
 export default function CreateClassPage() {
   const navigate = useNavigate();
@@ -239,16 +257,17 @@ export default function CreateClassPage() {
                 </button>
               );
             })}
-            <input
-              type="time"
-              value={meetingTime}
-              onChange={(e) => setMeetingTime(e.target.value)}
-              className="field ml-1 max-w-[8rem]"
-              aria-label="Meeting time"
+          </div>
+          <div className="mt-3">
+            <span className="mb-1.5 block text-sm font-semibold text-ink">Meeting time</span>
+            <FlipClockPicker
+              value={parseTime(meetingTime || '09:00')}
+              onChange={(t) => setMeetingTime(toTime24(t))}
             />
           </div>
-          <p className="mt-1.5 text-xs text-muted">
-            Used to auto-generate attendance sessions across the term.
+          <p className="mt-2 text-xs text-muted">
+            Used to auto-generate attendance sessions across the term. Use the arrows, or
+            double-click the hours/minutes to type.
           </p>
         </div>
 
