@@ -208,13 +208,13 @@ export default function ClassDetailPage() {
 
       <ErrorBanner message={error} />
 
-      {/* Tabs */}
-      <div className="mt-6 flex gap-1.5">
+      {/* Tabs — scroll horizontally on narrow screens instead of clipping. */}
+      <div className="mt-6 flex gap-1.5 overflow-x-auto pb-1">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+            className={`shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold transition ${
               tab === t.key
                 ? 'bg-white/75 text-brand-700 shadow-sm'
                 : 'text-muted hover:bg-white/50 hover:text-ink'
@@ -263,15 +263,16 @@ export default function ClassDetailPage() {
         ) : (
           <>
           <div className="glass-card overflow-hidden">
-            <table className="w-full text-sm">
+           <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted">
                 <tr className="border-b border-white/50">
-                  <th className="px-5 py-3">Title</th>
-                  <th className="px-5 py-3">Due</th>
-                  <th className="px-5 py-3">Planned</th>
-                  <th className="px-5 py-3">Points</th>
-                  <th className="px-5 py-3">Grade</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
+                  <th className="px-4 py-3">Title</th>
+                  <th className="whitespace-nowrap px-4 py-3">Due</th>
+                  <th className="whitespace-nowrap px-4 py-3">Planned</th>
+                  <th className="whitespace-nowrap px-4 py-3">Points</th>
+                  <th className="whitespace-nowrap px-4 py-3">Grade</th>
+                  <th className="whitespace-nowrap px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/40">
@@ -280,7 +281,7 @@ export default function ClassDetailPage() {
                   const overdue = st.isPastDue && !isDone(a);
                   return (
                   <tr key={a.id} className={`transition hover:bg-white/40 ${overdue ? 'bg-rose-50/70' : ''}`}>
-                    <td className="px-5 py-3">
+                    <td className="min-w-[200px] px-4 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-ink">{a.title}</span>
                         {a.externalSource && <LmsBadge source={a.externalSource} />}
@@ -294,19 +295,19 @@ export default function ClassDetailPage() {
                         {a.category || a.status?.replace('_', ' ')}
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-slate-600">
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {fmtDate(a.dueDate)}
                       {st.hasDue && !isDone(a) && !overdue && (
                         <div className={`text-[11px] font-semibold ${countdownTone(st)}`}>{st.countdownLabel}</div>
                       )}
                     </td>
-                    <td className="px-5 py-3 text-muted">{fmtDate(a.plannedDate)}</td>
-                    <td className="px-5 py-3 text-muted">{a.pointValue ?? '—'}</td>
-                    <td className="px-5 py-3">
+                    <td className="whitespace-nowrap px-4 py-3 text-muted">{fmtDate(a.plannedDate)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted">{a.pointValue ?? '—'}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
                       {a.grade ? (
                         <button
                           onClick={() => setModal({ type: 'grade', assignment: a })}
-                          className="font-semibold text-ink transition hover:text-brand-600"
+                          className="whitespace-nowrap font-semibold text-ink transition hover:text-brand-600"
                           title="Edit grade"
                         >
                           {a.grade.pointsEarned}/{a.grade.pointsPossible}
@@ -320,7 +321,7 @@ export default function ClassDetailPage() {
                         </button>
                       )}
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="whitespace-nowrap px-4 py-3">
                       <div className="flex justify-end gap-3 text-xs font-semibold">
                         <button
                           onClick={() => setModal({ type: 'assignment', assignment: a })}
@@ -341,6 +342,7 @@ export default function ClassDetailPage() {
                 })}
               </tbody>
             </table>
+           </div>
           </div>
           <div className="mt-3 flex justify-end">
             <button
