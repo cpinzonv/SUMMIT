@@ -101,9 +101,9 @@ export async function getOverview(userId) {
       [userId],
     ),
     query(
-      `SELECT COALESCE(SUM(duration_minutes),0)::int AS total_minutes,
-              COALESCE(ROUND(AVG(duration_minutes)),0)::int AS avg_minutes
-         FROM learning_sessions WHERE user_id = $1 AND ended_at IS NOT NULL`,
+      `SELECT COALESCE(SUM(time_spent_seconds), 0)::int AS total_seconds,
+              COUNT(DISTINCT reviewed_at::date)::int AS study_days
+         FROM card_reviews WHERE user_id = $1`,
       [userId],
     ),
   ]);
@@ -134,7 +134,12 @@ export async function getOverview(userId) {
     }
   }
 
-  const totalStudyHours = Math.round((sessRows[0].total_minutes / 60) * 100) / 100;
+  // Study time from the review history (time_spent_seconds per rate). A "session"
+  // is approximated by a study-day, so averageSessionMinutes = minutes per active day.
+  const totalSeconds = sessRows[0].total_seconds;
+  const studyDays = sessRows[0].study_days;
+  const totalStudyHours = Math.round((totalSeconds / 3600) * 100) / 100;
+  const averageSessionMinutes = studyDays ? Math.round(totalSeconds / 60 / studyDays) : 0;
 
   const overview = {
     totalCards: total,
@@ -147,7 +152,7 @@ export async function getOverview(userId) {
     longestStreak,
     averageMasteryPercent: agg.avg_mastery,
     totalStudyHours,
-    averageSessionMinutes: sessRows[0].avg_minutes,
+    averageSessionMinutes,
   };
 
   // Refresh the cached aggregate row (best-effort; not critical to the response).
@@ -176,7 +181,7 @@ export async function getOverview(userId) {
       currentStreak,
       longestStreak,
       totalStudyHours,
-      sessRows[0].avg_minutes,
+      averageSessionMinutes,
       agg.avg_mastery,
     ],
   );

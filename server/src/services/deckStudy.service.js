@@ -85,7 +85,11 @@ async function todayStats(userId, deckId) {
  * Rate a card (1–5) → classic SM-2. Persists the schedule on the flashcards
  * row, appends a card_reviews history entry, and bumps the deck's daily stats.
  */
-export async function rateCard(userId, cardId, rating) {
+export async function rateCard(userId, cardId, rating, timeSpentSeconds = null) {
+  // Clamp against a backgrounded tab inflating study time.
+  const secs = Number.isFinite(timeSpentSeconds)
+    ? Math.max(0, Math.min(3600, Math.round(timeSpentSeconds)))
+    : null;
   return withTransaction(async (client) => {
     const { rows: cardRows } = await client.query(
       'SELECT * FROM flashcards WHERE id = $1 AND user_id = $2 FOR UPDATE',
@@ -112,12 +116,12 @@ export async function rateCard(userId, cardId, rating) {
       [cardId, res.easeFactor, res.interval, res.repetitions, nextDays],
     );
 
-    // History log (keeps existing analytics/streaks working).
+    // History log (drives streaks + study-time analytics).
     await client.query(
       `INSERT INTO card_reviews
-         (user_id, card_id, confidence, correct, interval_days, ease_factor, next_review_at)
-       VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(days => $7))`,
-      [userId, cardId, rating, rating >= 3, res.interval, res.easeFactor, nextDays],
+         (user_id, card_id, time_spent_seconds, confidence, correct, interval_days, ease_factor, next_review_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now() + make_interval(days => $8))`,
+      [userId, cardId, secs, rating, rating >= 3, res.interval, res.easeFactor, nextDays],
     );
 
     // Daily deck stats.

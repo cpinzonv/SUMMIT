@@ -704,8 +704,9 @@ function ReviewSession({ classId, deckId = null, deckName, cards = [], className
     const card = queue[idx];
     if (!card) return;
     setSubmitting(true);
+    const timeSpentSeconds = Math.round((Date.now() - startedAt.current) / 1000);
     try {
-      const { data } = await api.post(`/api/flashcards/${card.id}/rate`, { rating });
+      const { data } = await api.post(`/api/flashcards/${card.id}/rate`, { rating, timeSpentSeconds });
       reviewedCount.current += 1;
       easeSum.current += data.easeFactor ?? 0;
       setInteractions((n) => n + 1);
