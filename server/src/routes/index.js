@@ -16,6 +16,7 @@ import filesRoutes from './files.routes.js';
 import transcriptsRoutes from './transcripts.routes.js';
 import lmsRoutes from './lms.routes.js';
 import learnRoutes from './learn.routes.js';
+import { flashcardsRouter, decksRouter, studyRouter } from './deckStudy.routes.js';
 import featuresRoutes from './features.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -57,6 +58,9 @@ router.use('/google-calendar', gcalRoutes); // Summit → Google Calendar one-wa
 router.use('/files', filesRoutes); // per-class file download/delete by id
 router.use('/transcripts', transcriptsRoutes); // transcript update/delete by id
 router.use('/learn', learnRoutes); // Learn tab — flashcards + spaced repetition
+router.use('/flashcards', flashcardsRouter); // classic SM-2: rate a card 1–5
+router.use('/decks', decksRouter); // deck settings, deadlines, study plan
+router.use('/study', studyRouter); // today's study queue (respects limits)
 router.use('/features', featuresRoutes); // feature gating status (lock icons + paywall)
 
 export default router;
