@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Spinner, Toggle } from '../components/ui';
@@ -39,6 +39,27 @@ export default function CreateClassPage() {
 
   const update = (field) => (e) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  // This create form only writes to the backend on "Create class" (a draft
+  // isn't auto-saved). Warn before a refresh / tab close / hard navigation
+  // discards unsaved input, so half-filled forms aren't silently lost.
+  const isDirty =
+    !saving &&
+    (Object.values(form).some((v) => v.trim?.()) ||
+      meetingDays.length > 0 ||
+      meetingTime.trim() !== '' ||
+      assignments.length > 0 ||
+      grading.length > 0);
+
+  useEffect(() => {
+    if (!isDirty) return undefined;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = ''; // triggers the browser's "Leave site? Unsaved changes" prompt
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [isDirty]);
 
   const toggleDay = (d) =>
     setMeetingDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
