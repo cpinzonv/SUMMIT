@@ -64,6 +64,17 @@ router.delete(
   validate(learn.cardIdParam, 'params'),
   asyncHandler(learn.removeCard),
 );
+// Study actions: bury (return in ~1 day) / suspend (hide until unsuspended).
+router.post(
+  '/cards/:cardId/bury',
+  validate(learn.cardIdParam, 'params'),
+  asyncHandler(learn.buryCard),
+);
+router.post(
+  '/cards/:cardId/suspend',
+  validate(learn.cardIdParam, 'params'),
+  asyncHandler(learn.suspendCard),
+);
 router.post(
   '/cards/:cardId/review',
   validate(learn.cardIdParam, 'params'),

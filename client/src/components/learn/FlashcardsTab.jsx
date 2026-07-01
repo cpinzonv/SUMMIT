@@ -34,7 +34,9 @@ function PhaseBadge({ phase, step }) {
 }
 
 const isDue = (card) =>
-  !card.mastery || !card.mastery.nextReviewAt || new Date(card.mastery.nextReviewAt) <= new Date();
+  !card.isSuspended &&
+  (!card.buryUntil || new Date(card.buryUntil) <= new Date()) &&
+  (!card.mastery || !card.mastery.nextReviewAt || new Date(card.mastery.nextReviewAt) <= new Date());
 
 export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   const [cards, setCards] = useState([]);
@@ -171,6 +173,7 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
           classId={classId}
           deckId={activeDeck}
           className={className}
+          flash={flash}
           onClose={() => { setReviewing(false); afterChange(); }}
         />
       )}
@@ -451,13 +454,69 @@ function GenerateModal({ classId, onClose, onGenerated }) {
   );
 }
 
-function ReviewSession({ classId, deckId = null, className, onClose }) {
+/** Top-right 3-dot menu on the study card: delete / bury / suspend. */
+function StudyCardMenu({ onAction, disabled }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const pick = (type) => { setOpen(false); onAction(type); };
+
+  const items = [
+    { type: 'delete', label: 'Delete', cls: 'text-rose-600 hover:bg-rose-50', icon: <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /> },
+    { type: 'bury', label: 'Bury', cls: 'text-orange-600 hover:bg-orange-50', icon: <path d="M12 5v13M6 12l6 6 6-6" /> },
+    { type: 'suspend', label: 'Suspend', cls: 'text-amber-500 hover:bg-amber-50', icon: <><line x1="9" y1="5" x2="9" y2="19" /><line x1="15" y1="5" x2="15" y2="19" /></> },
+  ];
+
+  return (
+    <div ref={ref} className="absolute right-4 top-4 z-10">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Card options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="grid h-8 w-8 place-items-center rounded-full bg-white/60 text-muted backdrop-blur transition hover:bg-white/90 hover:text-ink disabled:opacity-40"
+      >
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+          <circle cx="12" cy="5" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="12" cy="19" r="1.6" />
+        </svg>
+      </button>
+      {open && (
+        <div role="menu" className="glass-panel absolute right-0 mt-1 w-40 overflow-hidden p-1 text-sm shadow-lg">
+          {items.map((it) => (
+            <button
+              key={it.type}
+              role="menuitem"
+              onClick={() => pick(it.type)}
+              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left font-semibold transition ${it.cls}`}
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                {it.icon}
+              </svg>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
   const [queue, setQueue] = useState(null);
   const [idx, setIdx] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [err, setErr] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [exiting, setExiting] = useState(false); // fades the card out on a menu action
   const startedAt = useRef(Date.now());
   const confidences = useRef([]);
   const ran = useRef(false);
@@ -510,6 +569,30 @@ function ReviewSession({ classId, deckId = null, className, onClose }) {
     }
   };
 
+  // Delete / bury / suspend the current card, then fade it out and advance.
+  const ACTION_TOAST = { delete: 'Card deleted', bury: 'Card buried', suspend: 'Card suspended' };
+  const doAction = async (type) => {
+    const c = queue?.[idx];
+    if (!c || exiting) return;
+    setExiting(true);
+    try {
+      if (type === 'delete') await api.delete(`/api/learn/cards/${c.id}`);
+      else await api.post(`/api/learn/cards/${c.id}/${type}`); // bury | suspend
+    } catch (e) {
+      setErr(errorMessage(e));
+      setExiting(false);
+      return;
+    }
+    flash?.(ACTION_TOAST[type]);
+    // Let the fade play, then drop the card — idx now points at the next card.
+    setTimeout(() => {
+      setRevealed(false);
+      setQueue((q) => q.filter((_, i) => i !== idx));
+      startedAt.current = Date.now();
+      setExiting(false);
+    }, 180);
+  };
+
   const finish = async () => { await endSession(); onClose(); };
 
   // Swipe left/right toggles the answer (mobile affordance).
@@ -553,15 +636,20 @@ function ReviewSession({ classId, deckId = null, className, onClose }) {
               <div className="h-full rounded-full transition-all" style={{ width: `${(idx / total) * 100}%`, background: 'var(--grad-teal-purple)' }} />
             </div>
             <p className="text-center text-xs font-medium text-muted">Card {idx + 1} of {total}</p>
-            <div
-              className="flex max-h-[26rem] min-h-[10rem] overflow-y-auto overscroll-contain rounded-2xl bg-white/50 p-6 text-center sm:min-h-[8rem]"
-              onTouchStart={onTouchStart}
-              onTouchEnd={onTouchEnd}
-            >
-              {/* m-auto centers short cards vertically but collapses to top-aligned
-                  when content overflows, so long answers stay fully scrollable. */}
-              <div className="m-auto w-full">
-                <CardFace card={card} revealed={revealed} />
+            <div className="relative">
+              {/* 3-dot study actions — lives outside the scroll container so its
+                  dropdown isn't clipped. */}
+              <StudyCardMenu onAction={doAction} disabled={submitting || exiting} />
+              <div
+                className={`flex max-h-[26rem] min-h-[10rem] overflow-y-auto overscroll-contain rounded-2xl bg-white/50 p-6 text-center transition-opacity duration-150 sm:min-h-[8rem] ${exiting ? 'opacity-0' : 'opacity-100'}`}
+                onTouchStart={onTouchStart}
+                onTouchEnd={onTouchEnd}
+              >
+                {/* m-auto centers short cards vertically but collapses to top-aligned
+                    when content overflows, so long answers stay fully scrollable. */}
+                <div className="m-auto w-full">
+                  <CardFace card={card} revealed={revealed} />
+                </div>
               </div>
             </div>
             {!revealed ? (

@@ -272,6 +272,8 @@ export async function getDueCards(userId, { classId = null, deckId = null, limit
           WHERE r.card_id = f.id ORDER BY reviewed_at DESC LIMIT 1
        ) lr ON true
       WHERE f.user_id = $1 ${classFilter}
+        AND f.is_suspended = false
+        AND (f.bury_until IS NULL OR f.bury_until <= now())
         AND (lr.next_review_at IS NULL OR lr.next_review_at <= now())
       ORDER BY lr.next_review_at ASC NULLS FIRST
       LIMIT $${params.length}`,
