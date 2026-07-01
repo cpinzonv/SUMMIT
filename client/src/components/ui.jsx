@@ -1,7 +1,13 @@
 /** Small shared presentational helpers used across pages. */
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
-/** Centered modal dialog. Closes on backdrop click or Escape. */
+/**
+ * Centered modal dialog. Closes on backdrop click or Escape. Rendered through a
+ * portal to document.body so it fills the viewport even when opened from inside
+ * an element with a `backdrop-filter`/`transform` (e.g. a glass class card),
+ * which would otherwise become the containing block for `position: fixed`.
+ */
 export function Modal({ title, onClose, children, wide = false }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -9,7 +15,7 @@ export function Modal({ title, onClose, children, wide = false }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4 backdrop-blur-sm"
       onClick={onClose}
@@ -30,7 +36,8 @@ export function Modal({ title, onClose, children, wide = false }) {
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -67,6 +67,16 @@ export const updateClassSchema = z
 
 export const classIdParam = z.object({ id: z.string().uuid('Invalid class id') });
 
+// Supported LMS platforms for the per-class manual link (matches LMS_PROVIDER_KEYS).
+const LMS_PLATFORMS = ['canvas', 'blackboard', 'google_classroom', 'brightspace', 'moodle', 'sakai'];
+
+// POST /api/classes/:id/link-lms — { lms, course_id }. course_id is the LMS's
+// own course id or URL, entered by the student.
+export const linkLmsSchema = z.object({
+  lms: z.enum(LMS_PLATFORMS),
+  course_id: z.string().trim().min(1, 'Enter the course ID or URL from your LMS').max(500),
+});
+
 export async function create(req, res) {
   const created = await classService.createClass(req.user.id, req.body);
   res.status(201).json({ class: created });
@@ -95,4 +105,12 @@ export async function remove(req, res) {
 export async function autoArchive(req, res) {
   const archived = await classService.autoArchiveExpired(req.user.id);
   res.json({ archived, count: archived.length });
+}
+
+export async function linkLms(req, res) {
+  const updated = await classService.linkClassLms(req.user.id, req.params.id, {
+    lms: req.body.lms,
+    courseId: req.body.course_id,
+  });
+  res.json({ class: updated });
 }

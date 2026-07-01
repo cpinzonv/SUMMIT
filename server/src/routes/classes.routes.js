@@ -104,6 +104,14 @@ router.put(
   asyncHandler(classes.archive),
 );
 
+// Manually link a class to one LMS platform + that platform's course id/URL.
+router.post(
+  '/:id/link-lms',
+  validate(classes.classIdParam, 'params'),
+  validate(classes.linkLmsSchema),
+  asyncHandler(classes.linkLms),
+);
+
 // Assignments nested under a class.
 router.post(
   '/:id/assignments',

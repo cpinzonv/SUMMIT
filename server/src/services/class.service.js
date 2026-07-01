@@ -18,6 +18,9 @@ export function toPublicClass(row) {
     meetingTime: row.meeting_time ?? null,
     attendanceGraded: row.attendance_graded ?? false,
     attendanceWeight: row.attendance_weight == null ? null : Number(row.attendance_weight),
+    // Per-class manual LMS link (see linkClassLms). null when not linked.
+    linkedLms: row.linked_lms ?? null,
+    linkedLmsCourseId: row.linked_lms_course_id ?? null,
     archivedAt: row.archived_at,
     plannerCourseId: row.plan_item_id ?? null, // planner course this class was created from
     syllabus: {
@@ -140,6 +143,21 @@ export async function updateClass(userId, classId, input) {
   const { rows } = await query(
     `UPDATE classes SET ${sets.join(', ')} WHERE id = $${i} RETURNING *`,
     values,
+  );
+  return toPublicClass(rows[0]);
+}
+
+/**
+ * Manually link a class the user owns to one LMS platform + that platform's
+ * course id/URL (set from the class card's "Link to LMS" action). This is the
+ * lightweight, user-entered mapping — the OAuth/sync pipeline is separate.
+ */
+export async function linkClassLms(userId, classId, { lms, courseId }) {
+  await getOwnedClass(userId, classId); // 404s if not owned
+  const { rows } = await query(
+    `UPDATE classes SET linked_lms = $1, linked_lms_course_id = $2
+       WHERE id = $3 RETURNING *`,
+    [lms, courseId, classId],
   );
   return toPublicClass(rows[0]);
 }

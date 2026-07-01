@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Toast, Toggle, Modal, Spinner, classGradient, gradeColor } from '../components/ui';
-import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
+import { beginConnect } from '../lib/lms';
 import { gcalApi, summarizeGcalSync } from '../lib/gcal';
 
 const TABS = [
@@ -324,7 +324,7 @@ function PreferencesTab({ prefs, set }) {
         </Row>
       </Section>
 
-      <LmsConnections />
+      {/* LMS is now linked per-class from each class card's "Link to LMS" menu. */}
       <GoogleCalendarSection />
     </>
   );
@@ -441,175 +441,6 @@ function GoogleCalendarSection() {
       )}
       <Toast toast={toast} />
     </Section>
-  );
-}
-
-/* ---- LMS integrations (Canvas, Blackboard, Google Classroom, …) -------- */
-function LmsConnections() {
-  const [providers, setProviders] = useState(null);
-  const [toast, setToast] = useState(null);
-
-  const reload = () => lmsStatusAll().then(setProviders).catch(() => setProviders([]));
-
-  useEffect(() => {
-    reload();
-  }, []);
-
-  useEffect(() => {
-    if (!toast) return undefined;
-    const t = setTimeout(() => setToast(null), 3500);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  // Which provider, if any, just completed an OAuth redirect (?lms=<provider>).
-  const justConnected = new URLSearchParams(window.location.search).get('lms');
-
-  return (
-    <Section
-      title="Connected learning platforms"
-      description="Link an LMS to auto-import assignments, due dates, and grades."
-    >
-      <div className="space-y-4">
-        {providers === null ? (
-          <p className="text-sm text-muted">Loading…</p>
-        ) : (
-          providers.map((p) => (
-            <ProviderCard
-              key={p.provider}
-              status={p}
-              justConnected={justConnected === p.provider}
-              onChange={reload}
-              setToast={setToast}
-            />
-          ))
-        )}
-      </div>
-      <Toast toast={toast} />
-    </Section>
-  );
-}
-
-function ProviderCard({ status, justConnected, onChange, setToast }) {
-  const { refreshUser } = useAuth();
-  const provider = status.provider;
-  const meta = LMS_META[provider] || {};
-  const label = status.label || meta.label || provider;
-  const api = lmsApi(provider);
-
-  const [domain, setDomain] = useState(status.domain || '');
-  const [busy, setBusy] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState('');
-
-  const lastSynced = status.syncedAt
-    ? new Date(status.syncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-    : 'never';
-
-  const connect = async () => {
-    setError('');
-    const d = domain.trim();
-    if (status.needsDomain && !d) {
-      return setError(`Enter your school's ${meta.domainLabel || `${label} address`}.`);
-    }
-    setBusy(true);
-    try {
-      const { url, state } = await api.authUrl(status.needsDomain ? d : undefined);
-      beginConnect({ provider, url, state, domain: status.needsDomain ? d : null });
-    } catch (err) {
-      setError(errorMessage(err, `Could not start the ${label} connection.`));
-      setBusy(false);
-    }
-  };
-
-  const disconnect = async () => {
-    if (!confirm(`Disconnect ${label}? Synced assignments stay, but syncing stops.`)) return;
-    setBusy(true);
-    try {
-      await api.disconnect();
-      await refreshUser();
-      setToast({ type: 'success', msg: `${label} disconnected` });
-      onChange();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const sync = async () => {
-    setSyncing(true);
-    setToast({ loading: true, msg: `Syncing assignments from ${label}…` });
-    try {
-      const result = await api.sync();
-      await refreshUser();
-      setToast({ type: 'success', msg: summarizeSync(result, provider) });
-      onChange();
-    } catch (err) {
-      setToast({ type: 'error', msg: errorMessage(err, `${label} sync failed`) });
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  return (
-    <div className="rounded-2xl border border-white/50 bg-white/40 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: meta.accent || '#6366f1' }} />
-        <h3 className="font-display text-base font-bold text-ink">{label}</h3>
-        {status.connected && (
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-600">
-            ✓ Connected
-          </span>
-        )}
-      </div>
-
-      {error && <div className="mb-3"><ErrorBanner message={error} /></div>}
-      {justConnected && status.connected && (
-        <div className="mb-3 rounded-2xl border border-emerald-300/50 bg-emerald-50/70 px-4 py-2.5 text-sm font-medium text-emerald-700">
-          {label} connected — you can now sync assignments.
-        </div>
-      )}
-
-      {!status.available ? (
-        <p className="text-sm text-muted">
-          {label} isn’t configured on this server yet. An admin needs to set the {label} client
-          credentials and the token encryption key.
-        </p>
-      ) : status.connected ? (
-        <div className="space-y-2">
-          {status.domain && <p className="text-xs text-muted">{status.domain}</p>}
-          <p className="text-xs text-muted">Last synced: {lastSynced}</p>
-          <div className="flex gap-2 pt-1">
-            <button onClick={sync} disabled={syncing} className="btn btn-primary">
-              {syncing ? 'Syncing…' : 'Sync now'}
-            </button>
-            <button onClick={disconnect} disabled={busy} className="btn btn-soft">
-              Disconnect
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {status.needsDomain && (
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-ink">{meta.domainLabel || `${label} web address`}</span>
-              <input
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                placeholder={meta.domainPlaceholder || ''}
-                className="field"
-                autoCapitalize="none"
-                autoCorrect="off"
-              />
-              {meta.domainHelp && <span className="mt-1 block text-xs text-muted">{meta.domainHelp}</span>}
-            </label>
-          )}
-          <button onClick={connect} disabled={busy} className="btn btn-primary">
-            {busy ? 'Redirecting…' : `Connect ${label}`}
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 

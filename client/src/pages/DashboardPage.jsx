@@ -15,6 +15,7 @@ import {
 } from '../components/ui';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
+import { ClassMenu, LmsBadge } from '../components/ClassMenu';
 
 export default function DashboardPage() {
   const { preferences, refreshUser } = useAuth();
@@ -34,6 +35,11 @@ export default function DashboardPage() {
   // in a ref makes both React StrictMode mounts await the SAME work, so the
   // class list is loaded AFTER both run and each notice fires exactly once.
   const initPromise = useRef(null);
+
+  // Replace one class in the list in place (e.g. after linking it to an LMS),
+  // so its card badge updates without a full refetch.
+  const updateClass = (updated) =>
+    setClasses((list) => list.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
 
   useEffect(() => {
     let active = true;
@@ -222,13 +228,13 @@ export default function DashboardPage() {
           ) : preferences.defaultDashboardView === 'list' ? (
             <div className="glass-card divide-y divide-white/40 overflow-hidden">
               {classes.map((cls, i) => (
-                <ClassRow key={cls.id} cls={cls} index={i} />
+                <ClassRow key={cls.id} cls={cls} index={i} onUpdated={updateClass} />
               ))}
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2">
               {classes.map((cls, i) => (
-                <ClassCard key={cls.id} cls={cls} index={i} />
+                <ClassCard key={cls.id} cls={cls} index={i} onUpdated={updateClass} />
               ))}
             </div>
           )}
@@ -297,7 +303,7 @@ function Stat({ label, value, valueClass = 'text-ink', gradient = false, glow })
   );
 }
 
-function ClassCard({ cls, index }) {
+function ClassCard({ cls, index, onUpdated }) {
   const grade = cls.currentGrade;
   const glass = isGlassColor(cls.color);
   const gradient = classGradient(cls, index);
@@ -306,6 +312,10 @@ function ClassCard({ cls, index }) {
       to={`/classes/${cls.id}`}
       className="glass-card group relative overflow-hidden p-6 transition hover:-translate-y-1 hover:shadow-[0_22px_48px_-18px_rgba(180,120,80,0.45)]"
     >
+      {/* Top-right 3-dot actions menu (badge lives in the info column below). */}
+      <div className="absolute right-3 top-3 z-20">
+        <ClassMenu cls={cls} onUpdated={onUpdated} />
+      </div>
       {/* Colored classes get a gradient wash + glowing blobs; "Glass / Clear"
           classes stay frosted (no color fill) with just the subtle accent bar. */}
       {!glass && (
@@ -332,9 +342,12 @@ function ClassCard({ cls, index }) {
           />
           <div>
             <h3 className="font-bold text-ink">{cls.name}</h3>
-            <p className="text-xs text-muted">
-              {[cls.code, cls.term].filter(Boolean).join(' · ') || 'No code'}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs text-muted">
+                {[cls.code, cls.term].filter(Boolean).join(' · ') || 'No code'}
+              </p>
+              <LmsBadge lms={cls.linkedLms} />
+            </div>
             {cls.overdueCount > 0 && (
               <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">
                 {cls.overdueCount} overdue
@@ -370,7 +383,7 @@ function ClassCard({ cls, index }) {
   );
 }
 
-function ClassRow({ cls, index }) {
+function ClassRow({ cls, index, onUpdated }) {
   const grade = cls.currentGrade;
   return (
     <Link
@@ -381,6 +394,7 @@ function ClassRow({ cls, index }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold text-ink">{cls.name}</span>
+          <LmsBadge lms={cls.linkedLms} className="shrink-0" />
           {cls.overdueCount > 0 && (
             <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">
               {cls.overdueCount} overdue
@@ -405,6 +419,7 @@ function ClassRow({ cls, index }) {
         </div>
         <div className="text-[10px] font-medium text-muted">{grade?.letter || 'No grades'}</div>
       </div>
+      <ClassMenu cls={cls} onUpdated={onUpdated} />
     </Link>
   );
 }

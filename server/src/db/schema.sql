@@ -241,6 +241,12 @@ ALTER TABLE classes ADD COLUMN IF NOT EXISTS attendance_weight NUMERIC(5,2);
 -- external_source = 'canvas' | 'blackboard' | ...; external_course_id is that LMS's course id.
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS external_source    TEXT;
 ALTER TABLE classes ADD COLUMN IF NOT EXISTS external_course_id TEXT;
+-- Per-class manual LMS link (set from the class card's "Link to LMS" action).
+-- This is a lightweight, user-entered mapping (platform + that platform's course
+-- id/URL); the OAuth-based auto-sync above (external_source/*) is populated
+-- separately. linked_lms = 'canvas' | 'blackboard' | 'google_classroom' | …
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS linked_lms            TEXT;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS linked_lms_course_id  TEXT;
 -- One Summit class per (user, source, external course).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_classes_external
   ON classes(user_id, external_source, external_course_id)
