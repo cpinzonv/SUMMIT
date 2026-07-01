@@ -27,6 +27,9 @@ const DEFAULT_PREFS = {
   defaultCalendarView: 'month',
   notificationsEnabled: false,
   showArchived: false,
+  // Academic planning — program length (years) + credits/year for the roadmap.
+  academicDuration: 4,
+  creditsPerYear: 30,
 };
 
 /** Apply visual preferences (theme/font/compact) to the document root. */

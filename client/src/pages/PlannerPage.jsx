@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import {
   Spinner,
   ErrorBanner,
@@ -18,7 +19,10 @@ const STATUS_BADGE = {
   completed: 'bg-emerald-100 text-emerald-700',
 };
 const STATUS_LABEL = { planned: 'Planned', in_progress: 'In Progress', completed: 'Completed' };
-const GRAD_GOAL = 120; // typical bachelor's credit requirement
+// Graduation credit goal is derived from the user's Academic Planning prefs
+// (program duration × credits/year); this is just the fallback when unset.
+const DEFAULT_DURATION = 4;
+const DEFAULT_CREDITS_PER_YEAR = 30; // 4 × 30 = 120, a typical bachelor's
 
 const fmtDay = (d) =>
   d
@@ -30,6 +34,7 @@ const fmtDay = (d) =>
     : null;
 
 export default function PlannerPage() {
+  const { preferences } = useAuth();
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -107,7 +112,10 @@ export default function PlannerPage() {
   };
 
   const completed = summary?.completedCredits ?? 0;
-  const pct = Math.min(100, Math.round((completed / GRAD_GOAL) * 100));
+  // Roadmap length + graduation goal come from the user's Academic Planning prefs.
+  const duration = Number(preferences?.academicDuration) || DEFAULT_DURATION;
+  const gradGoal = duration * (Number(preferences?.creditsPerYear) || DEFAULT_CREDITS_PER_YEAR);
+  const pct = Math.min(100, Math.round((completed / gradGoal) * 100));
 
   return (
     <div>
@@ -165,7 +173,7 @@ export default function PlannerPage() {
                 </div>
                 <div className="mt-1 text-3xl font-extrabold">
                   <span className="text-gradient">{completed}</span>
-                  <span className="text-muted"> / {GRAD_GOAL} credits</span>
+                  <span className="text-muted"> / {gradGoal} credits</span>
                 </div>
               </div>
               <div className="text-right text-sm text-muted">
@@ -184,7 +192,7 @@ export default function PlannerPage() {
           {terms.length === 0 ? (
             <EmptyHero
               illustration={<CalendarIllustration />}
-              headline="Build your 4-year roadmap"
+              headline={`Build your ${duration}-year roadmap`}
               subheading="Add courses by semester. When a term starts, they move to your Dashboard automatically."
               ctaLabel="Add your first course"
               onCta={() => setAdding(true)}

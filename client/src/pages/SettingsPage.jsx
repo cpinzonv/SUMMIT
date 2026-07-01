@@ -324,9 +324,87 @@ function PreferencesTab({ prefs, set }) {
         </Row>
       </Section>
 
+      <AcademicPlanningSection prefs={prefs} set={set} />
+
       <LmsConnections />
       <GoogleCalendarSection />
     </>
+  );
+}
+
+/* ---- Academic planning (Planner roadmap length) ------------------------ */
+const DURATION_PRESETS = [3, 4, 5, 6];
+
+function AcademicPlanningSection({ prefs, set }) {
+  const duration = Number(prefs.academicDuration ?? 4);
+  const creditsPerYear = Number(prefs.creditsPerYear ?? 30);
+  // "Custom" mode when the saved value isn't one of the presets (or the user
+  // toggles it on to type an arbitrary length).
+  const [customMode, setCustomMode] = useState(!DURATION_PRESETS.includes(duration));
+  const gradGoal = duration * creditsPerYear;
+
+  const setDuration = (v) => {
+    const n = Math.min(12, Math.max(1, Math.round(Number(v) || 0)));
+    if (n) set('academicDuration')(n);
+  };
+  const setCredits = (v) => {
+    const n = Math.min(60, Math.max(1, Math.round(Number(v) || 0)));
+    if (n) set('creditsPerYear')(n);
+  };
+
+  return (
+    <Section
+      title="Academic planning"
+      description="Sets how long your Planner roadmap spans and your graduation-credit goal."
+    >
+      <Row label="Program duration" hint="How many years your program runs.">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <RadioGroup
+            name="Program duration"
+            value={customMode ? 'custom' : duration}
+            onChange={(v) => {
+              if (v === 'custom') {
+                setCustomMode(true);
+              } else {
+                setCustomMode(false);
+                setDuration(v);
+              }
+            }}
+            options={[
+              ...DURATION_PRESETS.map((y) => ({ value: y, label: `${y} yr` })),
+              { value: 'custom', label: 'Custom' },
+            ]}
+          />
+          {customMode && (
+            <input
+              type="number"
+              min="1"
+              max="12"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              className="field !w-20"
+              aria-label="Custom program duration in years"
+            />
+          )}
+        </div>
+      </Row>
+      <Row label="Credits per year" hint="Used to compute your graduation goal.">
+        <input
+          type="number"
+          min="1"
+          max="60"
+          value={creditsPerYear}
+          onChange={(e) => setCredits(e.target.value)}
+          className="field !w-24"
+          aria-label="Credits per year"
+        />
+      </Row>
+      <Row label="Graduation goal" hint="Program duration × credits per year.">
+        <span className="text-sm font-semibold text-ink">
+          {duration}-year plan · {gradGoal} credits
+        </span>
+      </Row>
+    </Section>
   );
 }
 

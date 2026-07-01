@@ -12,6 +12,10 @@ export const preferencesSchema = z
     defaultCalendarView: z.enum(['month', 'week', 'day']).optional(),
     notificationsEnabled: z.boolean().optional(),
     showArchived: z.boolean().optional(),
+    // Academic planning: program length (years) + credits per year drive the
+    // Planner's roadmap headline and graduation-credit goal.
+    academicDuration: z.number().int().min(1).max(12).optional(),
+    creditsPerYear: z.number().int().min(1).max(60).optional(),
   })
   .strict()
   .refine((o) => Object.keys(o).length > 0, { message: 'No preferences provided' });
