@@ -5,6 +5,7 @@ import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Toast, Toggle, Modal, Spinner, classGradient, gradeColor } from '../components/ui';
 import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
 import { gcalApi, summarizeGcalSync } from '../lib/gcal';
+import { EmptyHero, LmsIllustration } from '../components/EmptyHero';
 
 const TABS = [
   { key: 'account', label: 'Account' },
@@ -448,6 +449,7 @@ function GoogleCalendarSection() {
 function LmsConnections() {
   const [providers, setProviders] = useState(null);
   const [toast, setToast] = useState(null);
+  const [showAll, setShowAll] = useState(false);
 
   const reload = () => lmsStatusAll().then(setProviders).catch(() => setProviders([]));
 
@@ -464,16 +466,29 @@ function LmsConnections() {
   // Which provider, if any, just completed an OAuth redirect (?lms=<provider>).
   const justConnected = new URLSearchParams(window.location.search).get('lms');
 
+  // Show the glass empty state until the student has linked a platform (unless
+  // they've asked to see the options, or just finished an OAuth redirect).
+  const noneConnected = Array.isArray(providers) && providers.every((p) => !p.connected);
+  const showEmpty = noneConnected && !showAll && !justConnected;
+
   return (
     <Section
       title="Connected learning platforms"
       description="Link an LMS to auto-import assignments, due dates, and grades."
     >
-      <div className="space-y-4">
-        {providers === null ? (
-          <p className="text-sm text-muted">Loading…</p>
-        ) : (
-          providers.map((p) => (
+      {providers === null ? (
+        <p className="text-sm text-muted">Loading…</p>
+      ) : showEmpty ? (
+        <EmptyHero
+          illustration={<LmsIllustration />}
+          headline="Connect your course platform"
+          subheading="Set up Canvas, Blackboard, or Google Classroom to auto-import your assignments, due dates, and grades."
+          ctaLabel="Add connection"
+          onCta={() => setShowAll(true)}
+        />
+      ) : (
+        <div className="space-y-4">
+          {providers.map((p) => (
             <ProviderCard
               key={p.provider}
               status={p}
@@ -481,9 +496,9 @@ function LmsConnections() {
               onChange={reload}
               setToast={setToast}
             />
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
       <Toast toast={toast} />
     </Section>
   );

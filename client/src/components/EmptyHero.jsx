@@ -103,6 +103,59 @@ export function AssignmentsIllustration() {
   );
 }
 
+/**
+ * A single Lucide-style line icon (24×24 path space) centered in a soft
+ * coral→teal gradient glass badge. Used by the LMS / meeting-times empty states
+ * for a cleaner, more minimal look than the full illustrations above.
+ */
+function IconBadge({ id, children }) {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs(id)}
+      <ellipse cx="100" cy="170" rx="50" ry="9" fill="#4FC3DC" opacity="0.12" />
+      {/* frosted gradient disc */}
+      <circle cx="100" cy="94" r="54" fill={`url(#${id}-grad)`} filter={`url(#${id}-glow)`} />
+      <circle cx="100" cy="94" r="54" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
+      {/* Lucide icon: 24u glyph scaled ×2.9 and centered on the disc */}
+      <g
+        transform="translate(65.2 59.2) scale(2.9)"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {children}
+      </g>
+    </svg>
+  );
+}
+
+/** Lucide "link-2" — connect a course platform (LMS). */
+export function LmsIllustration() {
+  return (
+    <IconBadge id="lms">
+      <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+      <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+    </IconBadge>
+  );
+}
+
+/** Lucide "calendar-clock" — schedule / meeting times. */
+export function MeetingTimesIllustration() {
+  return (
+    <IconBadge id="meet">
+      <path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5" />
+      <path d="M16 2v4" />
+      <path d="M8 2v4" />
+      <path d="M3 10h5" />
+      <circle cx="16" cy="16" r="6" />
+      <path d="M16 14v2l1.5 1" />
+    </IconBadge>
+  );
+}
+
 /** Notepad with ruled lines + a pencil (Notes). */
 export function NotepadIllustration() {
   return (
