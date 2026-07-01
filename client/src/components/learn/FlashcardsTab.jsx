@@ -5,6 +5,7 @@ import { Labeled } from './common';
 import { exportDeck } from '../../lib/learnExport';
 import { CardFace, CardTypeBadge } from './CardTypes';
 import { LearnEmptyState } from './LearnEmptyState';
+import DeckCompletionAnimation from './DeckCompletionAnimation';
 
 /** Flashcards: manage a class's cards and run spaced-repetition review sessions. */
 
@@ -608,6 +609,20 @@ function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
   const done = queue !== null && idx >= total;
   const card = queue && idx < total ? queue[idx] : null;
 
+  // Re-study the same set from the top (a light "cram again" pass).
+  const reviewAgain = () => { setIdx(0); setRevealed(false); startedAt.current = Date.now(); };
+
+  // Finished a non-empty queue → celebratory completion overlay.
+  if (done && total > 0) {
+    return (
+      <DeckCompletionAnimation
+        count={confidences.current.length || total}
+        onReviewAgain={reviewAgain}
+        onBackToDecks={finish}
+      />
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex flex-col items-center bg-slate-900/40 p-3 backdrop-blur-sm sm:p-4">
       <div className="glass-panel mt-6 flex w-full max-w-xl flex-col gap-4 p-5 sm:mt-10 sm:p-6">
@@ -623,13 +638,6 @@ function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
           <Spinner label="Building your study queue…" />
         ) : total === 0 ? (
           <EmptyState title="Nothing due right now">Great work — check back later!</EmptyState>
-        ) : done ? (
-          <div className="py-8 text-center">
-            <p className="text-4xl">🎉</p>
-            <p className="mt-2 text-lg font-bold text-ink">Session complete!</p>
-            <p className="text-sm text-muted">You reviewed {total} card{total === 1 ? '' : 's'}.</p>
-            <button onClick={finish} className="btn btn-primary mt-4">Done</button>
-          </div>
         ) : (
           <>
             <div className="h-1.5 overflow-hidden rounded-full bg-white/40">

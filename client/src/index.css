@@ -463,6 +463,42 @@
     }
   }
 
+  /* Deck-completion celebration: card fade-in, a popping summit badge with a
+     glow pulse, and accent particles floating up. Bounce easing per spec. */
+  .deck-complete-card { animation: deckFadeIn 0.25s ease-out both; }
+  .deck-complete-icon { animation: deckPop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  .deck-complete-glow { animation: summitGlow 1.6s ease-out both; }
+  .deck-complete-text { animation: deckFadeIn 0.4s ease-out 0.25s both; }
+  .deck-particle { animation: floatUp 2s ease-out infinite; }
+
+  @keyframes deckFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes deckPop {
+    0%   { transform: scale(0); }
+    60%  { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+  @keyframes summitGlow {
+    0%   { opacity: 0; transform: scale(0.8); box-shadow: 0 0 0 rgba(255, 107, 53, 0); }
+    50%  { opacity: 1; box-shadow: 0 0 40px rgba(255, 107, 53, 0.6); }
+    100% { opacity: 1; transform: scale(1); box-shadow: 0 0 20px rgba(255, 107, 53, 0.3); }
+  }
+  @keyframes floatUp {
+    0%   { opacity: 0.6; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-60px); }
+  }
+
+  /* Respect reduced-motion: show the card, skip the motion + particles. */
+  @media (prefers-reduced-motion: reduce) {
+    .deck-complete-card,
+    .deck-complete-icon,
+    .deck-complete-glow,
+    .deck-complete-text { animation: none; }
+    .deck-particle { display: none; }
+  }
+
   /* Frosted-glass floating window (draggable note editor). Thin 1px border,
      heavy backdrop blur, soft shadow — sits over the app for multitasking. */
   .note-float {
