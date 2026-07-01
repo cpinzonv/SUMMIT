@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
+import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { useAuth } from '../context/AuthContext';
 import {
   Spinner,
   ErrorBanner,
-  EmptyState,
   classGradient,
   isGlassColor,
   Modal,
@@ -593,12 +593,17 @@ function EventRow({ ev, act, dnd }) {
 
 /* ---- Day --------------------------------------------------------------- */
 function DayView({ cursor, byDay, act }) {
+  const navigate = useNavigate();
   const evs = sortEvents(byDay.get(localKey(cursor)) || []);
   if (evs.length === 0) {
     return (
-      <EmptyState title="Nothing scheduled">
-        No assignments due or planned on this day.
-      </EmptyState>
+      <EmptyHero
+        illustration={<CalendarIllustration />}
+        headline="Nothing scheduled"
+        subheading="Enjoy your free time. Add assignments or events when you need them."
+        ctaLabel="+ Add assignment"
+        onCta={() => navigate('/')}
+      />
     );
   }
   return (
