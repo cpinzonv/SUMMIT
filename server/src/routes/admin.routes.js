@@ -5,6 +5,9 @@ import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as admin from '../controllers/admin.controller.js';
 import * as authController from '../controllers/auth.controller.js';
+import { execFile } from 'child_process';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
 const router = Router();
 
@@ -27,5 +30,17 @@ router.get('/analytics/referral-sources', asyncHandler(authController.referralAn
 router.get('/whitelist', asyncHandler(admin.whitelistList));
 router.post('/whitelist/add', validate(admin.whitelistAddSchema), asyncHandler(admin.whitelistAdd));
 router.post('/whitelist/remove', validate(admin.whitelistRemoveSchema), asyncHandler(admin.whitelistRemove));
+
+// TEMPORARY — run db:seed on the production server. Remove once admin account is created.
+router.post('/seed-database', asyncHandler(async (req, res) => {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const seedScript = path.resolve(__dirname, '../../db/seed.js');
+    execFile('node', [seedScript], { cwd: path.resolve(__dirname, '../..') }, (err, stdout, stderr) => {
+          if (err) {
+                  return res.status(500).json({ ok: false, error: err.message, stderr });
+          }
+          res.json({ ok: true, stdout, stderr });
+    });
+}));
 
 export default router;
