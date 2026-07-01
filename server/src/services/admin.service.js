@@ -111,3 +111,28 @@ export async function lms() {
   for (const r of rows) out[LMS_LABELS[r.provider] || r.provider] = r.count;
   return out;
 }
+
+/** Recent Canvas sync-run logs (newest first) for the admin monitoring view. */
+export async function syncLogs(limit = 100) {
+  const { rows } = await query(
+    `SELECT l.id, l.kind, l.status, l.synced_count, l.error_count, l.duration_ms,
+            l.message, l.triggered_by, l.created_at, c.name AS class_name
+       FROM canvas_sync_logs l
+       LEFT JOIN classes c ON c.id = l.class_id
+      ORDER BY l.created_at DESC
+      LIMIT $1`,
+    [Math.min(Number(limit) || 100, 500)],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    status: r.status,
+    syncedCount: r.synced_count,
+    errorCount: r.error_count,
+    durationMs: r.duration_ms,
+    message: r.message,
+    triggeredBy: r.triggered_by,
+    className: r.class_name,
+    createdAt: r.created_at,
+  }));
+}

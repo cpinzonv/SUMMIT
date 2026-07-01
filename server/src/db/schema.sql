@@ -191,6 +191,67 @@ CREATE TRIGGER trg_lms_credentials_updated_at
   BEFORE UPDATE ON lms_credentials
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- ----------------------------------------------------------------------------
+-- canvas_synced_assignments — Canvas assignments pulled INTO Summit (read-only
+-- mirror). One row per Canvas assignment (unique canvas_assignment_id). Data
+-- flows one way: Canvas → Summit. archived_at is set when an assignment that we
+-- previously synced disappears from Canvas (soft delete, never hard-deleted).
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS canvas_synced_assignments (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id             UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  canvas_course_id     TEXT NOT NULL,
+  canvas_assignment_id TEXT NOT NULL UNIQUE,      -- Canvas's assignment id
+  name                 TEXT NOT NULL,
+  description          TEXT,
+  due_date             TIMESTAMPTZ,
+  points_possible      NUMERIC(8,2),
+  archived_at          TIMESTAMPTZ,               -- set if removed from Canvas
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  synced_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_canvas_assignments_class ON canvas_synced_assignments(class_id, synced_at);
+CREATE INDEX IF NOT EXISTS idx_canvas_assignments_due   ON canvas_synced_assignments(class_id, due_date);
+
+-- ----------------------------------------------------------------------------
+-- canvas_synced_grades — per-assignment Canvas grades/submissions for a user,
+-- mirrored into Summit. Unique per (user, canvas assignment) so re-syncs upsert.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS canvas_synced_grades (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id              UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  class_id             UUID REFERENCES classes(id) ON DELETE CASCADE,
+  canvas_assignment_id TEXT NOT NULL,
+  score                NUMERIC(8,2),
+  max_points           NUMERIC(8,2),
+  submitted_at         TIMESTAMPTZ,
+  synced_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, canvas_assignment_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_canvas_grades_user ON canvas_synced_grades(user_id, synced_at);
+
+-- ----------------------------------------------------------------------------
+-- canvas_sync_logs — one row per sync run (per class), for monitoring: how many
+-- items synced, error count, duration, status, and any message.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS canvas_sync_logs (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  class_id      UUID REFERENCES classes(id) ON DELETE SET NULL,
+  kind          TEXT NOT NULL,                    -- 'assignments' | 'grades'
+  status        TEXT NOT NULL,                    -- 'success' | 'error'
+  synced_count  INTEGER NOT NULL DEFAULT 0,
+  error_count   INTEGER NOT NULL DEFAULT 0,
+  duration_ms   INTEGER,
+  message       TEXT,
+  triggered_by  TEXT NOT NULL DEFAULT 'manual',   -- 'manual' | 'cron'
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_canvas_sync_logs_created ON canvas_sync_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_canvas_sync_logs_class   ON canvas_sync_logs(class_id, created_at DESC);
+
 -- Backfill: migrate any existing single-connection (Canvas) link from the legacy
 -- users.lms_* columns into lms_connections. Idempotent — safe to re-run.
 INSERT INTO lms_connections

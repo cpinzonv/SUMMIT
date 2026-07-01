@@ -120,7 +120,14 @@ router.post(
   asyncHandler(classes.linkCanvas),
 );
 
-// Canvas: fetch raw assignments for a Canvas-linked class (connection check).
+// Canvas: trigger a manual sync of assignments (+ the caller's grades) into Summit.
+router.post(
+  '/:id/canvas/sync',
+  validate(classes.classIdParam, 'params'),
+  asyncHandler(classes.canvasSyncNow),
+);
+
+// Canvas: read the synced assignments for a class (from Summit's DB, not live).
 router.get(
   '/:id/canvas/assignments',
   validate(classes.classIdParam, 'params'),

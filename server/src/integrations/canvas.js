@@ -137,6 +137,22 @@ export class CanvasClient {
   }
 
   /**
+   * Per-assignment submissions for a course, scoped to one student (defaults to
+   * `self` — the token owner, which is what a personal access token can read).
+   * Includes the assignment so we can capture points_possible. Each item:
+   * { assignment_id, score, submitted_at, assignment: { points_possible, name } }.
+   */
+  async getSubmissions(courseId, studentId = 'self') {
+    if (!courseId) throw AppError.badRequest('A Canvas course ID is required.');
+    const q = new URLSearchParams({ per_page: '100', 'include[]': 'assignment' });
+    q.append('student_ids[]', String(studentId));
+    const subs = await this.#get(
+      `/api/v1/courses/${encodeURIComponent(courseId)}/students/submissions?${q}`,
+    );
+    return Array.isArray(subs) ? subs : [];
+  }
+
+  /**
    * Grades for a course via enrollments. Optionally scope to one Canvas user id;
    * returns each enrollment's `grades` block (current/final score + grade).
    */

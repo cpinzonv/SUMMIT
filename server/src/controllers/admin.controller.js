@@ -63,6 +63,11 @@ export async function whitelistList(req, res) {
   res.json({ whitelisted: await gating.listWhitelist() });
 }
 
+// GET /api/admin/sync-logs — recent Canvas sync runs (monitoring).
+export async function syncLogs(req, res) {
+  res.json({ logs: await analytics.syncLogs(req.query.limit) });
+}
+
 // POST /api/admin/lms/configure — store the server-wide Canvas admin config.
 export const lmsConfigureSchema = z.object({
   lms: z.literal('canvas'),

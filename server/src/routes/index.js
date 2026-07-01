@@ -27,6 +27,7 @@ const router = Router();
 router.use('/auth', authRoutes);
 router.use('/auth', oauthRoutes); // OAuth social login (Google/Apple/GitHub)
 router.use('/user', userRoutes);
+router.use('/users', userRoutes); // plural alias (e.g. GET /api/users/:userId/canvas/grades)
 router.use('/admin', adminRoutes);
 
 // LMS integrations. The same provider-scoped router is mounted once per provider

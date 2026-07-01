@@ -19,4 +19,11 @@ router.post('/2fa/setup', asyncHandler(user.twofaSetup));
 router.post('/2fa/confirm', validate(user.twofaConfirmSchema), asyncHandler(user.twofaConfirm));
 router.post('/2fa/disable', validate(user.twofaDisableSchema), asyncHandler(user.twofaDisable));
 
+// Synced Canvas grades for a user (self, or any user if the caller is an admin).
+router.get(
+  '/:userId/canvas/grades',
+  validate(user.userIdParam, 'params'),
+  asyncHandler(user.canvasGrades),
+);
+
 export default router;

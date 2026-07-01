@@ -26,6 +26,9 @@ router.get('/analytics/referral-sources', asyncHandler(authController.referralAn
 // LMS admin config — store the server-wide Canvas base URL + API key (encrypted).
 router.post('/lms/configure', validate(admin.lmsConfigureSchema), asyncHandler(admin.configureLms));
 
+// Canvas sync-run history (monitoring).
+router.get('/sync-logs', asyncHandler(admin.syncLogs));
+
 // Premium whitelist — grant comp access to specific users (close friends/testers).
 router.get('/whitelist', asyncHandler(admin.whitelistList));
 router.post('/whitelist/add', validate(admin.whitelistAddSchema), asyncHandler(admin.whitelistAdd));

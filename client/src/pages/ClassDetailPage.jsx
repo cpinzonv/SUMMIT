@@ -22,6 +22,7 @@ import { ClassNotes } from '../components/ClassNotes';
 import { ClassAttendance } from '../components/ClassAttendance';
 import { ClassFiles } from '../components/ClassFiles';
 import NotesChatbot from '../components/NotesChatbot';
+import { CanvasSyncPanel } from '../components/CanvasSyncPanel';
 
 const TABS = [
   { key: 'assignments', label: 'Assignments' },
@@ -245,6 +246,12 @@ export default function ClassDetailPage() {
 
       {tab === 'assignments' && (
       <section className="mt-5">
+        {/* Canvas-linked classes get a read-only synced-assignments panel above
+            the manual assignments (Summit = single source of truth). */}
+        {cls?.linkedLms === 'canvas' && (
+          <CanvasSyncPanel classId={id} onToast={setToast} />
+        )}
+
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold">Assignments</h2>
           <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">

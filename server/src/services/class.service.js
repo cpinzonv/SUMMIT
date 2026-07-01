@@ -2,6 +2,7 @@ import { query, withTransaction } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { computeClassGrade } from './grade.service.js';
 import { getCanvasClient } from './lmsCredentials.service.js';
+import { canvasSync } from './canvas-sync.js';
 
 /** Map a classes row to the API shape (camelCase, grouped syllabus data). */
 export function toPublicClass(row) {
@@ -187,18 +188,87 @@ export async function linkClassCanvas(userId, classId, courseId) {
 }
 
 /**
- * Fetch raw assignments from Canvas for a class already linked to a Canvas
- * course. (Validates the connection works; no data is synced into Summit yet.)
+ * Trigger a manual Canvas sync for a class the user owns: pulls assignments,
+ * then (best-effort) that user's grades. Grade-sync failures don't fail the
+ * assignment sync. Returns the counts.
  */
-export async function getClassCanvasAssignments(userId, classId) {
+export async function syncClassFromCanvas(userId, classId, { triggeredBy = 'manual' } = {}) {
+  await getOwnedClass(userId, classId); // 404s if not owned
+  const assignments = await canvasSync.syncAssignmentsForClass(classId, { triggeredBy });
+
+  let grades = { synced: 0, errors: 0 };
+  try {
+    grades = await canvasSync.syncGradesForUser(userId, classId, { triggeredBy });
+  } catch (err) {
+    // Grades often need teacher/account scope; don't fail the whole sync on it.
+    console.warn(`[canvas-sync] grade sync skipped for class ${classId}: ${err.message}`);
+  }
+  return { assignments, grades };
+}
+
+/**
+ * Read the Canvas assignments already synced INTO Summit for a class (from the
+ * canvas_synced_assignments table — NOT a live Canvas call), ordered by due
+ * date. Excludes soft-archived rows by default.
+ */
+export async function getClassCanvasAssignments(userId, classId, { includeArchived = false } = {}) {
   const cls = await getOwnedClass(userId, classId);
   if (cls.linked_lms !== 'canvas' || !cls.linked_lms_course_id) {
     throw AppError.badRequest('Link this class to a Canvas course first.');
   }
-  const client = await getCanvasClient();
-  const assignments = await client.getAssignments(cls.linked_lms_course_id);
-  console.info(`[lms] fetched ${assignments.length} canvas assignments for class ${classId} (user ${userId})`);
-  return { courseId: cls.linked_lms_course_id, count: assignments.length, assignments };
+  const { rows } = await query(
+    `SELECT id, canvas_assignment_id, name, description, due_date, points_possible,
+            archived_at, synced_at
+       FROM canvas_synced_assignments
+      WHERE class_id = $1 ${includeArchived ? '' : 'AND archived_at IS NULL'}
+      ORDER BY due_date NULLS LAST, name`,
+    [classId],
+  );
+  const lastSyncedAt = rows.reduce(
+    (max, r) => (!max || new Date(r.synced_at) > new Date(max) ? r.synced_at : max),
+    null,
+  );
+  return {
+    courseId: cls.linked_lms_course_id,
+    count: rows.length,
+    lastSyncedAt,
+    assignments: rows.map((r) => ({
+      id: r.id,
+      canvasAssignmentId: r.canvas_assignment_id,
+      name: r.name,
+      description: r.description,
+      dueDate: r.due_date,
+      pointsPossible: r.points_possible == null ? null : Number(r.points_possible),
+      archived: Boolean(r.archived_at),
+      syncedAt: r.synced_at,
+      source: 'canvas',
+    })),
+  };
+}
+
+/** Synced Canvas grades for a user, joined to assignment + class names. */
+export async function listCanvasGradesForUser(userId) {
+  const { rows } = await query(
+    `SELECT g.id, g.canvas_assignment_id, g.score, g.max_points, g.submitted_at, g.synced_at,
+            a.name AS assignment_name, c.name AS class_name
+       FROM canvas_synced_grades g
+       LEFT JOIN canvas_synced_assignments a ON a.canvas_assignment_id = g.canvas_assignment_id
+       LEFT JOIN classes c ON c.id = g.class_id
+      WHERE g.user_id = $1
+      ORDER BY g.synced_at DESC`,
+    [userId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    canvasAssignmentId: r.canvas_assignment_id,
+    assignmentName: r.assignment_name,
+    className: r.class_name,
+    score: r.score == null ? null : Number(r.score),
+    maxPoints: r.max_points == null ? null : Number(r.max_points),
+    submittedAt: r.submitted_at,
+    syncedAt: r.synced_at,
+    source: 'canvas',
+  }));
 }
 
 /** List the user's active (non-archived) classes, each with grade + attendance. */

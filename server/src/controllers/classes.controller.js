@@ -127,6 +127,19 @@ export async function canvasAssignments(req, res) {
   res.json(result);
 }
 
+// POST /api/classes/:id/canvas/sync — pull assignments (+ this user's grades)
+// from Canvas into Summit's tables.
+export async function canvasSyncNow(req, res) {
+  const result = await classService.syncClassFromCanvas(req.user.id, req.params.id);
+  const synced = result.assignments.synced;
+  res.json({
+    ok: true,
+    synced,
+    message: `Synced ${synced} assignment${synced === 1 ? '' : 's'} from Canvas`,
+    ...result,
+  });
+}
+
 export async function linkLms(req, res) {
   const updated = await classService.linkClassLms(req.user.id, req.params.id, {
     lms: req.body.lms,
