@@ -442,6 +442,20 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
   const [open, setOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
   const ref = useRef(null);
+  // Pending "close the flyout" timer. The flyout sits a small gap to the left of
+  // its trigger, so we don't close the instant the cursor leaves the trigger —
+  // we wait ~180ms so the cursor can cross the gap to the submenu (hover-trap
+  // fix). Any re-entry cancels the pending close.
+  const subTimer = useRef(null);
+
+  const openSub = () => {
+    clearTimeout(subTimer.current);
+    setSubOpen(true);
+  };
+  const closeSubSoon = () => {
+    clearTimeout(subTimer.current);
+    subTimer.current = setTimeout(() => setSubOpen(false), 180);
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -457,8 +471,12 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
     };
   }, [open, subOpen]);
 
+  // Never leave a close timer running after the menu unmounts.
+  useEffect(() => () => clearTimeout(subTimer.current), []);
+
   // Close everything after picking an action.
   const pick = (fn) => () => {
+    clearTimeout(subTimer.current);
     setOpen(false);
     setSubOpen(false);
     fn();
@@ -484,17 +502,19 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
             <span>✎</span> Edit class
           </button>
 
-          {/* Add Integration → flyout submenu of LMS providers. */}
+          {/* Add Integration → flyout submenu of LMS providers. Open on hover,
+              close on a short delay so the cursor can cross the gap to the
+              flyout without it vanishing. */}
           <div
             className="relative"
-            onMouseEnter={() => setSubOpen(true)}
-            onMouseLeave={() => setSubOpen(false)}
+            onMouseEnter={openSub}
+            onMouseLeave={closeSubSoon}
           >
             <button
               type="button"
               aria-haspopup="menu"
               aria-expanded={subOpen}
-              onClick={() => setSubOpen((s) => !s)}
+              onClick={() => { clearTimeout(subTimer.current); setSubOpen((s) => !s); }}
               className="menu-item w-full justify-between"
             >
               <span className="flex items-center gap-2">
@@ -506,6 +526,8 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
             {subOpen && (
               <div
                 role="menu"
+                onMouseEnter={openSub}
+                onMouseLeave={closeSubSoon}
                 className="glass-panel absolute right-full top-0 z-30 mr-1 max-h-[22rem] w-64 overflow-y-auto p-1.5 text-sm shadow-xl"
               >
                 {lmsProviders.length === 0 ? (
