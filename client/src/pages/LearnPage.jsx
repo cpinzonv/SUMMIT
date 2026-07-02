@@ -14,7 +14,7 @@ import { Icon } from '../components/learn/icons/Icon';
 
 /**
  * Learn tab — multi-format study hub. Flashcards are free; quizzes, podcasts,
- * study guides, and mind maps are Pro. A shared class selector + stat header
+ * and study guides are Pro. A shared class selector + stat header
  * sit above a tab bar; each tab renders its own content for the selected class.
  */
 // `feature` ties a premium tab to its server feature key (for per-feature access).

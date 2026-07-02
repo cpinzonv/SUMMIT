@@ -1,7 +1,6 @@
 /**
  * Client-side exports for the Learn tab — no server round-trip or storage.
  *   - Flashcard decks → CSV or TSV (TSV imports straight into Anki)
- *   - Mind maps → PNG or SVG (rendered from the on-screen <svg>)
  *   - Study guides / quiz results → the browser print dialog (Save as PDF)
  */
 
