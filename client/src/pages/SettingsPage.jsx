@@ -499,13 +499,39 @@ function ProviderCard({ status, justConnected, onChange, setToast }) {
   const api = lmsApi(provider);
 
   const [domain, setDomain] = useState(status.domain || '');
+  const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
 
-  const lastSynced = status.syncedAt
-    ? new Date(status.syncedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-    : 'never';
+  const fmt = (d) =>
+    d ? new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
+  const lastSynced = fmt(status.syncedAt) || 'never';
+
+  // Connect by pasting a personal API token (Canvas) — no OAuth redirect.
+  const connectToken = async () => {
+    setError('');
+    const d = domain.trim();
+    if (status.needsDomain && !d) {
+      return setError(`Enter your school's ${meta.domainLabel || `${label} address`}.`);
+    }
+    if (!token.trim()) return setError(`Paste your ${label} access token.`);
+    setBusy(true);
+    try {
+      const res = await api.connectToken({ domain: status.needsDomain ? d : undefined, token: token.trim() });
+      await refreshUser();
+      setToken('');
+      setToast({
+        type: 'success',
+        msg: res.sync ? summarizeSync(res.sync, provider) : `${label} connected`,
+      });
+      onChange();
+    } catch (err) {
+      setError(errorMessage(err, `Could not connect ${label}.`));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const connect = async () => {
     setError('');
@@ -572,7 +598,7 @@ function ProviderCard({ status, justConnected, onChange, setToast }) {
         </div>
       )}
 
-      {!status.available ? (
+      {!status.available && !status.supportsTokenAuth ? (
         <p className="text-sm text-muted">
           {label} isn’t configured on this server yet. An admin needs to set the {label} client
           credentials and the token encryption key.
@@ -580,7 +606,21 @@ function ProviderCard({ status, justConnected, onChange, setToast }) {
       ) : status.connected ? (
         <div className="space-y-2">
           {status.domain && <p className="text-xs text-muted">{status.domain}</p>}
+          {/* Synced-data counts */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+            <span><span className="font-bold text-ink">{status.assignmentsSynced ?? 0}</span> assignments</span>
+            <span><span className="font-bold text-ink">{status.gradesSynced ?? 0}</span> grades</span>
+            {status.authMethod && (
+              <span className="capitalize">via {status.authMethod === 'token' ? 'API token' : 'OAuth'}</span>
+            )}
+          </div>
           <p className="text-xs text-muted">Last synced: {lastSynced}</p>
+          {status.lastSync?.status === 'error' && (
+            <p className="text-xs font-medium text-rose-500">Last sync failed: {status.lastSync.error || 'unknown error'}</p>
+          )}
+          {status.nextSyncEta && (
+            <p className="text-xs text-muted">Next auto-sync: {fmt(status.nextSyncEta)}</p>
+          )}
           <div className="flex gap-2 pt-1">
             <button onClick={sync} disabled={syncing} className="btn btn-primary">
               {syncing ? 'Syncing…' : 'Sync now'}
@@ -606,9 +646,42 @@ function ProviderCard({ status, justConnected, onChange, setToast }) {
               {meta.domainHelp && <span className="mt-1 block text-xs text-muted">{meta.domainHelp}</span>}
             </label>
           )}
-          <button onClick={connect} disabled={busy} className="btn btn-primary">
-            {busy ? 'Redirecting…' : `Connect ${label}`}
-          </button>
+
+          {/* Preferred: OAuth (only when the server has client credentials). */}
+          {status.available && (
+            <button onClick={connect} disabled={busy} className="btn btn-primary">
+              {busy ? 'Redirecting…' : `Connect ${label}`}
+            </button>
+          )}
+
+          {/* Personal-access-token connect (Canvas). Shown as the alternative
+              when OAuth is available, or the primary path when it isn't. */}
+          {status.supportsTokenAuth && (
+            <div className="space-y-2">
+              {status.available && (
+                <div className="flex items-center gap-2 text-xs text-muted">
+                  <span className="h-px flex-1 bg-white/40" />or<span className="h-px flex-1 bg-white/40" />
+                </div>
+              )}
+              <label className="block">
+                <span className="mb-1 block text-sm font-semibold text-ink">Access token</span>
+                <input
+                  type="password"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder={`Paste your ${label} access token`}
+                  className="field"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  autoComplete="off"
+                />
+                {meta.tokenHelp && <span className="mt-1 block text-xs text-muted">{meta.tokenHelp}</span>}
+              </label>
+              <button onClick={connectToken} disabled={busy} className={status.available ? 'btn btn-soft' : 'btn btn-primary'}>
+                {busy ? 'Connecting…' : `Connect with token`}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

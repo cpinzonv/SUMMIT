@@ -15,6 +15,8 @@ export const LMS_META = {
     domainLabel: 'Canvas web address',
     domainPlaceholder: 'school.instructure.com',
     domainHelp: 'The address you use to log into Canvas (e.g. asu.instructure.com).',
+    tokenHelp:
+      'In Canvas, go to Account → Settings → Approved Integrations and click “+ New Access Token”. Paste the token here — it’s stored encrypted and never leaves the server.',
   },
   blackboard: {
     label: 'Blackboard',
@@ -72,8 +74,10 @@ export function lmsApi(provider) {
     status: () => api.get(`${base}/status`).then((r) => r.data),
     authUrl: (domain) => api.get(`${base}/auth-url`, { params: domain ? { domain } : {} }).then((r) => r.data),
     connect: (body) => api.post(`${base}/connect`, body).then((r) => r.data),
+    connectToken: (body) => api.post(`${base}/connect-token`, body).then((r) => r.data),
     disconnect: () => api.post(`${base}/disconnect`).then((r) => r.data),
     sync: () => api.post(`${base}/sync`).then((r) => r.data),
+    syncLog: () => api.get(`${base}/sync-log`).then((r) => r.data.log),
     listCourseAssignments: (classId) =>
       api.get(`${base}/courses/${classId}/assignments`).then((r) => r.data),
     import: (classId, externalIds) =>

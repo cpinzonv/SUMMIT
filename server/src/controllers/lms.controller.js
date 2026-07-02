@@ -29,6 +29,14 @@ export const callbackSchema = z.object({
   redirectUri: z.string().optional(),
 });
 
+// Personal-access-token connect (Canvas): the student pastes their instance URL
+// + a token. domain is required for multi-tenant providers (the service also
+// enforces this per provider).
+export const connectTokenSchema = z.object({
+  domain: z.string().trim().min(1).optional(),
+  token: z.string().trim().min(1, 'Paste your access token'),
+});
+
 export const classIdParam = z.object({ classId: z.string().uuid('Invalid class id') });
 
 export const importSchema = z.object({
@@ -53,12 +61,22 @@ export async function callback(req, res) {
   res.json(await lmsService.connect(req.user.id, providerOf(req), req.body));
 }
 
+/** Connect using a pasted personal API token (no OAuth redirect). */
+export async function connectToken(req, res) {
+  res.json(await lmsService.connectWithToken(req.user.id, providerOf(req), req.body));
+}
+
 export async function disconnect(req, res) {
   res.json(await lmsService.disconnect(req.user.id, providerOf(req)));
 }
 
 export async function sync(req, res) {
-  res.json(await lmsService.syncAll(req.user.id, providerOf(req)));
+  res.json(await lmsService.syncAll(req.user.id, providerOf(req), { trigger: 'manual' }));
+}
+
+/** Recent sync attempts for the mounted provider (audit trail / debugging). */
+export async function syncLog(req, res) {
+  res.json({ log: await lmsService.getSyncLog(req.user.id, providerOf(req)) });
 }
 
 export async function listCourseAssignments(req, res) {

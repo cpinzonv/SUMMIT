@@ -226,6 +226,13 @@ export function mockProvider(key) {
       });
     },
 
+    // Personal-access-token connect: any non-empty token "validates".
+    supportsTokenAuth: true,
+    verifyToken({ accessToken }) {
+      if (!accessToken) throw AppError.badRequest('Invalid Canvas token or instance URL.');
+      return Promise.resolve({ id: `mock-${key}-user`, name: 'Mock Student' });
+    },
+
     listCourses() {
       return Promise.resolve(courses.map((c) => ({ ...c.course })));
     },

@@ -20,47 +20,122 @@
 import crypto from 'node:crypto';
 import { query, withTransaction } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
-import { encrypt, decrypt } from '../utils/crypto.js';
+import { encrypt, decrypt, isEncryptionConfigured } from '../utils/crypto.js';
 import { getProvider, DEFAULT_PROVIDER, PROVIDER_KEYS } from './lms/index.js';
 import { getProviderMeta } from './lms/providers.js';
 import { env } from '../config/env.js';
 
+/** How often the background cron re-syncs connected accounts (drives next-sync ETA). */
+export const SYNC_INTERVAL_HOURS = 4;
+
 /* ---- Connection status -------------------------------------------------- */
 
 /** Public connection status for one provider (safe for the client — no tokens). */
-function toStatus(providerKey, row) {
+function toStatus(providerKey, row, extra = {}) {
   const meta = getProviderMeta(providerKey);
+  const p = getProvider(providerKey);
+  const syncedAt = row?.synced_at ?? null;
+  const connected = Boolean(row?.connected);
   return {
     provider: providerKey,
     label: meta?.label ?? providerKey,
     needsDomain: meta?.needsDomain ?? true,
-    connected: Boolean(row?.connected),
+    connected,
+    authMethod: row?.auth_method ?? null,     // 'oauth' | 'token' | null
     domain: row?.domain ?? null,
-    syncedAt: row?.synced_at ?? null,
-    // Whether the server can do LMS work for this provider (configured or mock).
-    available: getProvider(providerKey).isConfigured(),
+    syncedAt,
+    // Whether the server can do OAuth for this provider (configured or mock)…
+    available: p.isConfigured(),
+    // …and whether the paste-a-personal-token path is available (needs the
+    // encryption key + provider support). Independent of OAuth config.
+    supportsTokenAuth: Boolean(p.supportsTokenAuth) && isEncryptionConfigured(),
+    // Synced-data counts + last/next sync for the status card.
+    assignmentsSynced: extra.assignments ?? 0,
+    gradesSynced: extra.grades ?? 0,
+    lastSync: extra.lastSync ?? null,
+    nextSyncEta:
+      connected && syncedAt
+        ? new Date(new Date(syncedAt).getTime() + SYNC_INTERVAL_HOURS * 3600_000).toISOString()
+        : null,
   };
+}
+
+/** Synced-assignment/grade counts per external_source for a user. */
+async function syncedCounts(userId) {
+  const { rows } = await query(
+    `SELECT a.external_source AS provider,
+            count(*)::int AS assignments,
+            count(g.assignment_id)::int AS grades
+       FROM assignments a
+       JOIN classes c ON c.id = a.class_id
+       LEFT JOIN grades g ON g.assignment_id = a.id
+      WHERE c.user_id = $1 AND a.external_source IS NOT NULL
+      GROUP BY a.external_source`,
+    [userId],
+  );
+  return Object.fromEntries(rows.map((r) => [r.provider, r]));
+}
+
+/** Most-recent sync-log row per provider for a user (for the "last sync" line). */
+async function lastSyncByProvider(userId) {
+  const { rows } = await query(
+    `SELECT DISTINCT ON (provider)
+            provider, trigger, status, error_message, started_at, completed_at
+       FROM lms_sync_log WHERE user_id = $1
+      ORDER BY provider, started_at DESC`,
+    [userId],
+  );
+  return Object.fromEntries(
+    rows.map((r) => [
+      r.provider,
+      { trigger: r.trigger, status: r.status, error: r.error_message, at: r.completed_at ?? r.started_at },
+    ]),
+  );
 }
 
 /** Status for a single provider. */
 export async function getStatus(userId, provider = DEFAULT_PROVIDER) {
   assertKnownProvider(provider);
-  const { rows } = await query(
-    `SELECT provider, domain, connected, synced_at
-       FROM lms_connections WHERE user_id = $1 AND provider = $2`,
-    [userId, provider],
-  );
-  return toStatus(provider, rows[0]);
+  const [{ rows }, counts, lastSync] = await Promise.all([
+    query(
+      `SELECT provider, domain, connected, synced_at, auth_method
+         FROM lms_connections WHERE user_id = $1 AND provider = $2`,
+      [userId, provider],
+    ),
+    syncedCounts(userId),
+    lastSyncByProvider(userId),
+  ]);
+  return toStatus(provider, rows[0], { ...counts[provider], lastSync: lastSync[provider] });
 }
 
 /** Status for every registered provider — what the Settings page renders. */
 export async function getStatuses(userId) {
-  const { rows } = await query(
-    `SELECT provider, domain, connected, synced_at FROM lms_connections WHERE user_id = $1`,
-    [userId],
-  );
+  const [{ rows }, counts, lastSync] = await Promise.all([
+    query(
+      `SELECT provider, domain, connected, synced_at, auth_method
+         FROM lms_connections WHERE user_id = $1`,
+      [userId],
+    ),
+    syncedCounts(userId),
+    lastSyncByProvider(userId),
+  ]);
   const byProvider = Object.fromEntries(rows.map((r) => [r.provider, r]));
-  return PROVIDER_KEYS.map((key) => toStatus(key, byProvider[key]));
+  return PROVIDER_KEYS.map((key) =>
+    toStatus(key, byProvider[key], { ...counts[key], lastSync: lastSync[key] }),
+  );
+}
+
+/** Recent sync-log rows for one provider (audit trail for the UI / debugging). */
+export async function getSyncLog(userId, provider = DEFAULT_PROVIDER, limit = 20) {
+  assertKnownProvider(provider);
+  const { rows } = await query(
+    `SELECT id, trigger, status, courses, imported, updated, grades,
+            error_message, started_at, completed_at
+       FROM lms_sync_log WHERE user_id = $1 AND provider = $2
+      ORDER BY started_at DESC LIMIT $3`,
+    [userId, provider, Math.min(Math.max(limit, 1), 100)],
+  );
+  return rows;
 }
 
 function assertKnownProvider(provider) {
@@ -99,14 +174,15 @@ export async function connect(userId, provider, { domain, code, redirectUri } = 
   }
   await query(
     `INSERT INTO lms_connections
-       (user_id, provider, domain, access_token, refresh_token, token_expires_at, connected)
-     VALUES ($1, $2, $3, $4, $5, $6, true)
+       (user_id, provider, domain, access_token, refresh_token, token_expires_at, connected, auth_method)
+     VALUES ($1, $2, $3, $4, $5, $6, true, 'oauth')
      ON CONFLICT (user_id, provider) DO UPDATE SET
        domain = EXCLUDED.domain,
        access_token = EXCLUDED.access_token,
        refresh_token = EXCLUDED.refresh_token,
        token_expires_at = EXCLUDED.token_expires_at,
-       connected = true`,
+       connected = true,
+       auth_method = 'oauth'`,
     [
       userId,
       provider,
@@ -117,6 +193,55 @@ export async function connect(userId, provider, { domain, code, redirectUri } = 
     ],
   );
   return getStatus(userId, provider);
+}
+
+/**
+ * Connect with a personal API access token (Canvas: Account → Settings → New
+ * Access Token) instead of OAuth. Validates the token against the provider,
+ * stores it ENCRYPTED (no refresh token — on expiry the student reconnects),
+ * then kicks off an initial sync. A failing first sync doesn't fail the connect
+ * (it's logged and retried by the cron), so the account still links.
+ */
+export async function connectWithToken(userId, provider, { domain, token } = {}) {
+  assertKnownProvider(provider);
+  const p = getProvider(provider);
+  const label = getProviderMeta(provider)?.label ?? provider;
+  if (!p.supportsTokenAuth || typeof p.verifyToken !== 'function') {
+    throw AppError.badRequest(`${label} doesn't support connecting with an API token.`);
+  }
+  if (!token || !token.trim()) throw AppError.badRequest(`Paste your ${label} access token.`);
+  if ((getProviderMeta(provider)?.needsDomain ?? true) && !domain?.trim()) {
+    throw AppError.badRequest(`Enter your ${label} instance URL.`);
+  }
+
+  // 1. Validate the token (also confirms the domain is reachable). Throws a
+  //    friendly 400 if the token or URL is wrong.
+  await p.verifyToken({ domain: domain?.trim(), accessToken: token.trim() });
+
+  // 2. Store encrypted. encrypt() throws 503 if the key isn't configured.
+  await query(
+    `INSERT INTO lms_connections
+       (user_id, provider, domain, access_token, refresh_token, token_expires_at, connected, auth_method)
+     VALUES ($1, $2, $3, $4, NULL, NULL, true, 'token')
+     ON CONFLICT (user_id, provider) DO UPDATE SET
+       domain = EXCLUDED.domain,
+       access_token = EXCLUDED.access_token,
+       refresh_token = NULL,
+       token_expires_at = NULL,
+       connected = true,
+       auth_method = 'token'`,
+    [userId, provider, domain?.trim() ?? null, encrypt(token.trim())],
+  );
+
+  // 3. Kick off an initial sync — best-effort so a first-sync hiccup (e.g. a
+  //    transient Canvas error) doesn't block the connection.
+  let sync = null;
+  try {
+    sync = await syncAll(userId, provider, { trigger: 'manual' });
+  } catch {
+    sync = null;
+  }
+  return { status: await getStatus(userId, provider), sync };
 }
 
 /** Forget one provider's connection + stored tokens. Leaves synced data in place. */
@@ -275,38 +400,91 @@ async function upsertAssignment(client, classId, source, a, tally) {
 
 /* ---- Public sync operations --------------------------------------------- */
 
-/** Full sync for one provider: every active course's assignments. Returns a tally. */
-export async function syncAll(userId, provider = DEFAULT_PROVIDER) {
-  const conn = await requireConnection(userId, provider);
-  const resolved = getProvider(provider);
-  const source = resolved.name;
-
-  // 1. Fetch everything from the LMS first (network), refreshing token if needed.
-  const courses = await withValidToken(userId, conn, (tok) =>
-    resolved.listCourses({ domain: conn.domain, accessToken: tok }),
-  );
-  const fetched = [];
-  for (const course of courses) {
-    const assignments = await withValidToken(userId, conn, (tok) =>
-      resolved.listAssignments({ domain: conn.domain, accessToken: tok, externalCourseId: course.externalId }),
+/** Append one audit row to lms_sync_log (best-effort; never throws). */
+async function writeSyncLog(userId, provider, trigger, startedAt, { status, tally, error }) {
+  try {
+    await query(
+      `INSERT INTO lms_sync_log
+         (user_id, provider, trigger, status, courses, imported, updated, grades, error_message, started_at, completed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())`,
+      [
+        userId, provider, trigger, status,
+        tally?.courses ?? 0, tally?.imported ?? 0, tally?.updated ?? 0, tally?.grades ?? 0,
+        error ? String(error.message || error).slice(0, 500) : null,
+        startedAt,
+      ],
     );
-    fetched.push({ course, assignments });
+  } catch (err) {
+    console.error(`[lms] failed to write sync log for ${provider}:`, err.message);
   }
+}
 
-  // 2. Persist atomically.
-  const tally = { provider, courses: fetched.length, classesCreated: 0, classesMatched: 0, imported: 0, updated: 0, grades: 0 };
-  await withTransaction(async (client) => {
-    for (const { course, assignments } of fetched) {
-      const cls = await matchOrCreateClass(client, userId, source, course, tally);
-      for (const a of assignments) await upsertAssignment(client, cls.id, source, a, tally);
+/**
+ * Full sync for one provider: every active course's assignments (+ grades).
+ * Records the attempt in lms_sync_log. Returns a tally. `trigger` is 'manual'
+ * (button) or 'cron' (background job).
+ */
+export async function syncAll(userId, provider = DEFAULT_PROVIDER, { trigger = 'manual' } = {}) {
+  const startedAt = new Date();
+  try {
+    const conn = await requireConnection(userId, provider);
+    const resolved = getProvider(provider);
+    const source = resolved.name;
+
+    // 1. Fetch everything from the LMS first (network), refreshing token if needed.
+    const courses = await withValidToken(userId, conn, (tok) =>
+      resolved.listCourses({ domain: conn.domain, accessToken: tok }),
+    );
+    const fetched = [];
+    for (const course of courses) {
+      const assignments = await withValidToken(userId, conn, (tok) =>
+        resolved.listAssignments({ domain: conn.domain, accessToken: tok, externalCourseId: course.externalId }),
+      );
+      fetched.push({ course, assignments });
     }
-  });
 
-  await query(
-    `UPDATE lms_connections SET synced_at = now() WHERE user_id = $1 AND provider = $2`,
-    [userId, provider],
+    // 2. Persist atomically.
+    const tally = { provider, courses: fetched.length, classesCreated: 0, classesMatched: 0, imported: 0, updated: 0, grades: 0 };
+    await withTransaction(async (client) => {
+      for (const { course, assignments } of fetched) {
+        const cls = await matchOrCreateClass(client, userId, source, course, tally);
+        for (const a of assignments) await upsertAssignment(client, cls.id, source, a, tally);
+      }
+    });
+
+    await query(
+      `UPDATE lms_connections SET synced_at = now() WHERE user_id = $1 AND provider = $2`,
+      [userId, provider],
+    );
+    await writeSyncLog(userId, provider, trigger, startedAt, { status: 'ok', tally });
+    return tally;
+  } catch (error) {
+    await writeSyncLog(userId, provider, trigger, startedAt, { status: 'error', error });
+    throw error;
+  }
+}
+
+/**
+ * Background job entry point: sync every connected (user, provider) pair. Each
+ * account is synced independently — one student's failure (bad token, network)
+ * is logged and does NOT block the rest. Returns a small run summary.
+ */
+export async function syncAllConnectedUsers({ trigger = 'cron' } = {}) {
+  const { rows } = await query(
+    `SELECT user_id, provider FROM lms_connections
+      WHERE connected = true AND access_token IS NOT NULL`,
   );
-  return tally;
+  const summary = { attempted: rows.length, ok: 0, failed: 0 };
+  for (const { user_id, provider } of rows) {
+    try {
+      await syncAll(user_id, provider, { trigger });
+      summary.ok++;
+    } catch (err) {
+      summary.failed++;
+      console.error(`[lms] cron sync failed for user=${user_id} provider=${provider}: ${err.message}`);
+    }
+  }
+  return summary;
 }
 
 /** Resolve which external course a Summit class corresponds to (linking if needed). */

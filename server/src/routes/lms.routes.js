@@ -30,12 +30,17 @@ router.get('/auth-url', validate(lms.authUrlQuery, 'query'), asyncHandler(lms.au
 
 // Exchange the OAuth code the provider sent back for tokens.
 router.post('/connect', validate(lms.callbackSchema), asyncHandler(lms.callback));
+// Connect with a pasted personal API token (Canvas) — no OAuth redirect.
+router.post('/connect-token', validate(lms.connectTokenSchema), asyncHandler(lms.connectToken));
 router.post('/disconnect', asyncHandler(lms.disconnect));
 
 // Full sync of all courses. POST is canonical (it mutates); GET is accepted too
 // for convenience / the spec's "GET /api/<provider>/sync".
 router.post('/sync', asyncHandler(lms.sync));
 router.get('/sync', asyncHandler(lms.sync));
+
+// Recent sync attempts (audit trail for the status card / debugging).
+router.get('/sync-log', asyncHandler(lms.syncLog));
 
 // Per-class import: list a course's assignments, then import a selected subset.
 router.get(

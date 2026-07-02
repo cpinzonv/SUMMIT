@@ -105,6 +105,37 @@ export function refresh({ domain, refreshToken }) {
 }
 
 /**
+ * Canvas supports connecting with a personal API access token (Account →
+ * Settings → New Access Token) instead of the OAuth dance. This path needs only
+ * the token + domain — no server-side client id/secret — so it works even when
+ * the OAuth dev key isn't configured.
+ */
+export const supportsTokenAuth = true;
+
+/**
+ * Validate a pasted personal access token by calling GET /users/self. Returns
+ * the Canvas user's { id, name } on success; throws a friendly 400 if the token
+ * or domain is wrong. Deliberately does NOT require OAuth config.
+ */
+export async function verifyToken({ domain, accessToken }) {
+  let self;
+  try {
+    self = await canvasGet(domain, accessToken, '/api/v1/users/self');
+  } catch (err) {
+    // Rate limiting is transient — let it bubble so the caller can retry later.
+    if (err?.details?.code === 'lms_rate_limited') throw err;
+    // Bad token (401), wrong host / unreachable (502), or denied (403) all mean
+    // the student's token + instance URL didn't work → one actionable message.
+    throw AppError.badRequest('Invalid Canvas token or instance URL.');
+  }
+  const user = Array.isArray(self) ? self[0] : self;
+  if (!user || user.id == null) {
+    throw AppError.badRequest('Invalid Canvas token or instance URL.');
+  }
+  return { id: String(user.id), name: user.name ?? null };
+}
+
+/**
  * Authenticated GET against the Canvas REST API, following pagination Link
  * headers (capped). Maps auth/rate-limit failures to typed AppErrors the sync
  * service understands.

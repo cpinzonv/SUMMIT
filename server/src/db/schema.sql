@@ -184,6 +184,34 @@ FROM users
 WHERE lms_provider IS NOT NULL AND lms_access_token IS NOT NULL
 ON CONFLICT (user_id, provider) DO NOTHING;
 
+-- How the connection was authorized: 'oauth' (authorize → code exchange, has a
+-- refresh_token) or 'token' (student pasted a Canvas personal access token — no
+-- refresh; on expiry we ask them to reconnect). Existing rows are OAuth.
+ALTER TABLE lms_connections ADD COLUMN IF NOT EXISTS auth_method TEXT NOT NULL DEFAULT 'oauth';
+
+-- ----------------------------------------------------------------------------
+-- lms_sync_log — append-only audit trail of every sync attempt (manual button
+-- or the background cron), for debugging and the "last sync" status the UI
+-- shows. One row per (user, provider) attempt.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS lms_sync_log (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider      TEXT NOT NULL,
+  trigger       TEXT NOT NULL DEFAULT 'manual',   -- 'manual' | 'cron'
+  status        TEXT NOT NULL,                     -- 'ok' | 'error'
+  courses       INT  NOT NULL DEFAULT 0,
+  imported      INT  NOT NULL DEFAULT 0,
+  updated       INT  NOT NULL DEFAULT 0,
+  grades        INT  NOT NULL DEFAULT 0,
+  error_message TEXT,
+  started_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at  TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_lms_sync_log_user_provider
+  ON lms_sync_log(user_id, provider, started_at DESC);
+
 -- ----------------------------------------------------------------------------
 -- refresh_tokens — server-side record of issued refresh tokens (rotation +
 -- revocation). Access tokens stay stateless JWTs; refresh tokens are tracked.
