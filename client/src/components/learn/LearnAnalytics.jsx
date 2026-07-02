@@ -56,7 +56,6 @@ export function LearnAnalytics({ classId }) {
     { label: 'Quizzes', icon: '❓', lines: [`${data.quizStats.quizzesTaken} taken`, `${data.quizStats.averageScore}% avg`, `${data.timeStats.quizzesMinutes} min`] },
     { label: 'Podcasts', icon: '🎧', lines: [`${data.podcastStats.podcastsListened} listened`, `${data.podcastStats.averageCompletion}% avg`, `${data.timeStats.podcastsMinutes} min`] },
     { label: 'Guides', icon: '📖', lines: [`${data.guideStats.guides} total`, `${data.guideStats.guidesRead} read`, `${data.guideStats.guidesBookmarked} ★`] },
-    { label: 'Mind Maps', icon: '🧠', lines: [`${data.mindmapStats.mindmaps} maps`, `~${data.mindmapStats.averageNodesPerMap} nodes`, ''] },
   ];
 
   return (

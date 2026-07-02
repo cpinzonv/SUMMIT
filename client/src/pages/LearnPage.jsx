@@ -8,14 +8,13 @@ import { FlashcardsTab } from '../components/learn/FlashcardsTab';
 import { QuizTab } from '../components/learn/QuizTab';
 import { PodcastTab } from '../components/learn/PodcastTab';
 import { GuideTab } from '../components/learn/GuideTab';
-import { MindMapTab } from '../components/learn/MindMapTab';
 import { StatsTab } from '../components/learn/StatsTab';
 import { LearnAnalytics } from '../components/learn/LearnAnalytics';
 import { Icon } from '../components/learn/icons/Icon';
 
 /**
  * Learn tab — multi-format study hub. Flashcards are free; quizzes, podcasts,
- * study guides, and mind maps are Pro. A shared class selector + stat header
+ * and study guides are Pro. A shared class selector + stat header
  * sit above a tab bar; each tab renders its own content for the selected class.
  */
 // `feature` ties a premium tab to its server feature key (for per-feature access).
@@ -24,7 +23,6 @@ const TABS = [
   { key: 'quizzes', label: 'Quizzes', icon: 'question', color: '#1B4C5C', premium: true, feature: 'quizzes' },
   { key: 'podcasts', label: 'Podcasts', icon: 'headphones', color: '#FFB4A2', premium: true, feature: 'podcasts' },
   { key: 'guides', label: 'Guides', icon: 'book', color: '#FF6B4A', premium: true, feature: 'studyGuides' },
-  { key: 'mindmaps', label: 'Mind Maps', icon: 'network', color: '#4FC3DC', premium: true, feature: 'mindMaps' },
   { key: 'stats', label: 'Stats', icon: 'chart', color: '#4FC3DC', premium: false },
 ];
 
@@ -107,7 +105,6 @@ export default function LearnPage() {
       case 'quizzes': return <QuizTab {...props} />;
       case 'podcasts': return <PodcastTab {...props} />;
       case 'guides': return <GuideTab {...props} />;
-      case 'mindmaps': return <MindMapTab {...props} />;
       default: return null;
     }
   };
@@ -117,7 +114,7 @@ export default function LearnPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink"><span className="text-gradient">Learn</span></h1>
-          <p className="text-sm text-muted">Study your way — flashcards, quizzes, podcasts, guides & mind maps</p>
+          <p className="text-sm text-muted">Study your way — flashcards, quizzes, podcasts & guides</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <StatChip
