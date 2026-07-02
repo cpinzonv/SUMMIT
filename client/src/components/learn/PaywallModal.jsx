@@ -6,7 +6,7 @@ import { useEffect } from 'react';
  * "coming soon"; once enabled it becomes a real upgrade action (Stripe — future).
  */
 const PERKS = [
-  'All learning formats — quizzes, podcasts, study guides & mind maps',
+  'All learning formats — quizzes, podcasts & study guides',
   'Google Calendar sync',
   'Advanced learning analytics',
 ];

@@ -25,8 +25,8 @@ export function UpgradePanel({ feature, billingEnabled = false }) {
       </div>
       <h3 className="font-display text-xl font-bold text-ink">{feature} is a <span className="text-gradient">Pro</span> feature</h3>
       <p className="max-w-sm text-sm text-muted">
-        Flashcards are free forever. Summit Pro unlocks {feature.toLowerCase()}, plus podcasts,
-        study guides, and mind maps generated from your class material.
+        Flashcards are free forever. Summit Pro unlocks {feature.toLowerCase()}, plus podcasts
+        and study guides generated from your class material.
       </p>
       {billingEnabled ? (
         <button className="btn btn-primary" onClick={() => alert('Subscription checkout is coming soon.')}>

@@ -61,12 +61,6 @@ export const generateSchema = z.object({
   notes: z.array(z.string()).optional(),
 });
 
-export const reviewSchema = z.object({
-  // 1=Again, 2=Hard, 3=Good, 4=Easy (Anki-style).
-  rating: z.number().int().min(1).max(4),
-  timeSpentSeconds: z.number().int().min(0).max(3600).optional(),
-  sessionId: z.string().uuid().optional(),
-});
 
 export const dueQuery = z.object({
   classId: z.string().uuid().optional(),
@@ -146,11 +140,6 @@ export async function due(req, res) {
       lapses: r.lapses,
     })),
   });
-}
-
-export async function review(req, res) {
-  const result = await learn.reviewCard(req.user.id, req.params.cardId, req.body);
-  res.json(result);
 }
 
 export async function overview(req, res) {

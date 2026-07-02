@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Modal, Spinner, ErrorBanner, EmptyState } from '../ui';
+import { Modal, Spinner, ErrorBanner, EmptyState, Toggle } from '../ui';
 import { Labeled } from './common';
 import { exportDeck } from '../../lib/learnExport';
 import { CardFace, CardTypeBadge } from './CardTypes';
@@ -17,13 +17,24 @@ const MASTERY = {
   mastered: { label: 'Mastered', cls: 'bg-emerald-400/15 text-emerald-600' },
 };
 const DIFFICULTY = { easy: 'text-emerald-500', medium: 'text-amber-500', hard: 'text-rose-500' };
-// Anki-style 4-button rating: 1=Again, 2=Hard, 3=Good, 4=Easy.
+// Classic SM-2 5-button rating: 1=Again … 5=Easy. Ratings < 3 fail the card.
 const RATINGS = [
   { v: 1, label: 'Again', cls: 'border-rose-300 text-rose-600 hover:bg-rose-50' },
   { v: 2, label: 'Hard', cls: 'border-orange-300 text-orange-600 hover:bg-orange-50' },
-  { v: 3, label: 'Good', cls: 'border-sky-300 text-sky-600 hover:bg-sky-50' },
-  { v: 4, label: 'Easy', cls: 'border-emerald-300 text-emerald-600 hover:bg-emerald-50' },
+  { v: 3, label: 'OK', cls: 'border-amber-300 text-amber-600 hover:bg-amber-50' },
+  { v: 4, label: 'Good', cls: 'border-sky-300 text-sky-600 hover:bg-sky-50' },
+  { v: 5, label: 'Easy', cls: 'border-emerald-300 text-emerald-600 hover:bg-emerald-50' },
 ];
+
+// Fisher–Yates shuffle (used when interleaving is on).
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 const PHASE_LABEL = { learning: 'Learning', review: 'Review', relearning: 'Relearning' };
 function PhaseBadge({ phase, step }) {
@@ -35,10 +46,12 @@ function PhaseBadge({ phase, step }) {
   );
 }
 
+// Classic SM-2: a card is studyable when it's new (no next_review_date yet) or
+// its scheduled review date has arrived — and it isn't suspended/buried.
 const isDue = (card) =>
   !card.isSuspended &&
   (!card.buryUntil || new Date(card.buryUntil) <= new Date()) &&
-  (!card.mastery || !card.mastery.nextReviewAt || new Date(card.mastery.nextReviewAt) <= new Date());
+  (!card.nextReviewDate || new Date(card.nextReviewDate) <= new Date());
 
 export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   const [cards, setCards] = useState([]);
@@ -49,6 +62,7 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   const [reviewing, setReviewing] = useState(false);
   const [editorCard, setEditorCard] = useState(undefined); // undefined=closed, null=new, obj=edit
   const [generating, setGenerating] = useState(false);
+  const [studyToken, setStudyToken] = useState(0); // bump to refresh the deck panel
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +87,7 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   const afterChange = useCallback(() => {
     load();
     refreshStats?.();
+    setStudyToken((t) => t + 1);
   }, [load, refreshStats]);
 
   const renameDeck = async (deckId, name) => {
@@ -128,6 +143,11 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
         />
       )}
 
+      {/* Per-deck study plan: progress, deadline, daily limits, interleaving. */}
+      {activeDeck && (
+        <DeckStudyPanel deckId={activeDeck} token={studyToken} flash={flash} />
+      )}
+
       {error && <ErrorBanner message={error} />}
 
       {cards.length === 0 ? (
@@ -179,6 +199,8 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
         <ReviewSession
           classId={classId}
           deckId={activeDeck}
+          deckName={activeDeckName}
+          cards={shownCards}
           className={className}
           flash={flash}
           onClose={() => { setReviewing(false); afterChange(); }}
@@ -501,16 +523,144 @@ function StudyCardMenu({ onAction, disabled }) {
   );
 }
 
-function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
+/** Per-deck study plan: progress, deadline, daily limits, interleaving toggle. */
+function DeckStudyPanel({ deckId, token, flash }) {
+  const [plan, setPlan] = useState(null);
+  const [settings, setSettings] = useState(null);
+  const [editingDeadline, setEditingDeadline] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [p, s] = await Promise.all([
+        api.get(`/api/decks/${deckId}/study-plan`),
+        api.get(`/api/decks/${deckId}/settings`),
+      ]);
+      setPlan(p.data);
+      setSettings(s.data);
+    } catch { /* non-fatal — panel just stays hidden */ }
+  }, [deckId]);
+
+  useEffect(() => { load(); }, [load, token]);
+
+  if (!plan || !settings) return null;
+  const { deck, deadline, daysRemaining, plan: proj, today } = plan;
+
+  const toggleInterleaving = async () => {
+    const next = !settings.interleavingEnabled;
+    setSettings((s) => ({ ...s, interleavingEnabled: next }));
+    try {
+      await api.post(`/api/decks/${deckId}/settings`, { interleavingEnabled: next });
+    } catch { load(); }
+  };
+
+  return (
+    <div className="glass-panel space-y-3 p-4">
+      <div>
+        <div className="mb-1 flex items-center justify-between text-sm">
+          <span className="font-semibold text-ink">
+            {deck.cardsLearned} / {deck.totalCards} cards learned
+          </span>
+          <span className="text-muted">{deck.progressPercent}%</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-white/50">
+          <div className="h-full rounded-full transition-all" style={{ width: `${deck.progressPercent}%`, backgroundImage: 'var(--grad-teal-purple)' }} />
+        </div>
+      </div>
+
+      <p className="text-xs text-muted">
+        Today: {today.newCardsToday} new + {today.cardsReviewedToday} reviews ={' '}
+        {today.totalInteractionsToday} interactions ({today.totalInteractionsToday}/{settings.userDailyStudyLimit} used)
+      </p>
+
+      {deadline ? (
+        <div className="rounded-xl border border-white/60 bg-white/45 p-3 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-ink">Deadline {deadline} · {daysRemaining} days left</span>
+            <button className="text-xs font-semibold text-brand-600 hover:underline" onClick={() => setEditingDeadline(true)}>Change</button>
+          </div>
+          {proj && (
+            <div className="mt-1 text-xs text-muted">
+              ~{proj.dailyNewCardsNeeded} new/day · ~{proj.estimatedMinutesPerDay} min/day · {proj.recommendedSessionsPerDay} session{proj.recommendedSessionsPerDay === 1 ? '' : 's'}/day
+            </div>
+          )}
+          {proj && !proj.isOnTrack && (
+            <div className="mt-2 rounded-lg border border-rose-300/50 bg-rose-50/70 px-3 py-1.5 text-xs font-semibold text-rose-700">
+              Off track — need {proj.dailyNewCardsNeeded}/day but only adding {proj.recentAvgNewPerDay}/day.
+            </div>
+          )}
+          {proj && proj.isOnTrack && <div className="mt-2 text-xs font-semibold text-emerald-600">On track ✓</div>}
+        </div>
+      ) : (
+        <button className="btn btn-soft" onClick={() => setEditingDeadline(true)}>+ Set deadline</button>
+      )}
+
+      <label className="flex items-center justify-between gap-3 pt-1 text-sm">
+        <span className="font-medium text-ink">
+          Mix topics while studying <span className="text-muted">(interleaving)</span>
+        </span>
+        <Toggle on={!!settings.interleavingEnabled} onChange={toggleInterleaving} />
+      </label>
+
+      {editingDeadline && (
+        <DeadlineModal
+          deckId={deckId}
+          current={deadline}
+          onClose={() => setEditingDeadline(false)}
+          onSaved={() => { setEditingDeadline(false); load(); flash?.('Deadline updated'); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeadlineModal({ deckId, current, onClose, onSaved }) {
+  const [date, setDate] = useState(current || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!date) return;
+    setSaving(true);
+    setErr('');
+    try {
+      await api.post(`/api/decks/${deckId}/deadline`, { deadline: date });
+      onSaved();
+    } catch (e2) {
+      setErr(errorMessage(e2, 'Could not set deadline'));
+      setSaving(false);
+    }
+  };
+  return (
+    <Modal title="Set deck deadline" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-3">
+        {err && <ErrorBanner message={err} />}
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-ink">Target date</span>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field" required />
+        </label>
+        <p className="text-xs text-muted">Summit will work out how many new cards per day you need to finish in time.</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn btn-soft">Cancel</button>
+          <button type="submit" disabled={saving || !date} className="btn btn-primary">{saving ? 'Saving…' : 'Save deadline'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function ReviewSession({ classId, deckId = null, deckName, cards = [], className, flash, onClose }) {
   const [queue, setQueue] = useState(null);
   const [idx, setIdx] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
   const [err, setErr] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [exiting, setExiting] = useState(false); // fades the card out on a menu action
+  const [interactions, setInteractions] = useState(0);
+  const [meta, setMeta] = useState({ studyLimit: Infinity, sessionsNeeded: 1, maxCardsPerSession: 30, interleavingEnabled: false });
   const startedAt = useRef(Date.now());
-  const confidences = useRef([]);
+  const timesSeen = useRef({}); // cardId → times shown today (same-session cap 5)
+  const easeSum = useRef(0);
+  const reviewedCount = useRef(0);
   const ran = useRef(false);
 
   useEffect(() => {
@@ -518,39 +668,51 @@ function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
     ran.current = true;
     (async () => {
       try {
-        const [dueRes, sessRes] = await Promise.all([
-          api.get('/api/learn/due', { params: { classId, ...(deckId ? { deckId } : {}) } }),
-          api.post('/api/learn/sessions', { classId }),
-        ]);
-        setQueue(dueRes.data.cards);
-        setSessionId(sessRes.data.session.id);
+        if (deckId) {
+          const { data } = await api.get(`/api/study/today/${deckId}`);
+          const all = [...(data.newCards || []), ...(data.reviewCards || [])];
+          setQueue(data.interleavingEnabled ? shuffle(all) : all);
+          setMeta({
+            studyLimit: data.studyLimit ?? Infinity,
+            sessionsNeeded: data.sessionsNeeded ?? 1,
+            maxCardsPerSession: data.maxCardsPerSession ?? 30,
+            interleavingEnabled: !!data.interleavingEnabled,
+          });
+        } else {
+          // No deck selected → study the loaded due cards, new ones first.
+          const due = cards.filter(isDue);
+          setQueue([...due.filter((c) => !c.nextReviewDate), ...due.filter((c) => c.nextReviewDate)]);
+        }
         startedAt.current = Date.now();
       } catch (e) {
         setErr(errorMessage(e));
         setQueue([]);
       }
     })();
-  }, [classId]);
-
-  const endSession = useCallback(async () => {
-    if (!sessionId) return;
-    const avg = confidences.current.length
-      ? confidences.current.reduce((a, b) => a + b, 0) / confidences.current.length
-      : undefined;
-    try {
-      await api.patch(`/api/learn/sessions/${sessionId}`, avg ? { averageConfidence: avg } : {});
-    } catch { /* best-effort */ }
-  }, [sessionId]);
+  }, [deckId]);
 
   const rate = async (rating) => {
     const card = queue[idx];
+    if (!card) return;
     setSubmitting(true);
-    const timeSpentSeconds = Math.round((Date.now() - startedAt.current) / 1000);
     try {
-      await api.post(`/api/learn/cards/${card.id}/review`, {
-        rating, timeSpentSeconds, ...(sessionId ? { sessionId } : {}),
+      const { data } = await api.post(`/api/flashcards/${card.id}/rate`, { rating });
+      reviewedCount.current += 1;
+      easeSum.current += data.easeFactor ?? 0;
+      setInteractions((n) => n + 1);
+
+      // Same-session re-queue: failed cards (rating < 3) always; OK (3) at 50%;
+      // capped at 5 views per card so a stubborn card can't loop forever.
+      const shown = (timesSeen.current[card.id] || 0) + 1;
+      timesSeen.current[card.id] = shown;
+      const requeue = shown < 5 && (data.shouldShowAgainToday || (rating === 3 && Math.random() < 0.5));
+      setQueue((q) => {
+        if (!requeue) return q;
+        const next = q.slice();
+        next.splice(Math.min(next.length, idx + 3), 0, card); // reappear a few cards later
+        return next;
       });
-      confidences.current.push(rating);
+
       setRevealed(false);
       startedAt.current = Date.now();
       setIdx((i) => i + 1);
@@ -585,7 +747,7 @@ function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
     }, 180);
   };
 
-  const finish = async () => { await endSession(); onClose(); };
+  const finish = () => onClose();
 
   // Swipe left/right toggles the answer (mobile affordance).
   const touchX = useRef(null);
@@ -597,17 +759,31 @@ function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
   };
 
   const total = queue?.length ?? 0;
-  const done = queue !== null && idx >= total;
-  const card = queue && idx < total ? queue[idx] : null;
+  const limitReached = Number.isFinite(meta.studyLimit) && interactions >= meta.studyLimit;
+  const done = queue !== null && (idx >= total || limitReached);
+  const card = queue && idx < total && !limitReached ? queue[idx] : null;
 
   // Re-study the same set from the top (a light "cram again" pass).
   const reviewAgain = () => { setIdx(0); setRevealed(false); startedAt.current = Date.now(); };
 
-  // Finished a non-empty queue → celebratory completion overlay.
+  // Finished the queue (or hit the daily limit) → celebratory completion overlay.
   if (done && total > 0) {
+    const avgEase = reviewedCount.current ? easeSum.current / reviewedCount.current : 0;
     return (
       <DeckCompletionAnimation
-        count={confidences.current.length || total}
+        count={reviewedCount.current}
+        summary={[
+          { label: 'Cards reviewed', value: reviewedCount.current },
+          { label: 'Interactions', value: interactions },
+          { label: 'Avg ease', value: avgEase ? avgEase.toFixed(2) : '—' },
+        ]}
+        note={
+          limitReached
+            ? 'Daily study limit reached — great work!'
+            : meta.sessionsNeeded > 1
+              ? `About ${meta.sessionsNeeded} sessions suggested today to stay on pace`
+              : null
+        }
         onReviewAgain={reviewAgain}
         onBackToDecks={finish}
       />
@@ -619,8 +795,7 @@ function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
       <div className="glass-panel mt-6 flex w-full max-w-xl flex-col gap-4 p-5 sm:mt-10 sm:p-6">
         <div className="flex items-center justify-between text-sm">
           <span className="flex items-center gap-2 font-semibold text-muted">
-            {className} · Study
-            {card && <PhaseBadge phase={card.phase} step={card.learningStep} />}
+            {deckName ? `${deckName} · Study` : `${className} · Study`}
           </span>
           <button onClick={finish} className="text-2xl leading-none text-muted hover:text-ink" aria-label="End session">×</button>
         </div>
@@ -634,7 +809,12 @@ function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
             <div className="h-1.5 overflow-hidden rounded-full bg-white/40">
               <div className="h-full rounded-full transition-all" style={{ width: `${(idx / total) * 100}%`, background: 'var(--grad-teal-purple)' }} />
             </div>
-            <p className="text-center text-xs font-medium text-muted">Card {idx + 1} of {total}</p>
+            <p className="text-center text-xs font-medium text-muted">
+              Card {idx + 1} of {total}
+              {Number.isFinite(meta.studyLimit) && (
+                <span> · {interactions}/{meta.studyLimit} interactions</span>
+              )}
+            </p>
             <div className="relative">
               {/* 3-dot study actions — lives outside the scroll container so its
                   dropdown isn't clipped. */}
@@ -656,7 +836,7 @@ function ReviewSession({ classId, deckId = null, className, flash, onClose }) {
             ) : (
               <div>
                 <p className="mb-2 text-center text-xs font-medium text-muted">How well did you know it?</p>
-                <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
                   {RATINGS.map((c) => (
                     <button key={c.v} disabled={submitting} onClick={() => rate(c.v)}
                       className={`flex min-h-[3rem] flex-col items-center justify-center rounded-xl border bg-white/60 py-2 text-xs font-semibold transition disabled:opacity-50 ${c.cls}`}>

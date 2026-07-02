@@ -65,6 +65,11 @@ export function toPublicCard(row) {
     // return once bury_until passes.
     isSuspended: row.is_suspended ?? false,
     buryUntil: row.bury_until ?? null,
+    // Classic SM-2 schedule (source of truth for due/new).
+    easeFactor: row.ease_factor != null ? Number(row.ease_factor) : 2.5,
+    interval: row.sm2_interval ?? 0,
+    repetitions: row.repetitions ?? 0,
+    nextReviewDate: row.next_review_date ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     // Present when joined with mastery_levels (list view).

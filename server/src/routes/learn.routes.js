@@ -6,7 +6,6 @@
  *   POST   /classes/:classId/generate      AI-generate cards (503 w/o API key)
  *   PATCH  /cards/:cardId                  edit a card
  *   DELETE /cards/:cardId                  delete a card
- *   POST   /cards/:cardId/review           record an SM-2 review
  *   GET    /due                            cards due for review (optional ?classId)
  *   GET    /stats                          learning overview (streak, mastery, due)
  *   POST   /sessions                       start a study session
@@ -80,12 +79,6 @@ router.post(
   '/cards/:cardId/suspend',
   validate(learn.cardIdParam, 'params'),
   asyncHandler(learn.suspendCard),
-);
-router.post(
-  '/cards/:cardId/review',
-  validate(learn.cardIdParam, 'params'),
-  validate(learn.reviewSchema),
-  asyncHandler(learn.review),
 );
 
 router.get('/due', validate(learn.dueQuery, 'query'), asyncHandler(learn.due));

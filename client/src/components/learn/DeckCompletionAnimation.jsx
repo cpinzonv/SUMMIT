@@ -29,7 +29,7 @@ function SummitPeak() {
   );
 }
 
-export default function DeckCompletionAnimation({ count = 0, onReviewAgain, onBackToDecks }) {
+export default function DeckCompletionAnimation({ count = 0, summary = null, note = null, onReviewAgain, onBackToDecks }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm">
       <div className="deck-complete-card glass-panel relative w-full max-w-[400px] overflow-hidden p-8 text-center">
@@ -66,6 +66,18 @@ export default function DeckCompletionAnimation({ count = 0, onReviewAgain, onBa
         <p className="deck-complete-text mt-1 text-sm text-muted">
           You&rsquo;ve studied {count} card{count === 1 ? '' : 's'} today
         </p>
+
+        {summary && summary.length > 0 && (
+          <div className="deck-complete-text mt-4 flex justify-center gap-5">
+            {summary.map((s) => (
+              <div key={s.label} className="text-center">
+                <div className="font-display text-lg font-bold text-ink">{s.value}</div>
+                <div className="text-[11px] font-medium text-muted">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {note && <p className="deck-complete-text mt-3 text-xs font-medium text-brand-600">{note}</p>}
 
         <div className="deck-complete-text mt-6 flex gap-2">
           <button onClick={onReviewAgain} className="btn btn-soft flex-1">Review again</button>
