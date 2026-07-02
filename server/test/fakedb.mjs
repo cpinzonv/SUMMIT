@@ -17,32 +17,38 @@ export const store = {
   classes: [],
   assignments: [],
   grades: [],
+  lms_sync_log: [],
   reset() {
     this.users = [];
     this.lms_connections = [];
     this.classes = [];
     this.assignments = [];
     this.grades = [];
+    this.lms_sync_log = [];
   },
 };
 
 function run(text, params) {
   const q = norm(text);
 
-  if (q.startsWith('SELECT provider, domain, connected, synced_at FROM lms_connections WHERE user_id = $1 AND provider = $2')) {
+  if (q.startsWith('SELECT provider, domain, connected, synced_at, auth_method FROM lms_connections WHERE user_id = $1 AND provider = $2')) {
     return rows(store.lms_connections.filter((c) => c.user_id === params[0] && c.provider === params[1]));
   }
-  if (q.startsWith('SELECT provider, domain, connected, synced_at FROM lms_connections WHERE user_id = $1')) {
+  if (q.startsWith('SELECT provider, domain, connected, synced_at, auth_method FROM lms_connections WHERE user_id = $1')) {
     return rows(store.lms_connections.filter((c) => c.user_id === params[0]));
+  }
+  if (q.startsWith('SELECT user_id, provider FROM lms_connections WHERE connected = true')) {
+    return rows(store.lms_connections.filter((c) => c.connected && c.access_token != null).map((c) => ({ user_id: c.user_id, provider: c.provider })));
   }
   if (q.startsWith('SELECT provider, domain, access_token, refresh_token, token_expires_at FROM lms_connections')) {
     return rows(store.lms_connections.filter((c) => c.user_id === params[0] && c.provider === params[1]));
   }
   if (q.startsWith('INSERT INTO lms_connections')) {
-    const [user_id, provider, domain, access_token, refresh_token, token_expires_at] = params;
+    const [user_id, provider, domain, access_token, refresh_token = null, token_expires_at = null] = params;
+    const auth_method = /'token'/.test(q) ? 'token' : 'oauth';
     let row = store.lms_connections.find((c) => c.user_id === user_id && c.provider === provider);
-    if (row) Object.assign(row, { domain, access_token, refresh_token, token_expires_at, connected: true });
-    else store.lms_connections.push({ id: uuid(), user_id, provider, domain, access_token, refresh_token, token_expires_at, connected: true, synced_at: null });
+    if (row) Object.assign(row, { domain, access_token, refresh_token, token_expires_at, connected: true, auth_method });
+    else store.lms_connections.push({ id: uuid(), user_id, provider, domain, access_token, refresh_token, token_expires_at, connected: true, synced_at: null, auth_method });
     return rows([]);
   }
   if (q.startsWith('UPDATE lms_connections SET connected = false')) {
@@ -115,6 +121,49 @@ function run(text, params) {
     let g = store.grades.find((x) => x.assignment_id === assignment_id);
     if (g) Object.assign(g, { points_earned: earned, points_possible: possible });
     else store.grades.push({ id: uuid(), assignment_id, points_earned: earned, points_possible: possible });
+    return rows([]);
+  }
+
+  // Synced-data counts per external_source (status enrichment).
+  if (q.startsWith('SELECT a.external_source AS provider')) {
+    const userClassIds = new Set(store.classes.filter((c) => c.user_id === params[0]).map((c) => c.id));
+    const gradedIds = new Set(store.grades.map((g) => g.assignment_id));
+    const by = {};
+    for (const a of store.assignments) {
+      if (!userClassIds.has(a.class_id) || a.external_source == null) continue;
+      const r = (by[a.external_source] ??= { provider: a.external_source, assignments: 0, grades: 0 });
+      r.assignments++;
+      if (gradedIds.has(a.id)) r.grades++;
+    }
+    return rows(Object.values(by));
+  }
+
+  // Most-recent sync-log row per provider.
+  if (q.startsWith('SELECT DISTINCT ON (provider) provider, trigger, status')) {
+    const mine = store.lms_sync_log.filter((l) => l.user_id === params[0]);
+    const latest = {};
+    for (const l of mine) {
+      if (!latest[l.provider] || l.started_at > latest[l.provider].started_at) latest[l.provider] = l;
+    }
+    return rows(Object.values(latest));
+  }
+
+  // Recent sync-log rows for one provider (getSyncLog).
+  if (q.startsWith('SELECT id, trigger, status, courses, imported, updated, grades')) {
+    const mine = store.lms_sync_log
+      .filter((l) => l.user_id === params[0] && l.provider === params[1])
+      .sort((a, b) => (a.started_at < b.started_at ? 1 : -1))
+      .slice(0, params[2] ?? 20);
+    return rows(mine);
+  }
+
+  if (q.startsWith('INSERT INTO lms_sync_log')) {
+    const [user_id, provider, trigger, status, courses, imported, updated, grades, error_message, started_at] = params;
+    store.lms_sync_log.push({
+      id: uuid(), user_id, provider, trigger, status,
+      courses, imported, updated, grades, error_message,
+      started_at, completed_at: new Date().toISOString(),
+    });
     return rows([]);
   }
 
