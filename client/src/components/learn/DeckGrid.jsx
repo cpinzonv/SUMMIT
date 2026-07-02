@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * Decks rendered as tactile stacks of flashcards. Tap a stack to open its cards;
- * double-click the name to rename inline. Stack fanning + hover lift live in
+ * Decks rendered as tactile stacks of flashcards. Single-tap a stack to open its
+ * cards (viewer); double-tap to launch an SM-2 review session for that deck.
+ * Double-click the name to rename inline. Stack fanning + hover lift live in
  * index.css (.deck-stack*).
  */
 
-function DeckStack({ deck, active, onSelect, onRename }) {
+function DeckStack({ deck, active, onSelect, onStudy, onRename }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(deck.name);
   const inputRef = useRef(null);
@@ -34,14 +35,16 @@ function DeckStack({ deck, active, onSelect, onRename }) {
       role="button"
       tabIndex={0}
       onClick={() => !editing && onSelect(deck.id)}
+      onDoubleClick={() => !editing && onStudy(deck.id)}
       onKeyDown={(e) => {
-        if (!editing && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault();
-          onSelect(deck.id);
-        }
+        if (editing) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(deck.id); }
+        // Shift+Enter = jump straight into a study session (keyboard parity with double-tap).
+        if (e.shiftKey && e.key === 'Enter') { e.preventDefault(); onStudy(deck.id); }
       }}
       className={`deck-stack ${active ? 'is-active' : ''}`}
-      aria-label={`Open ${deck.name} — ${deck.cardCount} cards`}
+      aria-label={`${deck.name} — ${deck.cardCount} cards. Tap to open, double-tap to study.`}
+      title="Tap to open · double-tap to study"
     >
       <span className="deck-stack-layer deck-stack-layer-3" aria-hidden="true" />
       <span className="deck-stack-layer deck-stack-layer-2" aria-hidden="true" />
@@ -77,7 +80,7 @@ function DeckStack({ deck, active, onSelect, onRename }) {
   );
 }
 
-export function DeckGrid({ decks, totalCards, activeDeck, onSelect, onRename }) {
+export function DeckGrid({ decks, totalCards, activeDeck, onSelect, onStudy, onRename }) {
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
       {/* "All cards" — a single flat card (not a stack) so it reads as the "show everything" option. */}
@@ -85,9 +88,14 @@ export function DeckGrid({ decks, totalCards, activeDeck, onSelect, onRename }) 
         role="button"
         tabIndex={0}
         onClick={() => onSelect(null)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(null); } }}
+        onDoubleClick={() => onStudy(null)}
+        onKeyDown={(e) => {
+          if (e.shiftKey && e.key === 'Enter') { e.preventDefault(); onStudy(null); return; }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(null); }
+        }}
         className={`deck-stack deck-stack--flat ${!activeDeck ? 'is-active' : ''}`}
-        aria-label={`All cards — ${totalCards} cards`}
+        aria-label={`All cards — ${totalCards} cards. Tap to open, double-tap to study.`}
+        title="Tap to open · double-tap to study"
       >
         <span className="deck-stack-front glass-card">
           <span className="font-display text-sm font-bold text-ink">All cards</span>
@@ -98,7 +106,7 @@ export function DeckGrid({ decks, totalCards, activeDeck, onSelect, onRename }) 
       </div>
 
       {decks.map((d) => (
-        <DeckStack key={d.id} deck={d} active={activeDeck === d.id} onSelect={onSelect} onRename={onRename} />
+        <DeckStack key={d.id} deck={d} active={activeDeck === d.id} onSelect={onSelect} onStudy={onStudy} onRename={onRename} />
       ))}
     </div>
   );

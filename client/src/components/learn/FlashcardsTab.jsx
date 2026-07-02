@@ -139,6 +139,7 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
           totalCards={cards.length}
           activeDeck={activeDeck}
           onSelect={setActiveDeck}
+          onStudy={(deckId) => { setActiveDeck(deckId); setReviewing(true); }}
           onRename={renameDeck}
         />
       )}
