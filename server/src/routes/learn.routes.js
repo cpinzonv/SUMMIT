@@ -51,6 +51,12 @@ router.get(
   validate(learn.deckIdParam, 'params'),
   asyncHandler(learn.deckCards),
 );
+router.patch(
+  '/decks/:deckId',
+  validate(learn.deckIdParam, 'params'),
+  validate(learn.updateDeckSchema),
+  asyncHandler(learn.updateDeck),
+);
 
 router.patch(
   '/cards/:cardId',

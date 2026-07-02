@@ -6,6 +6,7 @@ import { exportDeck } from '../../lib/learnExport';
 import { CardFace, CardTypeBadge } from './CardTypes';
 import { LearnEmptyState } from './LearnEmptyState';
 import DeckCompletionAnimation from './DeckCompletionAnimation';
+import { DeckGrid } from './DeckGrid';
 
 /** Flashcards: manage a class's cards and run spaced-repetition review sessions. */
 
@@ -89,6 +90,16 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
     setStudyToken((t) => t + 1);
   }, [load, refreshStats]);
 
+  const renameDeck = async (deckId, name) => {
+    try {
+      await api.patch(`/api/learn/decks/${deckId}`, { name });
+      flash('Deck renamed');
+      load();
+    } catch (err) {
+      flash(errorMessage(err), 'error');
+    }
+  };
+
   // Scope the grid + "Study" to the selected deck (null = all cards).
   const shownCards = activeDeck ? cards.filter((c) => c.deckId === activeDeck) : cards;
   const dueCount = shownCards.filter(isDue).length;
@@ -121,20 +132,16 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
         </div>
       )}
 
-      {/* Deck selector — group cards by source note (Anki-style). */}
+      {/* Deck selector — each deck is a tappable stack of flashcards. */}
       {decks.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          <DeckChip label="All cards" count={cards.length} active={!activeDeck} onClick={() => setActiveDeck(null)} />
-          {decks.map((d) => (
-            <DeckChip
-              key={d.id}
-              label={d.name}
-              count={d.cardCount}
-              active={activeDeck === d.id}
-              onClick={() => setActiveDeck(d.id)}
-            />
-          ))}
-        </div>
+        <DeckGrid
+          decks={decks}
+          totalCards={cards.length}
+          activeDeck={activeDeck}
+          onSelect={setActiveDeck}
+          onStudy={(deckId) => { setActiveDeck(deckId); setReviewing(true); }}
+          onRename={renameDeck}
+        />
       )}
 
       {/* Per-deck study plan: progress, deadline, daily limits, interleaving. */}
@@ -204,21 +211,6 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   );
 }
 
-/** Selectable deck pill with a card count. */
-function DeckChip({ label, count, active, onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold transition ${
-        active ? 'bg-white/80 text-brand-700 shadow-sm' : 'bg-white/45 text-muted hover:bg-white/70 hover:text-ink'
-      }`}
-    >
-      <span className="max-w-[12rem] truncate">{label}</span>
-      <span className={`rounded-full px-1.5 text-[11px] ${active ? 'bg-brand-500/15 text-brand-700' : 'bg-black/5 text-muted'}`}>{count}</span>
-    </button>
-  );
-}
 
 function CardTile({ card, onEdit, onDelete }) {
   const [flipped, setFlipped] = useState(false);

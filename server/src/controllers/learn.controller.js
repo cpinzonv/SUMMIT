@@ -99,6 +99,10 @@ export async function listDecks(req, res) {
 export async function deckCards(req, res) {
   res.json({ cards: await flashcards.listDeckCards(req.user.id, req.params.deckId) });
 }
+export const updateDeckSchema = z.object({ name: z.string().trim().min(1, 'Name is required').max(120) });
+export async function updateDeck(req, res) {
+  res.json({ deck: await flashcards.updateDeck(req.user.id, req.params.deckId, req.body) });
+}
 
 export async function updateCard(req, res) {
   const card = await flashcards.updateCard(req.user.id, req.params.cardId, req.body);

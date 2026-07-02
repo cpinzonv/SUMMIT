@@ -264,6 +264,16 @@ export async function deleteCard(userId, cardId) {
   if (!rowCount) throw AppError.notFound('Flashcard not found');
 }
 
+/** Rename a deck (owner-scoped). Returns the updated { id, name }. */
+export async function updateDeck(userId, deckId, { name }) {
+  const { rows } = await query(
+    'UPDATE decks SET name = $3 WHERE id = $1 AND user_id = $2 RETURNING id, name',
+    [deckId, userId, name.trim()],
+  );
+  if (!rows[0]) throw AppError.notFound('Deck not found');
+  return { id: rows[0].id, name: rows[0].name };
+}
+
 /** Bury a card: hide it from study until `bury_until` (default: +1 day). */
 export async function buryCard(userId, cardId) {
   const { rows } = await query(
