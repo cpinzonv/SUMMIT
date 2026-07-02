@@ -1,12 +1,32 @@
 import { z } from 'zod';
 import * as analytics from '../services/admin.service.js';
 import * as gating from '../services/featureGating.service.js';
+import * as canvasConfig from '../services/canvasConfig.service.js';
 import { query } from '../config/db.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 
 export async function overview(req, res) {
   res.json(await analytics.overview());
+}
+
+/* ---- Canvas configuration (admin) --------------------------------------- */
+
+export const canvasConfigSchema = z.object({
+  instanceUrl: z.string().trim().max(300).optional(),
+  clientId: z.string().trim().max(300).optional(),
+  // Empty/omitted secret means "keep the stored one".
+  clientSecret: z.string().max(500).optional(),
+  // Only accepted when none is set yet (write-once); must be 64 hex chars.
+  encryptionKey: z.string().regex(/^[0-9a-fA-F]{64}$/, 'Must be 64 hexadecimal characters').optional(),
+});
+
+export async function getCanvasConfig(req, res) {
+  res.json({ config: await canvasConfig.getPublicConfig() });
+}
+
+export async function saveCanvasConfig(req, res) {
+  res.json({ config: await canvasConfig.saveConfig(req.body) });
 }
 export async function signups(req, res) {
   res.json(await analytics.signups());

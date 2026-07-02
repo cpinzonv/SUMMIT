@@ -327,6 +327,7 @@ function PreferencesTab({ prefs, set }) {
 
       <SettingsGraduationSection />
       <LmsConnections />
+      <CanvasAdminConfig />
       <GoogleCalendarSection />
     </>
   );
@@ -685,6 +686,154 @@ function ProviderCard({ status, justConnected, onChange, setToast }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* ---- Canvas configuration (admin only) --------------------------------- */
+function CanvasAdminConfig() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
+  const [cfg, setCfg] = useState(null); // presence-flags view from the server
+  const [form, setForm] = useState({ instanceUrl: '', clientId: '', clientSecret: '', encryptionKey: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    setLoading(true);
+    api
+      .get('/api/admin/canvas-config')
+      .then((r) => {
+        const c = r.data.config;
+        setCfg(c);
+        setForm((f) => ({ ...f, instanceUrl: c.instanceUrl || '', clientId: c.clientId || '' }));
+      })
+      .catch(() => setCfg(null))
+      .finally(() => setLoading(false));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  if (!isAdmin) return null;
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // openssl rand -hex 32 equivalent, generated client-side.
+  const generateKey = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    setForm((f) => ({ ...f, encryptionKey: hex }));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const payload = { instanceUrl: form.instanceUrl.trim(), clientId: form.clientId.trim() };
+      if (form.clientSecret.trim()) payload.clientSecret = form.clientSecret.trim();
+      // Only send a key when none is set yet (write-once; the server enforces this too).
+      if (!cfg?.hasEncryptionKey && form.encryptionKey.trim()) payload.encryptionKey = form.encryptionKey.trim();
+      const r = await api.post('/api/admin/canvas-config', payload);
+      setCfg(r.data.config);
+      setForm((f) => ({ ...f, clientSecret: '', encryptionKey: '' }));
+      setToast({ type: 'success', msg: 'Canvas configured successfully' });
+    } catch (err) {
+      setToast({ type: 'error', msg: errorMessage(err, 'Could not save Canvas configuration') });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const busy = loading || saving;
+
+  return (
+    <Section title="Canvas configuration" description="Server-wide Canvas OAuth settings for the whole app (admin only).">
+      {loading ? (
+        <p className="text-sm text-muted">Loading…</p>
+      ) : cfg?.configured ? (
+        <p className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-600">
+          ✓ Canvas is configured
+        </p>
+      ) : (
+        <p className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1 text-sm font-bold text-rose-600">
+          ⚠ Canvas is not configured yet
+        </p>
+      )}
+
+      <div className="space-y-4">
+        <Field
+          label="Canvas Instance URL"
+          value={form.instanceUrl}
+          onChange={set('instanceUrl')}
+          placeholder="https://canvas.myuniversity.com"
+          disabled={busy}
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+        <Field
+          label="OAuth Client ID"
+          value={form.clientId}
+          onChange={set('clientId')}
+          placeholder="e.g. 10000000000001"
+          disabled={busy}
+          autoCapitalize="none"
+          autoCorrect="off"
+        />
+        <Field
+          label="OAuth Client Secret"
+          type="password"
+          value={form.clientSecret}
+          onChange={set('clientSecret')}
+          placeholder={cfg?.hasClientSecret ? '•••••••• saved — leave blank to keep' : 'Paste the client secret'}
+          disabled={busy}
+          autoComplete="off"
+        />
+
+        {/* Token encryption key — read-only display + generate (write-once). */}
+        <div>
+          <span className="mb-1 block text-sm font-semibold text-ink">Token Encryption Key</span>
+          {cfg?.hasEncryptionKey ? (
+            <div className="flex items-center gap-2">
+              <input readOnly value="•••••••••••••••••••• configured" className="field font-mono text-muted" />
+              <span className="whitespace-nowrap text-xs font-semibold text-emerald-600">🔒 Locked</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={form.encryptionKey}
+                placeholder="Click Generate to create a 64-char key"
+                className="field font-mono text-xs"
+              />
+              <button type="button" onClick={generateKey} disabled={busy} className="btn btn-soft whitespace-nowrap">
+                Generate Key
+              </button>
+            </div>
+          )}
+          <span className="mt-1 block text-xs text-muted">
+            {cfg?.hasEncryptionKey
+              ? 'Write-once — it can’t be replaced here, since that would make all existing encrypted tokens and 2FA secrets unreadable.'
+              : 'Generated in your browser. Also set it as the server’s APP_ENCRYPTION_KEY — the running server reads the key from the environment.'}
+          </span>
+        </div>
+
+        <div className="rounded-xl border border-amber-300/50 bg-amber-50/60 px-3 py-2 text-xs text-amber-700">
+          These values are stored for reference. The running server still reads Canvas credentials and the encryption
+          key from environment variables, so changes take effect once they’re set in the server env and it’s redeployed.
+        </div>
+
+        <button type="button" onClick={save} disabled={busy} className="btn btn-primary">
+          {saving ? 'Saving…' : 'Save Configuration'}
+        </button>
+      </div>
+
+      <Toast toast={toast} />
+    </Section>
   );
 }
 

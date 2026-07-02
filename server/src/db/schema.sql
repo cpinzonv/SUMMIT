@@ -213,6 +213,27 @@ CREATE INDEX IF NOT EXISTS idx_lms_sync_log_user_provider
   ON lms_sync_log(user_id, provider, started_at DESC);
 
 -- ----------------------------------------------------------------------------
+-- canvas_config — admin-managed Canvas OAuth configuration (singleton row).
+--
+-- NOTE (stub): the running server still reads Canvas creds + the token
+-- encryption key from ENV at boot (see config/env.js). This table stores what an
+-- admin enters in Settings so it survives restarts and can later be wired to be
+-- read at runtime. oauth_client_secret + token_encryption_key are stored
+-- ENCRYPTED at rest and never returned to the client. The encryption key is
+-- write-once (generate-if-absent) — overwriting it would make all existing
+-- encrypted tokens/2FA secrets undecryptable, so the service refuses to replace it.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS canvas_config (
+  id                   INT PRIMARY KEY DEFAULT 1,
+  instance_url         TEXT,
+  oauth_client_id      TEXT,
+  oauth_client_secret  TEXT,          -- encrypted
+  token_encryption_key TEXT,          -- encrypted; write-once
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT canvas_config_singleton CHECK (id = 1)
+);
+
+-- ----------------------------------------------------------------------------
 -- refresh_tokens — server-side record of issued refresh tokens (rotation +
 -- revocation). Access tokens stay stateless JWTs; refresh tokens are tracked.
 -- ----------------------------------------------------------------------------
