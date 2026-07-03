@@ -544,8 +544,23 @@ function UploadTranscriptModal({ classId, onClose, onSaved }) {
 
 /* ---- View a transcript: transcribe → summarize → move-to-notes --------- */
 function TranscriptModal({ transcript, autoTranscription, onClose, onChanged, onGoToNotes }) {
+  // Keep the recording by default; when off, drop it on any close / after move.
+  const [keepAudio, setKeepAudio] = useState(true);
+
+  // Best-effort: delete just the audio (keeps the transcript text) when the
+  // toggle is off. Fire-and-forget so closing stays instant.
+  const cleanupAudio = () => {
+    if (keepAudio || !transcript.audioFileId) return;
+    api
+      .delete(`/api/transcripts/${transcript.id}/audio?keepAudio=false`)
+      .then(() => onChanged?.())
+      .catch(() => {});
+  };
+  const handleClose = () => { cleanupAudio(); onClose(); };
+  const handleMoved = () => { cleanupAudio(); (onGoToNotes || onClose)(); };
+
   return (
-    <Modal title={transcript.title} onClose={onClose} wide>
+    <Modal title={transcript.title} onClose={handleClose} wide>
       <div className="space-y-3">
         <div className="text-xs text-muted">
           {[fmtDay(transcript.recordedDate), fmtDuration(transcript.durationSeconds), SOURCE_LABEL[transcript.source]].filter(Boolean).join(' · ')}
@@ -553,12 +568,14 @@ function TranscriptModal({ transcript, autoTranscription, onClose, onChanged, on
         <TranscriptionUI
           transcript={transcript}
           autoTranscription={autoTranscription}
+          hasAudio={!!transcript.audioFileId}
+          keepAudio={keepAudio}
+          onToggleKeepAudio={() => setKeepAudio((v) => !v)}
           onChanged={onChanged}
-          onGoToNotes={onGoToNotes}
-          onClose={onClose}
+          onMoved={handleMoved}
         />
         <div className="flex justify-end pt-1">
-          <button type="button" onClick={onClose} className="btn btn-soft">Close</button>
+          <button type="button" onClick={handleClose} className="btn btn-soft">Close</button>
         </div>
       </div>
     </Modal>
