@@ -10,6 +10,7 @@ import {
 } from '../utils/jwt.js';
 import { verifyLoginCode } from './twofa.service.js';
 import { hasPremiumAccess } from './featureGating.service.js';
+import { assertInstitutionActive } from './institution.service.js';
 
 const SALT_ROUNDS = 12;
 
@@ -145,6 +146,9 @@ export async function login({ email, password }) {
     throw AppError.unauthorized('Invalid email or password');
   }
 
+  // Hard block: a revoked institution's users cannot log in.
+  await assertInstitutionActive(user);
+
   // With 2FA on, hold off on tokens — return a short-lived challenge instead.
   if (user.totp_enabled) {
     return { twoFactorRequired: true, challengeToken: signTwoFactorChallenge(user.id) };
@@ -192,6 +196,10 @@ export async function refresh({ refreshToken }) {
       throw AppError.unauthorized('Invalid or expired refresh token');
     }
 
+    // Hard block: refuse to refresh a revoked institution's session (so a hard
+    // revoke takes effect within one access-token cycle).
+    await assertInstitutionActive(record.user_id);
+
     await client.query(
       `UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1`,
       [record.id],
@@ -216,6 +224,42 @@ export async function logout({ refreshToken }) {
      WHERE token_hash = $1 AND revoked_at IS NULL`,
     [hashToken(refreshToken)],
   );
+}
+
+/* ---- Invite links (institution-admin onboarding) ------------------------ */
+
+/** Validate an invite token and return the invitee's email (for the set-password page). */
+export async function getInvite(token) {
+  const { rows } = await query(
+    `SELECT iv.expires_at, iv.used_at, u.email
+       FROM user_invites iv JOIN users u ON u.id = iv.user_id
+      WHERE iv.token_hash = $1`,
+    [hashToken(token)],
+  );
+  const inv = rows[0];
+  if (!inv || inv.used_at || new Date(inv.expires_at) <= new Date()) {
+    throw AppError.badRequest('This invite link is invalid or has expired.');
+  }
+  return { email: inv.email };
+}
+
+/** Consume an invite token: set the account's password and mark it used. One-time. */
+export async function acceptInvite({ token, password }) {
+  const tokenHash = hashToken(token);
+  return withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT * FROM user_invites WHERE token_hash = $1 FOR UPDATE`,
+      [tokenHash],
+    );
+    const inv = rows[0];
+    if (!inv || inv.used_at || new Date(inv.expires_at) <= new Date()) {
+      throw AppError.badRequest('This invite link is invalid or has expired.');
+    }
+    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, inv.user_id]);
+    await client.query('UPDATE user_invites SET used_at = now() WHERE id = $1', [inv.id]);
+    return { ok: true };
+  });
 }
 
 export async function getCurrentUser(userId) {

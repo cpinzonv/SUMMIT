@@ -13,12 +13,14 @@ import LearnPage from './pages/LearnPage';
 import SettingsPage from './pages/SettingsPage';
 import LmsCallbackPage from './pages/LmsCallbackPage';
 import AdminAnalytics from './pages/AdminAnalytics';
+import SetPasswordPage from './pages/SetPasswordPage';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/callback" element={<OAuthCallbackPage />} />
+      <Route path="/set-password" element={<SetPasswordPage />} />
 
       <Route
         element={

@@ -917,3 +917,47 @@ CREATE TABLE IF NOT EXISTS deck_study_stats (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_deck_stats_day ON deck_study_stats(deck_id, user_id, date);
+
+-- ============================================================================
+-- Institutions (multi-tenancy) — B2B onboarding. A super-admin (role 'admin')
+-- provisions an institution + an 'institution_admin' user (school IT). Feature
+-- tiers are stored here now; app-wide ENFORCEMENT lands in Phase 2. Revoke is a
+-- hard block (login + token refresh are refused for the institution's users).
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS institutions (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name           TEXT NOT NULL,
+  admin_email    CITEXT NOT NULL,
+  contract_start DATE,
+  contract_end   DATE,
+  lms_type       TEXT,                                  -- canvas | blackboard | ...
+  student_seats  INTEGER NOT NULL DEFAULT 0,            -- soft cap (display only)
+  tier           TEXT NOT NULL DEFAULT 'basic',         -- basic | pro
+  feature_flags  JSONB NOT NULL DEFAULT '{}'::jsonb,    -- { transcription, summaries, ... }
+  revoked_at     TIMESTAMPTZ,
+  created_by     UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_institutions_admin_email ON institutions(admin_email);
+
+DROP TRIGGER IF EXISTS trg_institutions_updated_at ON institutions;
+CREATE TRIGGER trg_institutions_updated_at
+  BEFORE UPDATE ON institutions
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- Which institution a user belongs to (NULL = ordinary individual user). The
+-- institution's admin has role 'institution_admin'.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS institution_id UUID REFERENCES institutions(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_users_institution_id ON users(institution_id);
+
+-- One-time, expiring set-password invite tokens (only the SHA-256 hash is stored).
+CREATE TABLE IF NOT EXISTS user_invites (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_invites_user_id ON user_invites(user_id);

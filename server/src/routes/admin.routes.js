@@ -31,6 +31,23 @@ router.get('/analytics/referral-sources', asyncHandler(authController.referralAn
 router.get('/canvas-config', asyncHandler(admin.getCanvasConfig));
 router.post('/canvas-config', validate(admin.canvasConfigSchema), asyncHandler(admin.saveCanvasConfig));
 
+// Institutions (multi-tenancy). Super-admin provisions schools + invite links.
+router.get('/institutions', asyncHandler(admin.listInstitutions));
+router.post('/institutions', validate(admin.institutionCreateSchema), asyncHandler(admin.createInstitution));
+router.get('/institutions/:institutionId', validate(admin.institutionIdParam, 'params'), asyncHandler(admin.getInstitution));
+router.patch(
+  '/institutions/:institutionId',
+  validate(admin.institutionIdParam, 'params'),
+  validate(admin.institutionUpdateSchema),
+  asyncHandler(admin.updateInstitution),
+);
+router.post(
+  '/institutions/:institutionId/revoke',
+  validate(admin.institutionIdParam, 'params'),
+  validate(admin.revokeSchema),
+  asyncHandler(admin.revokeInstitution),
+);
+
 // Premium whitelist — grant comp access to specific users (close friends/testers).
 router.get('/whitelist', asyncHandler(admin.whitelistList));
 router.post('/whitelist/add', validate(admin.whitelistAddSchema), asyncHandler(admin.whitelistAdd));
