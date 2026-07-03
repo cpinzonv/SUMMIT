@@ -29,7 +29,7 @@ export const transcriptIdParam = z.object({
 
 export async function list(req, res) {
   const transcripts = await transcriptService.listTranscripts(req.user.id, req.params.id, req.query.q || '');
-  res.json({ transcripts });
+  res.json({ transcripts, autoTranscription: transcriptService.isTranscriptionConfigured() });
 }
 
 export async function create(req, res) {
@@ -56,4 +56,30 @@ export async function update(req, res) {
 export async function remove(req, res) {
   await transcriptService.deleteTranscript(req.user.id, req.params.transcriptId);
   res.status(204).end();
+}
+
+/* ---- Whisper transcription / Claude summary / move-to-notes ------------- */
+
+export async function transcribe(req, res) {
+  const transcript = await transcriptService.transcribeExisting(req.user.id, req.params.transcriptId);
+  res.json({ transcript });
+}
+
+export async function summary(req, res) {
+  const { transcript, summary: text } = await transcriptService.summarizeTranscript(
+    req.user.id,
+    req.params.transcriptId,
+  );
+  res.json({ transcript, summary: text });
+}
+
+export async function moveToNotes(req, res) {
+  const note = await transcriptService.moveToNotes(req.user.id, req.params.transcriptId);
+  res.status(201).json({ noteId: note.id, note });
+}
+
+export async function removeAudio(req, res) {
+  const keepAudio = String(req.query.keepAudio) === 'true';
+  const transcript = await transcriptService.deleteTranscriptAudio(req.user.id, req.params.transcriptId, { keepAudio });
+  res.json({ transcript });
 }

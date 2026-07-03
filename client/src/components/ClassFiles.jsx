@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { Spinner, Modal } from './ui';
+import { TranscriptionUI } from './TranscriptionUI';
 
 /* ---- line icons (2px stroke, currentColor) ----------------------------- */
 const svg = (children) =>
@@ -58,9 +59,10 @@ const SOURCE_LABEL = { recording: 'Recording', paste: 'Pasted', upload: 'Uploade
  * (or transcripts). Empty state shows a big "+" and a Record button. The "+"
  * opens a type chooser; recording is always available without the chooser.
  */
-export function ClassFiles({ classId }) {
+export function ClassFiles({ classId, onGoToNotes }) {
   const [files, setFiles] = useState(null);
   const [transcripts, setTranscripts] = useState(null);
+  const [autoTranscription, setAutoTranscription] = useState(false);
   const [active, setActive] = useState(null);
   const [error, setError] = useState('');
   const [uploadingCat, setUploadingCat] = useState(null);
@@ -73,7 +75,13 @@ export function ClassFiles({ classId }) {
   const loadFiles = () =>
     api.get(`/api/classes/${classId}/files`).then((r) => setFiles(r.data.files)).catch((e) => setError(errorMessage(e)));
   const loadTranscripts = () =>
-    api.get(`/api/classes/${classId}/transcripts`).then((r) => setTranscripts(r.data.transcripts)).catch((e) => setError(errorMessage(e)));
+    api
+      .get(`/api/classes/${classId}/transcripts`)
+      .then((r) => {
+        setTranscripts(r.data.transcripts);
+        setAutoTranscription(!!r.data.autoTranscription);
+      })
+      .catch((e) => setError(errorMessage(e)));
 
   useEffect(() => {
     loadFiles();
@@ -260,11 +268,10 @@ export function ClassFiles({ classId }) {
       {modal?.type === 'viewTranscript' && (
         <TranscriptModal
           transcript={modal.transcript}
+          autoTranscription={autoTranscription}
           onClose={() => setModal(null)}
-          onSaved={async () => {
-            setModal(null);
-            await loadTranscripts();
-          }}
+          onChanged={loadTranscripts}
+          onGoToNotes={onGoToNotes}
         />
       )}
     </div>
@@ -535,57 +542,23 @@ function UploadTranscriptModal({ classId, onClose, onSaved }) {
   );
 }
 
-/* ---- View / edit a transcript ------------------------------------------ */
-function TranscriptModal({ transcript, onClose, onSaved }) {
-  const [content, setContent] = useState(transcript.content || '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const dirty = content !== (transcript.content || '');
-
-  const save = async () => {
-    setSaving(true);
-    setError('');
-    try {
-      await api.patch(`/api/transcripts/${transcript.id}`, { content });
-      await onSaved();
-    } catch (err) {
-      setError(errorMessage(err, 'Could not save.'));
-      setSaving(false);
-    }
-  };
-
-  const downloadTxt = () => {
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${transcript.title || 'transcript'}.txt`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  };
-
+/* ---- View a transcript: transcribe → summarize → move-to-notes --------- */
+function TranscriptModal({ transcript, autoTranscription, onClose, onChanged, onGoToNotes }) {
   return (
     <Modal title={transcript.title} onClose={onClose} wide>
       <div className="space-y-3">
         <div className="text-xs text-muted">
           {[fmtDay(transcript.recordedDate), fmtDuration(transcript.durationSeconds), SOURCE_LABEL[transcript.source]].filter(Boolean).join(' · ')}
         </div>
-        {!transcript.content && (
-          <div className="rounded-xl border border-amber-300/50 bg-amber-50/70 px-3 py-2 text-sm text-amber-700">
-            This recording has no transcript text yet (automatic transcription isn’t configured). Paste the
-            transcript below and save.
-          </div>
-        )}
-        <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={14} className="field" placeholder="Transcript text…" />
-        {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
-        <div className="flex items-center justify-between pt-1">
-          <button type="button" onClick={downloadTxt} disabled={!content} className="text-xs font-semibold text-muted transition hover:text-ink disabled:opacity-40">
-            ↓ Download .txt
-          </button>
-          <div className="flex gap-2">
-            <button type="button" onClick={onClose} className="btn btn-soft">Close</button>
-            <button type="button" onClick={save} disabled={saving || !dirty} className="btn btn-primary">{saving ? 'Saving…' : 'Save'}</button>
-          </div>
+        <TranscriptionUI
+          transcript={transcript}
+          autoTranscription={autoTranscription}
+          onChanged={onChanged}
+          onGoToNotes={onGoToNotes}
+          onClose={onClose}
+        />
+        <div className="flex justify-end pt-1">
+          <button type="button" onClick={onClose} className="btn btn-soft">Close</button>
         </div>
       </div>
     </Modal>
