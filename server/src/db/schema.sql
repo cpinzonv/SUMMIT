@@ -480,6 +480,10 @@ CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);
 -- Archived notes are hidden from the default list (kept, not deleted).
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
+-- Optional link to a lecture recording taken alongside the note. ON DELETE SET
+-- NULL so deleting the recording just unlinks it (the note text is preserved).
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS transcript_id UUID REFERENCES transcripts(id) ON DELETE SET NULL;
+
 DROP TRIGGER IF EXISTS trg_notes_updated_at ON notes;
 CREATE TRIGGER trg_notes_updated_at
   BEFORE UPDATE ON notes

@@ -5,6 +5,7 @@ import { askAboutNotes } from '../services/chatbot.service.js';
 export const createNoteSchema = z.object({
   title: z.string().max(300).optional(),
   content: z.string().optional(),
+  transcriptId: z.string().uuid().nullable().optional(),
 });
 
 export const chatbotSchema = z.object({
@@ -21,6 +22,7 @@ export const updateNoteSchema = z
     title: z.string().max(300).optional(),
     content: z.string().optional(),
     archived: z.boolean().optional(),
+    transcriptId: z.string().uuid().nullable().optional(),
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 

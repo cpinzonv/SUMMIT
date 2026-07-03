@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
-import { Spinner, ErrorBanner, EmptyState } from './ui';
+import { Spinner, ErrorBanner, EmptyState, Toast } from './ui';
 import { EmptyHero, NotepadIllustration } from './EmptyHero';
 import { RichTextEditor } from './RichTextEditor';
+import { RecordButton } from './RecordButton';
 import { useDraggable } from '../hooks/useDraggable';
 
 /* ---- date helpers ------------------------------------------------------- */
@@ -40,7 +41,7 @@ const ExpandIcon = ({ className = '' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
 );
 
-export function ClassNotes({ classId }) {
+export function ClassNotes({ classId, onGoToFiles }) {
   const [notes, setNotes] = useState([]);
   const [q, setQ] = useState('');
   const [view, setView] = useState('active'); // 'active' | 'archived'
@@ -48,6 +49,13 @@ export function ClassNotes({ classId }) {
   const [error, setError] = useState('');
   const [editing, setEditing] = useState(null); // { note, mode:'modal'|'full' }
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const load = useCallback(
     async (search = q, v = view) => {
@@ -123,12 +131,20 @@ export function ClassNotes({ classId }) {
             </button>
           ))}
         </div>
-        <button onClick={() => setEditing({ note: { isNew: true, title: '', content: '' }, mode: 'modal' })} className="btn btn-primary ml-auto">
-          + New note
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <RecordButton
+            classId={classId}
+            onError={setError}
+            onRecorded={() => setToast({ type: 'success', msg: 'Recording saved to Files' })}
+          />
+          <button onClick={() => setEditing({ note: { isNew: true, title: '', content: '' }, mode: 'modal' })} className="btn btn-primary">
+            + New note
+          </button>
+        </div>
       </div>
 
       <ErrorBanner message={error} />
+      <Toast toast={toast} />
 
       {loading ? (
         <Spinner label="Loading notes…" />
@@ -175,6 +191,7 @@ export function ClassNotes({ classId }) {
           classId={classId}
           note={editing.note}
           mode={editing.mode}
+          onGoToFiles={onGoToFiles}
           onMode={(mode) => setEditing((e) => ({ ...e, mode }))}
           onClose={() => setEditing(null)}
           onChanged={() => load(q, view)}
@@ -229,11 +246,14 @@ function CardMenu({ archived, onArchive, onDelete }) {
 }
 
 /* ---- Auto-saving editor (modal or full-screen) ------------------------- */
-function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive, onRequestDelete }) {
+function NoteEditor({ classId, note, mode, onGoToFiles, onMode, onClose, onChanged, onArchive, onRequestDelete }) {
   const [title, setTitle] = useState(note.title || '');
   const [content, setContent] = useState(note.content || '');
   const [status, setStatus] = useState('idle'); // idle | saving | saved
   const [menuOpen, setMenuOpen] = useState(false);
+  // A lecture recording started from within this note (optional link).
+  const [linked, setLinked] = useState(note.transcriptId ? { id: note.transcriptId, title: note.transcriptTitle } : null);
+  const [recError, setRecError] = useState('');
   const idRef = useRef(note.isNew ? null : note.id);
   const savedRef = useRef({ title: note.title || '', content: note.content || '' });
   const skipFirst = useRef(true);
@@ -270,6 +290,29 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
       setStatus('error');
     }
   }, [classId, onChanged]);
+
+  // A recording finished while this note was open → link it to the note (create
+  // the note first if it doesn't exist yet). Best-effort; keeps the note text.
+  const linkRecording = async (tr) => {
+    setRecError('');
+    try {
+      if (!idRef.current) {
+        const { data } = await api.post(`/api/classes/${classId}/notes`, {
+          title: title || 'Lecture notes',
+          content,
+          transcriptId: tr.id,
+        });
+        idRef.current = data.note.id;
+        savedRef.current = { title, content };
+      } else {
+        await api.patch(`/api/notes/${idRef.current}`, { transcriptId: tr.id });
+      }
+      setLinked({ id: tr.id, title: tr.title || 'Recorded lecture' });
+      onChanged?.();
+    } catch (err) {
+      setRecError(errorMessage(err, 'Recording saved to Files, but linking failed.'));
+    }
+  };
 
   // Always hold the LATEST title/content/persist so the unmount flush below
   // saves what's actually on screen. (A stale mount-time closure here would
@@ -355,6 +398,25 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
     </>
   );
 
+  // Record-a-lecture toolbar + the "linked recording" chip (shown in both modes).
+  const recordBar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <RecordButton classId={classId} onError={setRecError} onRecorded={linkRecording} label="Record lecture" />
+      {linked && (
+        <button
+          type="button"
+          onClick={() => onGoToFiles?.()}
+          title="View this recording in the Files tab"
+          className="inline-flex items-center gap-1.5 rounded-full bg-white/60 px-2.5 py-1 text-xs font-semibold text-brand-700 transition hover:bg-white/85"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
+          Recording: {linked.title || 'Recorded lecture'} →
+        </button>
+      )}
+      {recError && <span className="text-xs font-medium text-rose-600">{recError}</span>}
+    </div>
+  );
+
   // Full-screen mode: distraction-free, full bleed.
   if (mode === 'full') {
     return (
@@ -366,6 +428,7 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
               {actions}
             </div>
             <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Untitled note" className="note-input text-lg font-bold" autoFocus />
+            {recordBar}
             <div className="min-h-0 flex-1"><RichTextEditor value={content} onChange={setContent} fullHeight /></div>
           </div>
         </div>
@@ -395,6 +458,9 @@ function NoteEditor({ classId, note, mode, onMode, onClose, onChanged, onArchive
         {statusEl}
         {actions}
       </div>
+
+      {/* Record-a-lecture toolbar */}
+      <div className="border-b border-black/5 px-3 py-1.5">{recordBar}</div>
 
       {/* Editor */}
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">

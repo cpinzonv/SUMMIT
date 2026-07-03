@@ -24,6 +24,8 @@ function toPublicNote(row) {
     title: row.title,
     content: row.content,
     className: row.class_name, // present on search results
+    transcriptId: row.transcript_id ?? null,
+    transcriptTitle: row.transcript_title ?? null, // present when joined (list)
     archivedAt: row.archived_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -47,25 +49,29 @@ export async function listNotes(userId, classId, q, { archived = false } = {}) {
   await getOwnedClass(userId, classId);
   const params = [classId];
   // Default view = active notes; `archived` flips to the archived view.
-  let where = `class_id = $1 AND archived_at IS ${archived ? 'NOT NULL' : 'NULL'}`;
+  let where = `n.class_id = $1 AND n.archived_at IS ${archived ? 'NOT NULL' : 'NULL'}`;
   if (q) {
     params.push(`%${q}%`);
-    where += ` AND (title ILIKE $2 OR content ILIKE $2)`;
+    where += ` AND (n.title ILIKE $2 OR n.content ILIKE $2)`;
   }
   const { rows } = await query(
-    `SELECT * FROM notes WHERE ${where} ORDER BY updated_at DESC`,
+    `SELECT n.*, t.title AS transcript_title
+       FROM notes n
+       LEFT JOIN transcripts t ON t.id = n.transcript_id
+      WHERE ${where}
+      ORDER BY n.updated_at DESC`,
     params,
   );
   return rows.map(toPublicNote);
 }
 
-export async function createNote(userId, classId, { title, content }) {
+export async function createNote(userId, classId, { title, content, transcriptId }) {
   await getOwnedClass(userId, classId);
   const { rows } = await query(
-    `INSERT INTO notes (class_id, user_id, title, content)
-     VALUES ($1, $2, COALESCE(NULLIF($3, ''), 'Untitled note'), COALESCE($4, ''))
+    `INSERT INTO notes (class_id, user_id, title, content, transcript_id)
+     VALUES ($1, $2, COALESCE(NULLIF($3, ''), 'Untitled note'), COALESCE($4, ''), $5)
      RETURNING *`,
-    [classId, userId, title ?? null, sanitizeNoteHtml(content) ?? null],
+    [classId, userId, title ?? null, sanitizeNoteHtml(content) ?? null, transcriptId ?? null],
   );
   return toPublicNote(rows[0]);
 }
@@ -86,6 +92,10 @@ export async function updateNote(userId, noteId, input) {
   if ('archived' in input) {
     // Boolean toggle → stamp or clear archived_at (no placeholder needed).
     sets.push(`archived_at = ${input.archived ? 'now()' : 'NULL'}`);
+  }
+  if ('transcriptId' in input) {
+    sets.push(`transcript_id = $${i++}`);
+    values.push(input.transcriptId ?? null);
   }
   if (sets.length === 0) return getOwnedNote(userId, noteId).then(toPublicNote);
   values.push(noteId);
