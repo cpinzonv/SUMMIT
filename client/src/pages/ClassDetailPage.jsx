@@ -203,6 +203,7 @@ export default function ClassDetailPage() {
             onDelete={() => setModal({ type: 'confirmDelete' })}
             onImport={(provider) => setModal({ type: 'lmsImport', provider })}
             onSync={syncClassProvider}
+            onConnect={(provider) => navigate(`/settings?lms=${provider}`)}
           />
         </div>
       </div>
@@ -438,7 +439,7 @@ export default function ClassDetailPage() {
  * gets an "Import" and "Sync" entry; providers that aren't connected are shown
  * disabled with a "Connect … in Settings first" tooltip.
  */
-function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync }) {
+function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync, onConnect }) {
   const [open, setOpen] = useState(false);
   const [subOpen, setSubOpen] = useState(false);
   const ref = useRef(null);
@@ -522,26 +523,38 @@ function ClassMenu({ providers, onEdit, onArchive, onDelete, onImport, onSync })
                           </span>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={!p.connected}
-                        onClick={p.connected ? pick(() => onImport(p.provider)) : undefined}
-                        title={p.connected ? undefined : `Connect ${p.label} in Settings first`}
-                        className={`menu-item ${p.connected ? 'text-[#c8401a]' : 'cursor-not-allowed text-muted/40 hover:bg-transparent'}`}
-                      >
-                        <span>⬇</span> Import assignments
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={!p.connected}
-                        onClick={p.connected ? pick(() => onSync(p.provider)) : undefined}
-                        title={p.connected ? undefined : `Connect ${p.label} in Settings first`}
-                        className={`menu-item ${p.connected ? 'text-[#3fa1a6]' : 'cursor-not-allowed text-muted/40 hover:bg-transparent'}`}
-                      >
-                        <span>↻</span> Sync assignments
-                      </button>
+                      {p.connected ? (
+                        <>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={pick(() => onImport(p.provider))}
+                            className="menu-item text-[#c8401a]"
+                          >
+                            <span>⬇</span> Import assignments
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={pick(() => onSync(p.provider))}
+                            className="menu-item text-[#3fa1a6]"
+                          >
+                            <span>↻</span> Sync assignments
+                          </button>
+                        </>
+                      ) : (
+                        // Not connected → give a real call-to-action instead of a
+                        // dead, disabled Import/Sync. Takes the user to Settings
+                        // where the OAuth / access-token connect form lives.
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={pick(() => onConnect?.(p.provider))}
+                          className="menu-item text-brand-600"
+                        >
+                          <span>🔗</span> Connect {p.label} in Settings →
+                        </button>
+                      )}
                     </div>
                   ))
                 )}
