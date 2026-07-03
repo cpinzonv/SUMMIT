@@ -229,7 +229,7 @@ export default function ClassDetailPage() {
 
       {tab === 'notes' && (
         <div className="mt-5">
-          <ClassNotes classId={id} />
+          <ClassNotes classId={id} onGoToFiles={() => setTab('files')} />
           {/* Floating "ask your notes" chat bubble (bottom-right). */}
           <NotesChatbot classId={id} className={cls?.name} />
         </div>
