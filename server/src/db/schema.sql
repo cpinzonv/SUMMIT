@@ -451,6 +451,10 @@ CREATE TABLE IF NOT EXISTS transcripts (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- AI-generated summary of the transcript (Claude). Filled on demand from the
+-- transcript content; used as the seed when "moving" a transcript to Notes.
+ALTER TABLE transcripts ADD COLUMN IF NOT EXISTS summary TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_transcripts_class_id ON transcripts(class_id);
 
 DROP TRIGGER IF EXISTS trg_transcripts_updated_at ON transcripts;

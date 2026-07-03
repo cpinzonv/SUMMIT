@@ -50,6 +50,12 @@ export const env = {
   anthropicApiKey: optional('ANTHROPIC_API_KEY', ''),
   anthropicModel: optional('ANTHROPIC_MODEL', 'claude-opus-4-8'),
 
+  // Optional: OpenAI Whisper for lecture speech-to-text (transcription.service).
+  // Empty string = unconfigured → recordings still save; auto-transcription is a
+  // graceful no-op the student fills in by hand.
+  openaiApiKey: optional('OPENAI_API_KEY', ''),
+  openaiWhisperModel: optional('OPENAI_WHISPER_MODEL', 'whisper-1'),
+
   // Optional: ElevenLabs text-to-speech for podcast audio. Without it, podcasts
   // still generate a script/transcript but the audio is marked "pending".
   elevenLabs: {

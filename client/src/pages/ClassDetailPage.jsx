@@ -235,7 +235,7 @@ export default function ClassDetailPage() {
       )}
       {tab === 'files' && (
         <div className="mt-5">
-          <ClassFiles classId={id} />
+          <ClassFiles classId={id} onGoToNotes={() => setTab('notes')} />
         </div>
       )}
       {tab === 'attendance' && (

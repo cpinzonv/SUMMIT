@@ -21,4 +21,27 @@ router.delete(
   asyncHandler(transcripts.remove),
 );
 
+// Auto-transcribe the linked audio (Whisper), summarize (Claude), turn the
+// summary into a class note, or drop just the audio recording.
+router.post(
+  '/:transcriptId/transcribe',
+  validate(transcripts.transcriptIdParam, 'params'),
+  asyncHandler(transcripts.transcribe),
+);
+router.post(
+  '/:transcriptId/summary',
+  validate(transcripts.transcriptIdParam, 'params'),
+  asyncHandler(transcripts.summary),
+);
+router.post(
+  '/:transcriptId/move-to-notes',
+  validate(transcripts.transcriptIdParam, 'params'),
+  asyncHandler(transcripts.moveToNotes),
+);
+router.delete(
+  '/:transcriptId/audio',
+  validate(transcripts.transcriptIdParam, 'params'),
+  asyncHandler(transcripts.removeAudio),
+);
+
 export default router;
