@@ -23,14 +23,53 @@ export const PREMIUM_FEATURES = {
   googleCalendarSync: 'Google Calendar Sync',
 };
 
-/** Can this user use the given premium feature? */
-export function canAccessFeature(user, _featureName) {
+// Features an institution's per-tier flags govern. A premium feature NOT in this
+// set (e.g. googleCalendarSync) stays available to institution users while their
+// contract is active — only these are toggled by the institution.
+const INSTITUTION_GATED = new Set(['transcription', 'summaries', 'quizzes', 'studyGuides', 'mindMaps', 'podcasts']);
+
+/**
+ * Institution access for a gating row. Returns null for individual users;
+ * otherwise { active, reason?, flags }. Tolerant of partial rows (the auth
+ * toPublicUser row has institution_id but not the joined institution columns —
+ * it's treated as active, which is correct since login already blocks revoked/
+ * expired institutions).
+ */
+function institutionAccessOf(user) {
+  if (!user?.institution_id) return null;
+  if (user.institution_revoked_at) return { active: false, reason: 'revoked', flags: {} };
+  const end = user.institution_contract_end;
+  if (end && String(end).slice(0, 10) < new Date().toISOString().slice(0, 10)) {
+    return { active: false, reason: 'expired', flags: {} };
+  }
+  let flags = user.institution_feature_flags || {};
+  if (typeof flags === 'string') { try { flags = JSON.parse(flags); } catch { flags = {}; } }
+  return { active: true, flags };
+}
+
+/**
+ * Can this user use the given premium feature? Institution members are governed
+ * by their institution's contract + feature flags (NOT individual billing);
+ * everyone else falls through to the subscription/whitelist path.
+ */
+export function canAccessFeature(user, featureName) {
   if (!user) return false;
   if (user.role === 'admin' || user.role === 'demo') return true;
+
+  const inst = institutionAccessOf(user);
+  if (inst) {
+    if (!inst.active) return false; // revoked or contract expired → locked out
+    if (featureName == null) return true; // overall access (active institution)
+    if (INSTITUTION_GATED.has(featureName)) return Boolean(inst.flags[featureName]);
+    return true; // non-institutional feature: allowed while the contract is active
+  }
+
   if (user.is_whitelisted) return true; // admin-granted comp access
   if (!env.billingEnabled) return false; // pre-billing: admin/demo/whitelist only
   return user.subscription_tier === 'pro' && user.subscription_status === 'active';
 }
+
+export { institutionAccessOf };
 
 /** Back-compat alias: overall premium access (feature-agnostic). */
 export const hasPremiumAccess = (user) => canAccessFeature(user, null);
@@ -39,6 +78,19 @@ export const hasPremiumAccess = (user) => canAccessFeature(user, null);
 export function getFeatureStatus(user, featureName) {
   const hasAccess = canAccessFeature(user, featureName);
   const label = PREMIUM_FEATURES[featureName] || featureName;
+  const inst = institutionAccessOf(user);
+  let message = '';
+  if (!hasAccess) {
+    if (inst && !inst.active) {
+      message = inst.reason === 'expired'
+        ? 'Your institution’s Summit contract has ended.'
+        : 'Your institution’s access has been revoked.';
+    } else if (inst) {
+      message = `${label} isn’t included in your institution’s plan.`;
+    } else {
+      message = `${label} is available on Summit Pro.`;
+    }
+  }
   return {
     feature: featureName,
     hasAccess,
@@ -46,7 +98,8 @@ export function getFeatureStatus(user, featureName) {
     billingEnabled: env.billingEnabled,
     userRole: user?.role || 'user',
     userTier: user?.subscription_tier || 'free',
-    message: hasAccess ? '' : `${label} is available on Summit Pro.`,
+    institution: inst ? { active: inst.active } : null,
+    message,
   };
 }
 
@@ -69,9 +122,14 @@ export async function getUserGating(userId) {
   const { rows } = await query(
     `SELECT u.role, u.plan, u.is_premium, u.subscription_tier, u.subscription_status,
             u.subscription_end_date,
-            (w.user_id IS NOT NULL) AS is_whitelisted
+            (w.user_id IS NOT NULL) AS is_whitelisted,
+            u.institution_id,
+            i.feature_flags AS institution_feature_flags,
+            i.contract_end  AS institution_contract_end,
+            i.revoked_at    AS institution_revoked_at
        FROM users u
        LEFT JOIN premium_whitelist w ON w.user_id = u.id
+       LEFT JOIN institutions i ON i.id = u.institution_id
       WHERE u.id = $1`,
     [userId],
   );
