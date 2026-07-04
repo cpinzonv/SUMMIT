@@ -2,6 +2,7 @@ import { z } from 'zod';
 import * as analytics from '../services/admin.service.js';
 import * as gating from '../services/featureGating.service.js';
 import * as canvasConfig from '../services/canvasConfig.service.js';
+import * as institutions from '../services/institution.service.js';
 import { query } from '../config/db.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
@@ -27,6 +28,54 @@ export async function getCanvasConfig(req, res) {
 
 export async function saveCanvasConfig(req, res) {
   res.json({ config: await canvasConfig.saveConfig(req.body) });
+}
+
+/* ---- Institutions (multi-tenancy) --------------------------------------- */
+
+const featureFlags = z.record(z.boolean()).optional();
+const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD').nullable().optional();
+
+export const institutionCreateSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  adminEmail: z.string().trim().email().toLowerCase(),
+  contractStart: dateStr,
+  contractEnd: dateStr,
+  lmsType: z.string().trim().max(50).nullable().optional(),
+  studentSeats: z.number().int().nonnegative().max(1_000_000).optional(),
+  tier: z.enum(['basic', 'pro']).optional(),
+  featureFlags,
+});
+
+export const institutionUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    contractStart: dateStr,
+    contractEnd: dateStr,
+    lmsType: z.string().trim().max(50).nullable().optional(),
+    studentSeats: z.number().int().nonnegative().max(1_000_000).optional(),
+    tier: z.enum(['basic', 'pro']).optional(),
+    featureFlags,
+  })
+  .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
+
+export const revokeSchema = z.object({ revoked: z.boolean().optional() });
+export const institutionIdParam = z.object({ institutionId: z.string().uuid('Invalid institution id') });
+
+export async function listInstitutions(req, res) {
+  res.json({ institutions: await institutions.listInstitutions() });
+}
+export async function createInstitution(req, res) {
+  // Returns { institution, inviteToken } — the caller builds the invite link.
+  res.status(201).json(await institutions.createInstitution(req.user.id, req.body));
+}
+export async function getInstitution(req, res) {
+  res.json({ institution: await institutions.getInstitution(req.params.institutionId) });
+}
+export async function updateInstitution(req, res) {
+  res.json({ institution: await institutions.updateInstitution(req.params.institutionId, req.body) });
+}
+export async function revokeInstitution(req, res) {
+  res.json({ institution: await institutions.setRevoked(req.params.institutionId, req.body.revoked !== false) });
 }
 export async function signups(req, res) {
   res.json(await analytics.signups());

@@ -56,4 +56,12 @@ router.patch(
   asyncHandler(authController.changePassword),
 );
 
+// Public invite links — institution admins set their password to activate.
+router.get('/invite/:token', asyncHandler(authController.getInvite));
+router.post(
+  '/invite/:token/accept',
+  validate(authController.acceptInviteSchema),
+  asyncHandler(authController.acceptInvite),
+);
+
 export default router;

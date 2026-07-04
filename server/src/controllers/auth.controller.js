@@ -11,6 +11,17 @@ export const REFERRAL_SOURCES = [
   'other',
 ];
 
+// Invite-link onboarding (institution admins set their password here).
+export const acceptInviteSchema = z.object({
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+});
+export async function getInvite(req, res) {
+  res.json(await authService.getInvite(req.params.token));
+}
+export async function acceptInvite(req, res) {
+  res.json(await authService.acceptInvite({ token: req.params.token, password: req.body.password }));
+}
+
 export const registerSchema = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(8, 'Password must be at least 8 characters'),

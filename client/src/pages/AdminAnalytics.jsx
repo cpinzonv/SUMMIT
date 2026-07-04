@@ -14,6 +14,7 @@ import {
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState } from '../components/ui';
 import { PremiumWhitelist } from '../components/PremiumWhitelist';
+import { InstitutionsAdmin } from '../components/InstitutionsAdmin';
 
 const REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
 
@@ -86,6 +87,7 @@ export default function AdminAnalytics() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [tab, setTab] = useState('analytics'); // 'analytics' | 'institutions'
   const timerRef = useRef(null);
 
   const load = useCallback(async ({ initial = false } = {}) => {
@@ -122,13 +124,29 @@ export default function AdminAnalytics() {
     return () => clearInterval(timerRef.current);
   }, [load]);
 
-  if (loading) return <Spinner label="Loading analytics…" />;
+  const Tabs = (
+    <div className="flex w-fit gap-1 rounded-full bg-white/45 p-1 text-sm">
+      {[['analytics', 'Analytics'], ['institutions', 'Institutions']].map(([k, l]) => (
+        <button
+          key={k}
+          onClick={() => setTab(k)}
+          className={`rounded-full px-4 py-1 font-semibold transition ${tab === k ? 'bg-white/85 text-brand-700 shadow-sm' : 'text-muted hover:text-ink'}`}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (tab === 'institutions') return <div className="space-y-6">{Tabs}<InstitutionsAdmin /></div>;
+  if (loading) return <div className="space-y-6">{Tabs}<Spinner label="Loading analytics…" /></div>;
 
   const o = data?.overview;
   const activity = data?.activity;
 
   return (
     <div className="space-y-6">
+      {Tabs}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink">
