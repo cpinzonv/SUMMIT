@@ -183,10 +183,18 @@ export async function assertInstitutionActive(userOrId) {
       ? (await query('SELECT institution_id FROM users WHERE id = $1', [userOrId])).rows[0]?.institution_id
       : userOrId?.institution_id;
   if (!institutionId) return;
-  const { rows } = await query('SELECT revoked_at FROM institutions WHERE id = $1', [institutionId]);
-  if (rows[0]?.revoked_at) {
+  const { rows } = await query('SELECT revoked_at, contract_end FROM institutions WHERE id = $1', [institutionId]);
+  const inst = rows[0];
+  if (inst?.revoked_at) {
     throw new AppError(403, 'Your institution’s access has been revoked. Contact your administrator.', {
       code: 'institution_revoked',
+    });
+  }
+  // Contract-expiry auto-lockout: past the contract end date, the institution's
+  // users can no longer log in / refresh (same hard-block path as revoke).
+  if (inst?.contract_end && String(inst.contract_end).slice(0, 10) < new Date().toISOString().slice(0, 10)) {
+    throw new AppError(403, 'Your institution’s Summit contract has ended. Contact your administrator.', {
+      code: 'institution_expired',
     });
   }
 }
