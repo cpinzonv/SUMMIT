@@ -13,12 +13,14 @@ const navItems = [
 export function Layout() {
   const { user } = useAuth();
 
-  // Admins get an extra nav link. Never shown to regular users; the route and
-  // the backend are independently gated too.
+  // Admins get an extra nav link; institution admins get their own (they aren't
+  // students, so the student nav is replaced). The routes + backend are gated too.
   const items =
     user?.role === 'admin'
       ? [...navItems, { to: '/admin', label: 'Admin' }]
-      : navItems;
+      : user?.role === 'institution_admin'
+        ? [{ to: '/institution', label: 'Institution' }]
+        : navItems;
 
   return (
     <div className="min-h-screen">
