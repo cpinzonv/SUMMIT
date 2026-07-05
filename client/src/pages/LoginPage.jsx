@@ -200,10 +200,6 @@ export default function LoginPage() {
           </p>
         </form>
         )}
-
-        <p className="mt-4 text-center text-xs text-muted">
-          Demo: demo@student.app / password123
-        </p>
       </div>
     </div>
   );
