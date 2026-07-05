@@ -10,6 +10,7 @@ import CalendarPage from './pages/CalendarPage';
 import CreateClassPage from './pages/CreateClassPage';
 import PlannerPage from './pages/PlannerPage';
 import LearnPage from './pages/LearnPage';
+import ActivitiesPage from './pages/ActivitiesPage';
 import SettingsPage from './pages/SettingsPage';
 import LmsCallbackPage from './pages/LmsCallbackPage';
 import AdminAnalytics from './pages/AdminAnalytics';
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/planner" element={<PlannerPage />} />
         <Route path="/learn" element={<LearnPage />} />
+        <Route path="/activities" element={<ActivitiesPage />} />
         {/* Archives now live inside the Planner as the "Archived" tab. */}
         <Route path="/archives" element={<Navigate to="/planner?tab=archived" replace />} />
         <Route path="/settings" element={<SettingsPage />} />

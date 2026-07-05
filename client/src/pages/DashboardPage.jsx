@@ -159,9 +159,7 @@ export default function DashboardPage() {
               {syncingProvider === p.provider ? 'Syncing…' : `↻ Sync ${p.label}`}
             </button>
           ))}
-          <Link to="/classes/new" className="btn btn-primary">
-            + New class
-          </Link>
+          <AddMenu />
         </div>
       </div>
 
@@ -415,5 +413,39 @@ function ClassRow({ cls, index }) {
         <div className="text-[10px] font-medium text-muted">{grade?.letter || 'No grades'}</div>
       </div>
     </Link>
+  );
+}
+
+/* ---- "+" dropdown: Add Class · Add Activity ---------------------------- */
+function AddMenu() {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [open]);
+  const go = (path) => () => { setOpen(false); navigate(path); };
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Add"
+        className="btn btn-primary grid h-9 w-9 place-items-center !px-0 text-xl leading-none"
+      >
+        +
+      </button>
+      {open && (
+        <div role="menu" className="glass-panel absolute right-0 z-30 mt-1 w-44 p-1.5 text-sm shadow-xl">
+          <button type="button" role="menuitem" onClick={go('/classes/new')} className="menu-item">Add Class</button>
+          <button type="button" role="menuitem" onClick={go('/activities?new=1')} className="menu-item">Add Activity</button>
+        </div>
+      )}
+    </div>
   );
 }

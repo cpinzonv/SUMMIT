@@ -19,6 +19,7 @@ import learnRoutes from './learn.routes.js';
 import { flashcardsRouter, decksRouter, studyRouter } from './deckStudy.routes.js';
 import featuresRoutes from './features.routes.js';
 import institutionAdminRoutes from './institutionAdmin.routes.js';
+import activityRoutes from './activity.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as lmsController from '../controllers/lms.controller.js';
@@ -64,5 +65,6 @@ router.use('/decks', decksRouter); // deck settings, deadlines, study plan
 router.use('/study', studyRouter); // today's study queue (respects limits)
 router.use('/features', featuresRoutes); // feature gating status (lock icons + paywall)
 router.use('/institution', institutionAdminRoutes); // institution-admin: roster + overview (tenant-scoped)
+router.use('/activities', activityRoutes); // anti-procrastination projects (non-class work)
 
 export default router;
