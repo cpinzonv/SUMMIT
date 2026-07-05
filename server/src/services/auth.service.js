@@ -52,6 +52,11 @@ function toPublicUser(row) {
       domain: row.lms_domain ?? null,
       syncedAt: row.lms_synced_at ?? null,
     },
+    // Institution membership + whether the school's access was revoked (drives the
+    // graceful-downgrade warning banner). Present only for institution members.
+    institution: row.institution_id
+      ? { name: row.institution_name ?? null, revoked: Boolean(row.institution_revoked_at) }
+      : null,
     createdAt: row.created_at,
   };
 }
@@ -132,7 +137,12 @@ export async function register({
 }
 
 export async function login({ email, password }) {
-  const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
+  const { rows } = await query(
+    `SELECT u.*, i.name AS institution_name, i.revoked_at AS institution_revoked_at
+       FROM users u LEFT JOIN institutions i ON i.id = u.institution_id
+      WHERE u.email = $1`,
+    [email],
+  );
   const user = rows[0];
 
   // Always run a hash comparison to avoid leaking whether the email exists via
@@ -166,7 +176,12 @@ export async function loginTwoFactor({ challengeToken, code }) {
   } catch {
     throw AppError.unauthorized('Your verification session expired. Please log in again.');
   }
-  const { rows } = await query('SELECT * FROM users WHERE id = $1', [payload.sub]);
+  const { rows } = await query(
+    `SELECT u.*, i.name AS institution_name, i.revoked_at AS institution_revoked_at
+       FROM users u LEFT JOIN institutions i ON i.id = u.institution_id
+      WHERE u.id = $1`,
+    [payload.sub],
+  );
   const user = rows[0];
   if (!user || !user.totp_enabled) throw AppError.unauthorized('Invalid verification session.');
 
@@ -263,7 +278,12 @@ export async function acceptInvite({ token, password }) {
 }
 
 export async function getCurrentUser(userId) {
-  const { rows } = await query('SELECT * FROM users WHERE id = $1', [userId]);
+  const { rows } = await query(
+    `SELECT u.*, i.name AS institution_name, i.revoked_at AS institution_revoked_at
+       FROM users u LEFT JOIN institutions i ON i.id = u.institution_id
+      WHERE u.id = $1`,
+    [userId],
+  );
   if (!rows[0]) throw AppError.notFound('User not found');
   return toPublicUser(rows[0]);
 }
