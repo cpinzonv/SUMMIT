@@ -22,6 +22,17 @@ export const TIER_FEATURES = {
 
 const INVITE_TTL_HOURS = 72;
 
+/** Mint a one-time set-password invite token for a user (only its hash is stored). */
+async function mintInvite(client, userId) {
+  const raw = crypto.randomBytes(32).toString('hex');
+  await client.query(
+    `INSERT INTO user_invites (user_id, token_hash, expires_at)
+     VALUES ($1, $2, now() + make_interval(hours => $3))`,
+    [userId, hashToken(raw), INVITE_TTL_HOURS],
+  );
+  return raw;
+}
+
 function normalizeFlags(flags) {
   const out = {};
   for (const k of FEATURE_KEYS) out[k] = Boolean(flags?.[k]);
@@ -117,12 +128,7 @@ export async function createInstitution(creatorId, input) {
     );
     const adminUserId = userRows[0].id;
 
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    await client.query(
-      `INSERT INTO user_invites (user_id, token_hash, expires_at)
-       VALUES ($1, $2, now() + interval '${INVITE_TTL_HOURS} hours')`,
-      [adminUserId, hashToken(rawToken)],
-    );
+    const rawToken = await mintInvite(client, adminUserId);
 
     return {
       institution: toPublic({ ...inst, student_count: 0, admin_activated: false }),
@@ -197,4 +203,47 @@ export async function assertInstitutionActive(userOrId) {
       code: 'institution_expired',
     });
   }
+}
+
+/* ---- Roster (institution-admin, tenant-scoped) -------------------------- */
+
+/** Students belonging to one institution. */
+export async function listStudents(institutionId) {
+  const { rows } = await query(
+    `SELECT id, email, full_name AS name, (password_hash IS NOT NULL) AS activated, created_at
+       FROM users WHERE institution_id = $1 AND role = 'user'
+      ORDER BY created_at DESC`,
+    [institutionId],
+  );
+  return rows.map((r) => ({ id: r.id, email: r.email, name: r.name, activated: r.activated, createdAt: r.created_at }));
+}
+
+/**
+ * Bulk-provision student accounts for one institution from a roster. Each new
+ * student gets NO password + a one-time invite token (returned so the admin can
+ * distribute set-password links). Existing emails are skipped, not overwritten.
+ * The seat cap is soft (display only) — over-cap adds still succeed.
+ */
+export async function addStudents(institutionId, students) {
+  return withTransaction(async (client) => {
+    const created = [];
+    const skipped = [];
+    for (const s of students) {
+      const email = String(s.email || '').trim().toLowerCase();
+      if (!email) continue;
+      const dup = await client.query('SELECT 1 FROM users WHERE email = $1', [email]);
+      if (dup.rowCount > 0) {
+        skipped.push({ email, reason: 'already exists' });
+        continue;
+      }
+      const { rows } = await client.query(
+        `INSERT INTO users (email, password_hash, full_name, role, institution_id, auth_method)
+         VALUES ($1, NULL, $2, 'user', $3, 'invite') RETURNING id`,
+        [email, s.name?.trim() || email, institutionId],
+      );
+      const token = await mintInvite(client, rows[0].id);
+      created.push({ email, inviteToken: token });
+    }
+    return { created, skipped };
+  });
 }

@@ -17,8 +17,14 @@ import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
 
 export default function DashboardPage() {
-  const { preferences, refreshUser } = useAuth();
+  const { preferences, refreshUser, user } = useAuth();
   const navigate = useNavigate();
+
+  // Institution admins (school IT) aren't students — send them to their console.
+  useEffect(() => {
+    if (user?.role === 'institution_admin') navigate('/institution', { replace: true });
+  }, [user, navigate]);
+
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

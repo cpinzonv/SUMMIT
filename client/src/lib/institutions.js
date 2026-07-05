@@ -10,8 +10,26 @@ export const institutionsApi = {
     api.post(`/api/admin/institutions/${id}/revoke`, { revoked }).then((r) => r.data.institution),
 };
 
-/** Build the one-time set-password link the super-admin sends to the school. */
+/** Build the one-time set-password link (super-admin sends to school; school sends to students). */
 export const inviteLink = (token) => `${window.location.origin}/set-password?token=${token}`;
+
+/** Institution-admin (school IT) API — always scoped to their own institution server-side. */
+export const institutionAdminApi = {
+  overview: () => api.get('/api/institution').then((r) => r.data), // { institution, students }
+  uploadRoster: (students) => api.post('/api/institution/roster', { students }).then((r) => r.data), // { created, skipped }
+};
+
+/** Parse pasted roster text ("email, Name" per line) into [{ email, name }]. */
+export function parseRoster(text) {
+  const rows = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    const [email, ...rest] = t.split(/[,\t]/).map((x) => x.trim());
+    if (email && email.includes('@')) rows.push({ email, name: rest.join(' ') || undefined });
+  }
+  return rows;
+}
 
 export const FEATURES = [
   { key: 'transcription', label: 'Transcription' },

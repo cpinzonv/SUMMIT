@@ -14,6 +14,8 @@ import SettingsPage from './pages/SettingsPage';
 import LmsCallbackPage from './pages/LmsCallbackPage';
 import AdminAnalytics from './pages/AdminAnalytics';
 import SetPasswordPage from './pages/SetPasswordPage';
+import InstitutionDashboardPage from './pages/InstitutionDashboardPage';
+import { InstitutionAdminRoute } from './components/InstitutionAdminRoute';
 
 export default function App() {
   return (
@@ -47,6 +49,14 @@ export default function App() {
             <AdminRoute>
               <AdminAnalytics />
             </AdminRoute>
+          }
+        />
+        <Route
+          path="/institution"
+          element={
+            <InstitutionAdminRoute>
+              <InstitutionDashboardPage />
+            </InstitutionAdminRoute>
           }
         />
       </Route>
