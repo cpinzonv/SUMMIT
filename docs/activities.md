@@ -81,22 +81,36 @@ Computed on read: `progress = done/total`, `nextAction = earliest-due not-done t
 
 ## Frontend
 
-- **`+` dropdown** (Req 0): Dashboard's `+ New class` becomes **`+`** → **Add Class · Add Activity**.
-- **Activities tab** (`/activities`): **Kanban — Backlog · Active · In Progress · Done.**
-  Cards show color strip, name, **progress bar**, **Next action** (highlighted),
-  **collapsible sub-tasks**, and a **"Active: n/3"** WIP counter in the header.
-  Drag cards between columns (WIP-guarded); drag sub-tasks to reschedule.
-- **Calendar** (Req 4): activity sub-tasks are a **new, visually distinct event
-  source** (activities are **status-colored**: Not Started gray → In Progress blue →
-  Overdue red → Done green, with an **"X days overdue"** badge), vs. classes which
-  are colored *by class*.
+**UX revision (post-PR-A review):** Activities live **on the Dashboard alongside
+classes**, as cards with the *same visual style* — not in a separate section. This
+keeps a student's "everything I'm juggling" in one place.
+
+- **`+` dropdown** (Req 0): Dashboard's `+ New class` becomes a balanced **`+`** →
+  **Add Class · Add Activity**. "Add Activity" opens the create modal inline on the
+  Dashboard.
+- **Dashboard cards:** classes + activities render in the **same grid/list**, same
+  card look (accent bar, gradient, glass). An activity card swaps the class's
+  code/grade for **kind + progress % + "n/m steps" + Next-action countdown** (+ an
+  "N overdue" badge). Clicking a **class → `/classes/:id`** (ClassDetailPage);
+  clicking an **activity → `/activities/:id`** (ActivityDetailPage).
+- **ActivityDetailPage** (`/activities/:id`): activity-specific — name + kind,
+  **progress bar** (with "Planned ✓" endowed-progress framing), highlighted
+  **Next action**, **stage controls** (Backlog · Active · In Progress · Done), and a
+  **steps** editor (check off, add, reschedule via the date field, delete). No
+  assignments/grades.
+- **Activities Kanban tab → Phase B.** The full Kanban board (Backlog · Active ·
+  In Progress · Done) with WIP-guarded drag lives in Phase B, as its own tab.
+- **Calendar** (Req 4, Phase C): activity sub-tasks become a **new, visually
+  distinct event source** (activities are **status-colored**: Not Started gray →
+  In Progress blue → Overdue red → Done green, with an **"X days overdue"** badge),
+  vs. classes which are colored *by class*.
 
 ## Phasing (PRs)
 
 | PR | Milestone | You can… |
 |---|---|---|
-| **A** | Data model + create flow (Option C) + `+` dropdown + minimal list | Create broken-down activities and see them |
-| **B** | Activities Kanban tab + WIP limits + progress / next-action | Work the board; feel the WIP guardrail |
+| **A** | Data model + create flow (Option C) + `+` dropdown + **Dashboard cards** + ActivityDetailPage | Create broken-down activities; see + open them from the Dashboard |
+| **B** | **Activities Kanban tab** + WIP limits + progress / next-action | Work the board; feel the WIP guardrail |
 | **C** | Calendar integration (status colors + overdue badge + drag) | See every deadline everywhere |
 | **D** *(opt.)* | Insights + Google Calendar push + endowed-progress polish | Refinement fuel from real use |
 

@@ -15,6 +15,8 @@ import {
 import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
+import { activitiesApi, ACTIVITY_KINDS } from '../lib/activities';
+import { CreateActivityModal } from '../components/CreateActivityModal';
 
 export default function DashboardPage() {
   const { preferences, refreshUser, user } = useAuth();
@@ -26,6 +28,8 @@ export default function DashboardPage() {
   }, [user, navigate]);
 
   const [classes, setClasses] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [showCreateActivity, setShowCreateActivity] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [archivedNotice, setArchivedNotice] = useState(0);
@@ -88,10 +92,16 @@ export default function DashboardPage() {
       .get('/api/workload/weekly')
       .then((r) => active && setWorkload(r.data))
       .catch(() => {});
+    activitiesApi
+      .list()
+      .then((d) => active && setActivities(d.activities))
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, []);
+
+  const reloadActivities = () => activitiesApi.list().then((d) => setActivities(d.activities)).catch(() => {});
 
   useEffect(() => {
     if (!archivedNotice) return undefined;
@@ -159,7 +169,7 @@ export default function DashboardPage() {
               {syncingProvider === p.provider ? 'Syncing…' : `↻ Sync ${p.label}`}
             </button>
           ))}
-          <AddMenu />
+          <AddMenu onAddActivity={() => setShowCreateActivity(true)} />
         </div>
       </div>
 
@@ -218,11 +228,11 @@ export default function DashboardPage() {
             <WorkloadWidget workload={workload} />
           )}
 
-          {classes.length === 0 ? (
+          {classes.length === 0 && activities.length === 0 ? (
             <EmptyHero
               illustration={<CalendarIllustration />}
-              headline="No active classes yet"
-              subheading="Start building your semester. Add courses to Dashboard."
+              headline="Nothing on your dashboard yet"
+              subheading="Add your classes and activities (clubs, freelance, volunteering) to start climbing."
               ctaLabel="+ Add your first class"
               onCta={() => navigate('/classes/new')}
             />
@@ -231,17 +241,29 @@ export default function DashboardPage() {
               {classes.map((cls, i) => (
                 <ClassRow key={cls.id} cls={cls} index={i} />
               ))}
+              {activities.map((a, i) => (
+                <ActivityRow key={a.id} activity={a} index={classes.length + i} />
+              ))}
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2">
               {classes.map((cls, i) => (
                 <ClassCard key={cls.id} cls={cls} index={i} />
               ))}
+              {activities.map((a, i) => (
+                <ActivityCard key={a.id} activity={a} index={classes.length + i} />
+              ))}
             </div>
           )}
         </>
       )}
 
+      {showCreateActivity && (
+        <CreateActivityModal
+          onClose={() => setShowCreateActivity(false)}
+          onCreated={(a) => { setShowCreateActivity(false); navigate(`/activities/${a.id}`); }}
+        />
+      )}
       <Toast toast={toast} />
     </div>
   );
@@ -417,7 +439,7 @@ function ClassRow({ cls, index }) {
 }
 
 /* ---- "+" dropdown: Add Class · Add Activity ---------------------------- */
-function AddMenu() {
+function AddMenu({ onAddActivity }) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -427,7 +449,7 @@ function AddMenu() {
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, [open]);
-  const go = (path) => () => { setOpen(false); navigate(path); };
+  const pick = (fn) => () => { setOpen(false); fn(); };
   return (
     <div ref={ref} className="relative">
       <button
@@ -436,16 +458,96 @@ function AddMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Add"
-        className="btn btn-primary grid h-9 w-9 place-items-center !px-0 text-xl leading-none"
+        className="btn btn-primary flex h-10 w-10 items-center justify-center !p-0 text-2xl font-semibold leading-none"
       >
         +
       </button>
       {open && (
         <div role="menu" className="glass-panel absolute right-0 z-30 mt-1 w-44 p-1.5 text-sm shadow-xl">
-          <button type="button" role="menuitem" onClick={go('/classes/new')} className="menu-item">Add Class</button>
-          <button type="button" role="menuitem" onClick={go('/activities?new=1')} className="menu-item">Add Activity</button>
+          <button type="button" role="menuitem" onClick={pick(() => navigate('/classes/new'))} className="menu-item">Add Class</button>
+          <button type="button" role="menuitem" onClick={pick(onAddActivity)} className="menu-item">Add Activity</button>
         </div>
       )}
     </div>
+  );
+}
+
+/* ---- Activity cards on the Dashboard (same look as classes, different link) --- */
+const activityKindLabel = (k) => ACTIVITY_KINDS.find((x) => x.value === k)?.label || 'Activity';
+const activityOverdue = (a) =>
+  a.tasks.filter((t) => t.status !== 'done' && t.dueDate && dueStatus(t.dueDate).isPastDue).length;
+
+function ActivityCard({ activity: a, index }) {
+  const glass = isGlassColor(a.color);
+  const gradient = classGradient(a, index);
+  const overdue = activityOverdue(a);
+  const { done, total, percent } = a.progress;
+  return (
+    <Link
+      to={`/activities/${a.id}`}
+      className="glass-card group relative overflow-hidden p-6 transition hover:-translate-y-1 hover:shadow-[0_22px_48px_-18px_rgba(180,120,80,0.45)]"
+    >
+      {!glass && (
+        <>
+          <span className="pointer-events-none absolute inset-0 opacity-[0.24] transition group-hover:opacity-[0.34]" style={{ backgroundImage: gradient }} />
+          <span className="pointer-events-none absolute -right-12 -top-14 h-48 w-48 rounded-full opacity-80 blur-3xl transition group-hover:opacity-100" style={{ backgroundImage: gradient }} />
+          <span className="pointer-events-none absolute -bottom-16 -left-10 h-40 w-40 rounded-full opacity-50 blur-3xl" style={{ backgroundImage: gradient }} />
+        </>
+      )}
+      <div className="relative flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <span className="h-12 w-1.5 rounded-full" style={{ backgroundImage: classAccent(a, index) }} />
+          <div>
+            <h3 className="font-bold text-ink">{a.name}</h3>
+            <p className="text-xs text-muted">{activityKindLabel(a.kind)}</p>
+            {overdue > 0 && (
+              <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">
+                {overdue} overdue
+              </span>
+            )}
+            {a.nextAction?.dueDate && overdue === 0 && (
+              <p className={`mt-1 text-[11px] font-semibold ${countdownTone(dueStatus(a.nextAction.dueDate))}`}>
+                Next: {dueStatus(a.nextAction.dueDate).countdownLabel}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-extrabold text-ink">{percent}%</div>
+          <div className="text-xs font-medium text-muted">{done}/{total} step{total === 1 ? '' : 's'}</div>
+        </div>
+      </div>
+      <p className="relative mt-4 flex gap-3 text-xs text-muted">
+        <span className="truncate">{a.nextAction ? `Next: ${a.nextAction.title}` : total ? 'All steps done' : 'No steps yet'}</span>
+      </p>
+    </Link>
+  );
+}
+
+function ActivityRow({ activity: a, index }) {
+  const overdue = activityOverdue(a);
+  const { done, total, percent } = a.progress;
+  return (
+    <Link to={`/activities/${a.id}`} className="group flex items-center gap-4 px-5 py-3.5 transition hover:bg-white/40">
+      <span className="h-9 w-1.5 rounded-full" style={{ backgroundImage: classAccent(a, index) }} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-semibold text-ink">{a.name}</span>
+          {overdue > 0 && (
+            <span className="shrink-0 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">{overdue} overdue</span>
+          )}
+        </div>
+        <div className="truncate text-xs text-muted">
+          {activityKindLabel(a.kind)}
+          {a.nextAction?.dueDate && overdue === 0 && (
+            <span className={`ml-2 font-semibold ${countdownTone(dueStatus(a.nextAction.dueDate))}`}>· {dueStatus(a.nextAction.dueDate).countdownLabel}</span>
+          )}
+        </div>
+      </div>
+      <div className="text-right">
+        <div className="text-lg font-extrabold text-ink">{percent}%</div>
+        <div className="text-[10px] font-medium text-muted">{done}/{total} steps</div>
+      </div>
+    </Link>
   );
 }
