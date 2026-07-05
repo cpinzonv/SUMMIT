@@ -191,13 +191,13 @@ export async function assertInstitutionActive(userOrId) {
   if (!institutionId) return;
   const { rows } = await query('SELECT revoked_at, contract_end FROM institutions WHERE id = $1', [institutionId]);
   const inst = rows[0];
-  if (inst?.revoked_at) {
-    throw new AppError(403, 'Your institution’s access has been revoked. Contact your administrator.', {
-      code: 'institution_revoked',
-    });
-  }
-  // Contract-expiry auto-lockout: past the contract end date, the institution's
-  // users can no longer log in / refresh (same hard-block path as revoke).
+  // NOTE: revoke is a GRACEFUL DOWNGRADE, not a login block — revoked students
+  // keep logging in and keep their own data; they just lose plus features (see
+  // featureGating.canAccessFeature) and get a warning banner. So revoked_at is
+  // deliberately NOT blocked here.
+  //
+  // Contract-expiry is still a HARD lockout: past the contract end date, the
+  // institution's users can no longer log in / refresh.
   if (inst?.contract_end && String(inst.contract_end).slice(0, 10) < new Date().toISOString().slice(0, 10)) {
     throw new AppError(403, 'Your institution’s Summit contract has ended. Contact your administrator.', {
       code: 'institution_expired',
