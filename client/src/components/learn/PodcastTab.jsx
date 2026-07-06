@@ -45,7 +45,7 @@ export function PodcastTab({ classId, flash }) {
       </div>
       {error && <ErrorBanner message={error} />}
       {podcasts.length === 0 ? (
-        <EmptyState title="No podcasts yet">Generate an audio-style summary from this class's material.</EmptyState>
+        <EmptyState title="No podcasts yet">Generate a two-host “deep dive” conversation from this class's material.</EmptyState>
       ) : (
         <div className="space-y-3">{podcasts.map((p) => <PodcastCard key={p.id} podcast={p} />)}</div>
       )}
@@ -102,14 +102,32 @@ function PodcastCard({ podcast }) {
         </>
       ) : (
         <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-700">
-          🎙️ Audio is pending — set <code>ELEVENLABS_API_KEY</code> to synthesize narration. The full script is below.
+          🎙️ Audio is pending — set <code>ELEVENLABS_API_KEY</code> to synthesize narration. The full dialogue is below.
         </p>
       )}
 
       <button onClick={() => setShowTranscript((s) => !s)} className="text-sm font-semibold text-brand-600">
         {showTranscript ? 'Hide' : 'Show'} transcript
       </button>
-      {showTranscript && <p className="whitespace-pre-wrap border-t border-white/40 pt-2 text-sm text-muted">{podcast.transcript}</p>}
+      {showTranscript && <DialogueTranscript text={podcast.transcript} />}
+    </div>
+  );
+}
+
+/** Render a "Name: line" dialogue transcript with the speaker names emphasized. */
+function DialogueTranscript({ text }) {
+  const turns = (text || '').split(/\n\n+/).filter(Boolean);
+  return (
+    <div className="space-y-2 border-t border-white/40 pt-2 text-sm">
+      {turns.map((t, i) => {
+        const m = t.match(/^([^:\n]{1,24}):\s*([\s\S]*)$/);
+        if (!m) return <p key={i} className="whitespace-pre-wrap text-muted">{t}</p>;
+        return (
+          <p key={i} className="whitespace-pre-wrap text-muted">
+            <span className="font-semibold text-brand-600">{m[1]}:</span> {m[2]}
+          </p>
+        );
+      })}
     </div>
   );
 }

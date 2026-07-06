@@ -16,26 +16,40 @@ import { runStructured } from './learnAi.js';
 
 const DAILY_LIMIT = 5;
 
+/**
+ * Two-host "deep dive" (NotebookLM-style). host_a asks the questions a student
+ * would; host_b is the expert who explains. Each host has a name (for the
+ * transcript) and its own ElevenLabs voice (see voiceFor / env).
+ */
+const HOSTS = {
+  host_a: { name: 'Maya', voiceKey: 'voiceIdA' }, // curious co-host
+  host_b: { name: 'Sam', voiceKey: 'voiceIdB' }, //  expert
+};
+
 const scriptSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
     title: { type: 'string' },
-    intro: { type: 'string' },
-    segments: {
+    description: { type: 'string' }, // one-line blurb for the card
+    turns: {
       type: 'array',
       items: {
         type: 'object',
         additionalProperties: false,
-        properties: { title: { type: 'string' }, script: { type: 'string' } },
-        required: ['title', 'script'],
+        properties: {
+          speaker: { type: 'string', enum: ['host_a', 'host_b'] },
+          text: { type: 'string' },
+        },
+        required: ['speaker', 'text'],
       },
     },
-    conclusion: { type: 'string' },
     durationMinutes: { type: 'number' },
   },
-  required: ['title', 'intro', 'segments', 'conclusion', 'durationMinutes'],
+  required: ['title', 'description', 'turns', 'durationMinutes'],
 };
+
+const nameFor = (speaker) => HOSTS[speaker]?.name ?? 'Host';
 
 function toPublicPodcast(r) {
   return {
@@ -54,10 +68,12 @@ function toPublicPodcast(r) {
   };
 }
 
-/** Assemble the script blocks into one readable transcript string. */
-function assembleTranscript({ intro, segments, conclusion }) {
-  const parts = [intro, ...segments.map((s) => `${s.title}\n${s.script}`), conclusion];
-  return parts.filter(Boolean).join('\n\n');
+/** Render the dialogue turns into a readable "Name: line" transcript. */
+function assembleTranscript(turns) {
+  return (turns || [])
+    .filter((t) => t?.text?.trim())
+    .map((t) => `${nameFor(t.speaker)}: ${t.text.trim()}`)
+    .join('\n\n');
 }
 
 /** ElevenLabs caps characters per request, so a full 5–10 min script must be
@@ -83,10 +99,16 @@ export function chunkForTts(text, max = TTS_CHUNK_CHARS) {
   return chunks;
 }
 
-/** Synthesize one chunk. `previous_text`/`next_text` give ElevenLabs prosody
- * continuity across chunk boundaries so it doesn't sound stitched. */
-async function ttsChunk(text, { previous, next }) {
-  const { apiKey, voiceId, model } = env.elevenLabs;
+/** Resolve a host's ElevenLabs voice id, falling back to the primary voice. */
+function voiceFor(speaker) {
+  const key = HOSTS[speaker]?.voiceKey;
+  return env.elevenLabs[key] || env.elevenLabs.voiceIdA;
+}
+
+/** Synthesize one chunk in a given voice. `previous_text`/`next_text` give
+ * ElevenLabs prosody continuity across boundaries so it doesn't sound stitched. */
+async function ttsChunk(text, { voiceId, previous, next }) {
+  const { apiKey, model } = env.elevenLabs;
   const res = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
@@ -109,18 +131,30 @@ async function ttsChunk(text, { previous, next }) {
 }
 
 /**
- * ElevenLabs TTS seam. Returns a Buffer of the full MP3 (all chunks
- * concatenated), or null if no key is configured.
+ * Synthesize the two-host dialogue: each turn is spoken in its host's voice
+ * (long turns are still sentence-chunked), then all the MP3 bytes are
+ * concatenated in order. Returns a Buffer, or null if no key is configured.
  */
-async function synthesizeAudio(text) {
+async function synthesizeDialogue(turns) {
   if (!env.elevenLabs.apiKey) return null;
-  const chunks = chunkForTts(text);
-  if (chunks.length === 0) return null;
+  const clean = (turns || []).filter((t) => t?.text?.trim());
+  if (clean.length === 0) return null;
   const buffers = [];
-  for (let i = 0; i < chunks.length; i++) {
-    buffers.push(await ttsChunk(chunks[i], { previous: chunks[i - 1], next: chunks[i + 1] }));
+  for (let i = 0; i < clean.length; i++) {
+    const voiceId = voiceFor(clean[i].speaker);
+    const chunks = chunkForTts(clean[i].text);
+    for (let j = 0; j < chunks.length; j++) {
+      buffers.push(
+        await ttsChunk(chunks[j], {
+          voiceId,
+          // continuity: within a turn use adjacent chunks; at turn edges, the neighbouring turn.
+          previous: chunks[j - 1] ?? clean[i - 1]?.text,
+          next: chunks[j + 1] ?? clean[i + 1]?.text,
+        }),
+      );
+    }
   }
-  return Buffer.concat(buffers);
+  return buffers.length ? Buffer.concat(buffers) : null;
 }
 
 export async function generatePodcast(userId, classId, { sourceType = null } = {}) {
@@ -137,24 +171,31 @@ export async function generatePodcast(userId, classId, { sourceType = null } = {
 
   const { text, sources } = await gatherClassContext(classId, sourceType);
   const system =
-    `You are an expert podcast scriptwriter. Create an engaging ~5-10 minute podcast script from the ` +
-    `"${cls.name}" material below: an introduction, 3-5 key concepts explained conversationally with ` +
-    `real-world examples, and a conclusion with memory hooks. Use ONLY the material.\n\n"""\n${text}\n"""`;
+    `You are the writer for a two-host "deep dive" study podcast about "${cls.name}" — the warm, ` +
+    `conversational NotebookLM style. Write a natural back-and-forth between two hosts:\n` +
+    `- ${HOSTS.host_a.name} (host_a): a curious, upbeat co-host who asks the questions a student would, ` +
+    `reacts, and keeps things moving.\n` +
+    `- ${HOSTS.host_b.name} (host_b): the knowledgeable one who explains clearly with analogies and ` +
+    `real-world examples.\n\n` +
+    `Aim for ~5-10 minutes (roughly 14-26 short turns). Open with a quick hook, alternate speakers ` +
+    `naturally (not rigidly), include the odd bit of banter, and close with the key takeaways. Spell out ` +
+    `numbers/symbols as they'd be spoken. Use ONLY the material below — do not invent facts.\n\n` +
+    `"""\n${text}\n"""`;
   const script = await runStructured({
     feature: 'Podcast generation',
     system,
-    user: 'Write the podcast script now.',
+    user: 'Write the two-host podcast dialogue now.',
     schema: scriptSchema,
-    maxTokens: 4096,
+    maxTokens: 5000,
   });
 
-  const transcript = assembleTranscript(script);
+  const transcript = assembleTranscript(script.turns);
   const durationSeconds = Math.max(60, Math.round((script.durationMinutes || 6) * 60));
 
   // Optional audio synthesis (seam). Failures here keep the transcript.
   let audioUrl = null;
   try {
-    const mp3 = await synthesizeAudio(transcript);
+    const mp3 = await synthesizeDialogue(script.turns);
     if (mp3) {
       const { rows: f } = await query(
         `INSERT INTO class_files (class_id, user_id, filename, mime_type, size_bytes, data, category)
@@ -171,7 +212,7 @@ export async function generatePodcast(userId, classId, { sourceType = null } = {
   const { rows } = await query(
     `INSERT INTO podcasts (class_id, user_id, title, description, audio_url, transcript_text, duration_seconds, generated_from)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [classId, userId, script.title, script.intro?.slice(0, 280) ?? null, audioUrl, transcript, durationSeconds, sources],
+    [classId, userId, script.title, script.description?.slice(0, 280) ?? null, audioUrl, transcript, durationSeconds, sources],
   );
   return toPublicPodcast(rows[0]);
 }

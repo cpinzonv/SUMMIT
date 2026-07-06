@@ -56,11 +56,14 @@ export const env = {
   openaiApiKey: optional('OPENAI_API_KEY', ''),
   openaiWhisperModel: optional('OPENAI_WHISPER_MODEL', 'whisper-1'),
 
-  // Optional: ElevenLabs text-to-speech for podcast audio. Without it, podcasts
-  // still generate a script/transcript but the audio is marked "pending".
+  // Optional: ElevenLabs text-to-speech for the two-host podcast audio. Without a
+  // key, podcasts still generate a dialogue transcript but audio stays "pending".
+  // Two voices — host_a (Maya, curious) and host_b (Sam, expert). ELEVENLABS_VOICE_ID
+  // is kept as an alias for voice A for backward compatibility.
   elevenLabs: {
     apiKey: optional('ELEVENLABS_API_KEY', ''),
-    voiceId: optional('ELEVENLABS_VOICE_ID', 'JBFqnCBsd6RMkjVDRZzb'), // a default narrator voice
+    voiceIdA: optional('ELEVENLABS_VOICE_ID_A', optional('ELEVENLABS_VOICE_ID', 'EXAVITQu4vr4xnSDxMaL')), // Sarah (warm)
+    voiceIdB: optional('ELEVENLABS_VOICE_ID_B', 'JBFqnCBsd6RMkjVDRZzb'), // George (narrator)
     model: optional('ELEVENLABS_MODEL', 'eleven_multilingual_v2'),
   },
 
