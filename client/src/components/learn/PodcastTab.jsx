@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, API_URL, errorMessage } from '../../api/client';
+import { api, errorMessage } from '../../api/client';
 import { Spinner, ErrorBanner, EmptyState } from '../ui';
 
 /** Podcasts: list, generate (premium), and play with an HTML5 audio player. */
@@ -63,8 +63,24 @@ function fmt(seconds) {
 function PodcastCard({ podcast }) {
   const [showTranscript, setShowTranscript] = useState(false);
   const [rate, setRate] = useState(1);
+  const [audioSrc, setAudioSrc] = useState(null);
+  const [audioErr, setAudioErr] = useState('');
   const audioRef = useRef(null);
   const saved = useRef(0);
+
+  // The /api/files download route requires auth, but an <audio> element can't
+  // send our bearer token — so fetch the MP3 through the authenticated API
+  // client and play it from an object URL (revoked on unmount).
+  useEffect(() => {
+    if (!podcast.audioUrl) return undefined;
+    let objectUrl;
+    let active = true;
+    api
+      .get(podcast.audioUrl, { responseType: 'blob' })
+      .then((res) => { if (!active) return; objectUrl = URL.createObjectURL(res.data); setAudioSrc(objectUrl); })
+      .catch((e) => { if (active) setAudioErr(errorMessage(e, 'Could not load audio.')); });
+    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [podcast.audioUrl]);
 
   // Persist completion percentage as it plays (throttled to ~10% steps).
   const onTime = () => {
@@ -89,17 +105,21 @@ function PodcastCard({ podcast }) {
       </div>
 
       {podcast.audioUrl ? (
-        <>
-          <audio ref={audioRef} controls preload="none" onTimeUpdate={onTime} className="w-full">
-            <source src={`${API_URL}${podcast.audioUrl}`} type="audio/mpeg" />
-          </audio>
-          <div className="flex items-center gap-1 text-xs text-muted">
-            Speed:
-            {[1, 1.25, 1.5].map((r) => (
-              <button key={r} onClick={() => setSpeed(r)} className={`rounded px-1.5 py-0.5 font-semibold ${rate === r ? 'bg-brand-500/20 text-brand-700' : 'hover:bg-white/50'}`}>{r}×</button>
-            ))}
-          </div>
-        </>
+        audioErr ? (
+          <p className="rounded-lg bg-rose-400/10 px-3 py-2 text-xs text-rose-700">{audioErr}</p>
+        ) : !audioSrc ? (
+          <p className="px-1 py-2 text-xs text-muted">Loading audio…</p>
+        ) : (
+          <>
+            <audio ref={audioRef} src={audioSrc} controls onTimeUpdate={onTime} className="w-full" />
+            <div className="flex items-center gap-1 text-xs text-muted">
+              Speed:
+              {[1, 1.25, 1.5].map((r) => (
+                <button key={r} onClick={() => setSpeed(r)} className={`rounded px-1.5 py-0.5 font-semibold ${rate === r ? 'bg-brand-500/20 text-brand-700' : 'hover:bg-white/50'}`}>{r}×</button>
+              ))}
+            </div>
+          </>
+        )
       ) : (
         <p className="rounded-lg bg-amber-400/10 px-3 py-2 text-xs text-amber-700">
           🎙️ Audio is pending — set <code>ELEVENLABS_API_KEY</code> to synthesize narration. The full dialogue is below.
