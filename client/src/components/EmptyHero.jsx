@@ -5,15 +5,22 @@
  * / animate-float utilities (no separate CSS file).
  */
 
-export function EmptyHero({ illustration, headline, subheading, ctaLabel, onCta }) {
+export function EmptyHero({ illustration, headline, subheading, ctaLabel, onCta, secondaryLabel, onSecondary }) {
   return (
     <div className="flex justify-center px-4 py-8">
       <div className="glass-panel animate-fade-up flex max-w-lg flex-col items-center p-8 text-center sm:p-12">
         <div className="animate-float flex h-40 w-40 items-center justify-center">{illustration}</div>
         <h2 className="mt-4 font-display text-2xl font-bold text-ink">{headline}</h2>
         <p className="mt-2 max-w-sm text-sm text-muted">{subheading}</p>
-        {ctaLabel && (
-          <button className="btn btn-primary mt-6" onClick={onCta}>{ctaLabel}</button>
+        {(ctaLabel || secondaryLabel) && (
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            {ctaLabel && (
+              <button className="btn btn-primary" onClick={onCta}>{ctaLabel}</button>
+            )}
+            {secondaryLabel && (
+              <button className="btn btn-soft" onClick={onSecondary}>{secondaryLabel}</button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -157,6 +164,122 @@ export function ScheduleIllustration() {
         <line x1="100" y1="96" x2="100" y2="64" stroke="#FF6B4A" strokeWidth="5" strokeLinecap="round" />
         <line x1="100" y1="96" x2="126" y2="110" stroke="#4FC3DC" strokeWidth="5" strokeLinecap="round" />
         <circle cx="100" cy="96" r="5.5" fill="#1B4C5C" />
+      </g>
+    </svg>
+  );
+}
+
+/** Quiz card: multiple-choice option pills + a floating "?" badge (Quizzes). */
+export function QuizIllustration() {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs('quiz')}
+      <ellipse cx="100" cy="172" rx="54" ry="9" fill="#4FC3DC" opacity="0.12" />
+      {/* card */}
+      <g filter="url(#quiz-glow)" transform="rotate(-4 100 100)">
+        <rect x="50" y="40" width="100" height="118" rx="12" fill="#fff" stroke="rgba(27,76,92,0.12)" />
+        <rect x="50" y="40" width="100" height="24" rx="12" fill="url(#quiz-grad)" opacity="0.9" />
+        <line x1="62" y1="52" x2="104" y2="52" stroke="#fff" strokeWidth="3" strokeLinecap="round" opacity="0.85" />
+        {/* option pills: bubble + line; the 2nd is selected */}
+        {[0, 1, 2].map((i) => {
+          const y = 82 + i * 22;
+          const sel = i === 1;
+          return (
+            <g key={i}>
+              <rect x="62" y={y - 7} width="76" height="16" rx="8" fill={sel ? 'rgba(79,195,220,0.16)' : 'rgba(27,76,92,0.05)'} />
+              <circle cx="72" cy={y + 1} r="6" fill={sel ? '#4FC3DC' : 'none'} stroke={sel ? '#4FC3DC' : 'rgba(27,76,92,0.3)'} strokeWidth="2" />
+              {sel && <path d={`M69 ${y + 1} l2.2 2.2 l4 -4.6`} fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
+              <line x1="86" y1={y + 1} x2={i === 2 ? 118 : 130} y2={y + 1} stroke="rgba(27,76,92,0.2)" strokeWidth="3" strokeLinecap="round" />
+            </g>
+          );
+        })}
+      </g>
+      {/* floating "?" badge */}
+      <g transform="translate(138 116)">
+        <circle r="21" fill="url(#quiz-grad)" filter="url(#quiz-glow)" />
+        <text x="0" y="7" textAnchor="middle" fontFamily="ui-rounded, 'Segoe UI', sans-serif" fontSize="26" fontWeight="800" fill="#fff">?</text>
+      </g>
+    </svg>
+  );
+}
+
+/** Studio microphone with sound waves (Podcasts). */
+export function PodcastIllustration() {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs('pod')}
+      <ellipse cx="100" cy="174" rx="46" ry="9" fill="#FF6B4A" opacity="0.12" />
+      {/* sound waves */}
+      {[26, 40].map((r, i) => (
+        <g key={r} opacity={i === 0 ? 0.55 : 0.28}>
+          <path d={`M${100 - r} ${86 - r * 0.7} a${r} ${r} 0 0 0 0 ${r * 1.4}`} fill="none" stroke="#4FC3DC" strokeWidth="5" strokeLinecap="round" />
+          <path d={`M${100 + r} ${86 - r * 0.7} a${r} ${r} 0 0 1 0 ${r * 1.4}`} fill="none" stroke="#FF6B4A" strokeWidth="5" strokeLinecap="round" />
+        </g>
+      ))}
+      {/* mic capsule */}
+      <g filter="url(#pod-glow)">
+        <rect x="84" y="46" width="32" height="60" rx="16" fill="#fff" stroke="rgba(27,76,92,0.12)" />
+        <rect x="84" y="46" width="32" height="60" rx="16" fill="url(#pod-grad)" opacity="0.9" />
+        {/* grille lines */}
+        {[58, 68, 78, 88].map((y) => (
+          <line key={y} x1="92" y1={y} x2="108" y2={y} stroke="#fff" strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
+        ))}
+      </g>
+      {/* yoke + stand */}
+      <path d="M74 92 a26 26 0 0 0 52 0" fill="none" stroke="#1B4C5C" strokeWidth="5" strokeLinecap="round" opacity="0.85" />
+      <line x1="100" y1="118" x2="100" y2="140" stroke="#1B4C5C" strokeWidth="5" strokeLinecap="round" opacity="0.85" />
+      <line x1="84" y1="140" x2="116" y2="140" stroke="#1B4C5C" strokeWidth="5" strokeLinecap="round" opacity="0.85" />
+    </svg>
+  );
+}
+
+/** Open book with a bookmark ribbon (Study guides). */
+export function GuideIllustration() {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs('guide')}
+      <ellipse cx="100" cy="170" rx="58" ry="9" fill="#4FC3DC" opacity="0.12" />
+      <g filter="url(#guide-glow)">
+        {/* left + right pages */}
+        <path d="M100 56 C84 46 64 46 46 52 L46 140 C64 134 84 134 100 144 Z" fill="#fff" stroke="rgba(27,76,92,0.12)" />
+        <path d="M100 56 C116 46 136 46 154 52 L154 140 C136 134 116 134 100 144 Z" fill="#fff" stroke="rgba(27,76,92,0.12)" />
+        {/* spine */}
+        <rect x="97" y="54" width="6" height="90" rx="3" fill="url(#guide-grad)" />
+        {/* text lines */}
+        {[74, 88, 102, 116].map((y, i) => (
+          <g key={y}>
+            <line x1="56" y1={y} x2={i === 3 ? 78 : 90} y2={y} stroke="rgba(27,76,92,0.18)" strokeWidth="3" strokeLinecap="round" />
+            <line x1="110" y1={y} x2={i === 3 ? 132 : 144} y2={y} stroke="rgba(27,76,92,0.18)" strokeWidth="3" strokeLinecap="round" />
+          </g>
+        ))}
+      </g>
+      {/* bookmark ribbon */}
+      <path d="M128 48 L128 92 L138 82 L148 92 L148 48 Z" fill="url(#guide-grad)" filter="url(#guide-glow)" />
+    </svg>
+  );
+}
+
+/** Bar chart climbing up with a trend arrow (Stats / progress). */
+export function StatsIllustration() {
+  return (
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="h-40 w-40" aria-hidden="true">
+      {defs('stats')}
+      <ellipse cx="100" cy="172" rx="56" ry="9" fill="#4FC3DC" opacity="0.12" />
+      {/* panel */}
+      <g filter="url(#stats-glow)">
+        <rect x="42" y="44" width="116" height="112" rx="14" fill="#fff" stroke="rgba(27,76,92,0.12)" />
+        {/* bars, increasing */}
+        {[{ x: 60, h: 30 }, { x: 84, h: 48 }, { x: 108, h: 66 }, { x: 132, h: 84 }].map((b, i) => (
+          <rect key={i} x={b.x} y={140 - b.h} width="14" height={b.h} rx="4"
+            fill={i === 3 ? 'url(#stats-grad)' : 'rgba(79,195,220,0.28)'} />
+        ))}
+        {/* baseline */}
+        <line x1="54" y1="140" x2="146" y2="140" stroke="rgba(27,76,92,0.15)" strokeWidth="2.5" strokeLinecap="round" />
+      </g>
+      {/* trend arrow */}
+      <g filter="url(#stats-glow)">
+        <path d="M60 116 L86 96 L108 106 L138 74" fill="none" stroke="#FF6B4A" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M126 72 L140 70 L138 84" fill="none" stroke="#FF6B4A" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
       </g>
     </svg>
   );
