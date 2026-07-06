@@ -355,36 +355,79 @@ function avatarParams(voice) {
   };
 }
 
-/** SVG hair shape over the head (head is ~cx50 cy53 rx26 ry29). */
+/**
+ * SVG hair over the head (head ~cx50 cy53 rx26 ry29). Drawn on top of the face
+ * with a low hairline so the forehead is covered (no "egg" look). A soft
+ * highlight adds a bit of shine.
+ */
 function Hair({ style, color }) {
+  const shine = 'rgba(255,255,255,0.18)';
   switch (style) {
-    case 'buzz':
-      return <path d="M26 44 Q26 24 50 23 Q74 24 74 44 Q64 35 50 35 Q36 35 26 44 Z" fill={color} />;
-    case 'curly':
+    case 'buzz': // short crop, low fringe
       return (
         <g fill={color}>
-          <circle cx="34" cy="27" r="10" /><circle cx="50" cy="22" r="11" /><circle cx="66" cy="27" r="10" />
-          <circle cx="26" cy="37" r="8" /><circle cx="74" cy="37" r="8" />
+          <path d="M23 45 C21 25 35 16 50 16 C65 16 79 25 77 45 C74 40 70 37 63 37 Q56 33 50 34 Q44 33 37 37 C30 37 26 40 23 45 Z" />
+          <path d="M50 16 C63 16 76 24 76 42 C72 34 64 30 50 30 Z" fill={shine} />
         </g>
       );
-    case 'bun':
+    case 'curly': // full rounded curls framing the face
       return (
         <g fill={color}>
-          <circle cx="50" cy="15" r="7" />
-          <path d="M24 46 Q24 24 50 22 Q76 24 76 46 Q66 33 50 33 Q34 33 24 46 Z" />
+          <circle cx="31" cy="30" r="11" /><circle cx="44" cy="23" r="11" /><circle cx="57" cy="23" r="11" />
+          <circle cx="69" cy="30" r="11" /><circle cx="24" cy="42" r="9" /><circle cx="76" cy="42" r="9" />
+          <path d="M28 40 Q50 26 72 40 Q50 34 28 40 Z" fill={shine} />
         </g>
       );
-    case 'bob':
-      return <path d="M22 64 Q20 26 50 20 Q80 26 78 64 L78 52 Q74 38 68 36 Q66 30 50 30 Q34 30 32 36 Q26 38 22 52 Z" fill={color} />;
-    case 'long':
-      return <path d="M20 84 Q18 26 50 18 Q82 26 80 84 L80 46 Q74 34 66 33 Q64 29 50 29 Q36 29 34 33 Q26 34 20 46 Z" fill={color} />;
-    default: // short
-      return <path d="M23 47 C21 24 37 17 50 17 C63 17 79 24 77 47 C72 33 66 28 50 28 C34 28 27 34 23 47 Z" fill={color} />;
+    case 'bun': // sleek cap + top bun
+      return (
+        <g fill={color}>
+          <circle cx="50" cy="13" r="8" />
+          <path d="M23 46 C22 25 36 17 50 17 C64 17 78 25 77 46 C74 38 69 34 61 34 Q50 31 39 34 C31 34 26 38 23 46 Z" />
+          <path d="M50 17 C64 17 76 25 76 42 C72 33 64 30 50 30 Z" fill={shine} />
+        </g>
+      );
+    case 'bob': // chin-length, frames the face
+      return (
+        <g fill={color}>
+          <path d="M20 64 C18 27 34 16 50 16 C66 16 82 27 80 64 L80 48 C78 39 71 35 63 34 Q50 31 37 34 C29 35 22 39 20 48 Z" />
+          <path d="M50 16 C64 16 78 26 79 46 C74 37 66 33 50 32 Z" fill={shine} />
+        </g>
+      );
+    case 'long': // flowing past the shoulders
+      return (
+        <g fill={color}>
+          <path d="M18 86 C16 27 34 14 50 14 C66 14 84 27 82 86 L82 44 C79 37 71 34 63 33 Q50 30 37 33 C29 34 21 37 18 44 Z" />
+          <path d="M50 14 C65 14 81 26 82 44 C76 35 66 31 50 30 Z" fill={shine} />
+        </g>
+      );
+    default: // short, textured with a soft side sweep
+      return (
+        <g fill={color}>
+          <path d="M22 46 C20 24 35 15 50 15 C65 15 80 24 78 46 C75 39 71 35 63 35 Q56 30 48 32 Q41 30 34 35 C28 36 25 40 22 46 Z" />
+          <path d="M50 15 C64 15 77 24 77 43 C72 34 63 31 49 32 Z" fill={shine} />
+        </g>
+      );
   }
 }
 
 /** A cute cartoon-avatar face (bitmoji-style): skin, hair, colored eyes, blush, smile. */
 function VoiceFace({ voice, playing, index = 0 }) {
+  // The "default" option isn't a person — show a neutral microphone glyph so it
+  // reads as "app default voice", not a face/skin tone.
+  if (!voice) {
+    return (
+      <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
+        <g className="vf-face">
+          <rect x="41" y="27" width="18" height="34" rx="9" fill="#fff" />
+          <g fill="none" stroke="#fff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M33 50 a17 17 0 0 0 34 0" />
+            <line x1="50" y1="67" x2="50" y2="77" />
+            <line x1="40" y1="78" x2="60" y2="78" />
+          </g>
+        </g>
+      </svg>
+    );
+  }
   const p = avatarParams(voice) || {};
   const { skin, hair, shirt, hairStyle, arch, lashes } = p;
   const eye = p.eye || { base: '#6B7280', light: '#AAB2BD' };
@@ -406,19 +449,18 @@ function VoiceFace({ voice, playing, index = 0 }) {
       <circle cx={cx + 1.9} cy="52" r="1.15" fill="#fff" opacity="0.9" />
     </g>
   );
-  const backHair = hairStyle === 'long' || hairStyle === 'bob';
   return (
     <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
       <g className={`vf-face ${arch}`} style={{ animationDelay: `${(index % 5) * 0.4}s` }}>
         {/* shoulders / shirt */}
         <path d="M26 98 Q28 82 42 79 Q50 85 58 79 Q72 82 74 98 Z" fill={shirt} />
         <path d="M43 76 Q50 82 57 76 L57 70 Q50 73 43 70 Z" fill={skin} />
-        {backHair && <Hair style={hairStyle} color={hair} />}
         {/* head + ears */}
         <circle cx="24" cy="55" r="4.5" fill={skin} />
         <circle cx="76" cy="55" r="4.5" fill={skin} />
         <ellipse cx="50" cy="53" rx="26" ry="29" fill={skin} />
-        {!backHair && <Hair style={hairStyle} color={hair} />}
+        {/* hair drawn in front so the forehead is always covered */}
+        <Hair style={hairStyle} color={hair} />
         {/* eyebrows */}
         <g stroke={hair} strokeWidth="2.2" strokeLinecap="round" fill="none">
           <path d="M31 38 Q38 34.5 45 37.5" /><path d="M55 37.5 Q62 34.5 69 38" />
