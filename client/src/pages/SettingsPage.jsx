@@ -308,11 +308,78 @@ const GENDER_GRAD = {
 };
 const voiceGrad = (v) => GENDER_GRAD[voiceMeta(v).gender] || 'linear-gradient(135deg, #FF8A5B, #4FC3DC)';
 
-/** A single profile bubble — avatar, name, vibe; ring when picked, equalizer while previewing. */
-function VoiceBubble({ voice, selected, playing, onClick }) {
+/** Map a voice's vibe to a face "personality" that drives its expression. */
+function faceArchetype(voice) {
+  const s = (voiceMeta(voice).style || '').toLowerCase();
+  const n = (voice?.name || '').toLowerCase();
+  if (s.includes('educational') || /educator|professor|teacher|knowledg/.test(n)) return 'smart';
+  if (s.includes('social')) return 'energetic';
+  if (s.includes('character') || s.includes('animation') || /trickster|warrior|quirky/.test(n)) return 'playful';
+  if (s.includes('narrative') || s.includes('story') || s.includes('meditation') || /calm|relaxed|velvety/.test(n)) return 'calm';
+  if (s.includes('advertisement') || s.includes('entertainment') || /confident|dominant|firm/.test(n)) return 'confident';
+  return 'friendly';
+}
+
+/** A cute animated SVG face drawn in white on the bubble's gradient (hero-graphic style). */
+function VoiceFace({ voice, playing, index = 0 }) {
+  const arch = voice ? faceArchetype(voice) : 'friendly';
+  const W = '#ffffff';
+  const eyeDelay = `${(index % 6) * 0.65}s`;
+  const cheeks = arch === 'playful' || arch === 'friendly' || arch === 'energetic';
+  return (
+    <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
+      <g className={`vf-face ${arch}`} style={{ animationDelay: `${(index % 5) * 0.4}s` }}>
+        {cheeks && (
+          <g fill="#fff" opacity="0.22">
+            <circle cx="29" cy="59" r="6" />
+            <circle cx="71" cy="59" r="6" />
+          </g>
+        )}
+        {/* eyes */}
+        {arch === 'calm' ? (
+          <g stroke={W} strokeWidth="4" strokeLinecap="round" fill="none">
+            <path d="M31 47 Q39 41 47 47" />
+            <path d="M53 47 Q61 41 69 47" />
+          </g>
+        ) : (
+          <g className="vf-eyes" style={{ animationDelay: eyeDelay }} fill={W}>
+            <circle cx="39" cy="45" r="5.5" />
+            <circle cx="61" cy="45" r="5.5" />
+          </g>
+        )}
+        {/* glasses for the studious ones */}
+        {arch === 'smart' && (
+          <g stroke={W} strokeWidth="3" fill="none" opacity="0.92">
+            <circle cx="39" cy="45" r="10" />
+            <circle cx="61" cy="45" r="10" />
+            <path d="M49 45 h2" strokeLinecap="round" />
+          </g>
+        )}
+        {/* sparkle for the energetic ones */}
+        {arch === 'energetic' && <text x="70" y="33" fontSize="15" fill={W}>✦</text>}
+        {/* mouth */}
+        <g className={`vf-mouth ${playing ? 'vf-talking' : ''}`}>
+          {playing ? (
+            <ellipse cx="50" cy="65" rx="7" ry="6" fill={W} />
+          ) : arch === 'playful' ? (
+            <path d="M38 60 Q50 75 62 60 Z" fill={W} />
+          ) : arch === 'confident' ? (
+            <path d="M40 63 Q52 71 61 61" stroke={W} strokeWidth="4" strokeLinecap="round" fill="none" />
+          ) : arch === 'calm' ? (
+            <path d="M42 63 Q50 69 58 63" stroke={W} strokeWidth="4" strokeLinecap="round" fill="none" />
+          ) : (
+            <path d="M39 61 Q50 72 61 61" stroke={W} strokeWidth="4" strokeLinecap="round" fill="none" />
+          )}
+        </g>
+      </g>
+    </svg>
+  );
+}
+
+/** A single profile bubble — animated face, name, vibe; ring when picked, talks while previewing. */
+function VoiceBubble({ voice, selected, playing, index, onClick }) {
   const name = voice ? voiceShortName(voice) : 'Default';
   const vibe = voice ? prettyLabel(voiceMeta(voice).style || voiceMeta(voice).accent || voiceMeta(voice).gender) : 'app default';
-  const initial = (name[0] || '?').toUpperCase();
   return (
     <button
       type="button"
@@ -323,17 +390,10 @@ function VoiceBubble({ voice, selected, playing, onClick }) {
       }`}
     >
       <span
-        className="relative grid h-14 w-14 place-items-center rounded-full text-lg font-bold text-white shadow-md transition duration-200 group-hover:-translate-y-0.5 group-hover:scale-105"
+        className="relative grid h-14 w-14 place-items-center overflow-hidden rounded-full shadow-md transition duration-200 group-hover:-translate-y-0.5 group-hover:scale-105"
         style={{ backgroundImage: voice ? voiceGrad(voice) : 'linear-gradient(135deg, #cbd5e1, #94a3b8)' }}
       >
-        {playing ? (
-          <span className="voice-eq"><span /><span /><span /><span /></span>
-        ) : (
-          <span className="transition group-hover:opacity-0">{initial}</span>
-        )}
-        {!playing && voice?.previewUrl && (
-          <span className="absolute inset-0 grid place-items-center opacity-0 transition group-hover:opacity-100">▶</span>
-        )}
+        <VoiceFace voice={voice} playing={playing} index={index} />
         {selected && (
           <span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full bg-brand-500 text-[10px] font-bold text-white ring-2 ring-white">✓</span>
         )}
@@ -398,9 +458,9 @@ function PodcastVoicesSection({ prefs, set }) {
                   <div className="truncate text-xs text-muted">{sel ? prettyLabel(`${voiceShortName(sel)} · ${sel.description}`) : 'App default'}</div>
                 </div>
                 <div className="-mx-1 flex snap-x gap-1 overflow-x-auto px-1 pb-1">
-                  <VoiceBubble voice={null} selected={!val} playing={false} onClick={() => choose(h.key)('')} />
-                  {voices.map((v) => (
-                    <VoiceBubble key={v.id} voice={v} selected={val === v.id} playing={playingId === v.id} onClick={() => choose(h.key)(v.id)} />
+                  <VoiceBubble voice={null} selected={!val} playing={false} index={0} onClick={() => choose(h.key)('')} />
+                  {voices.map((v, i) => (
+                    <VoiceBubble key={v.id} voice={v} selected={val === v.id} playing={playingId === v.id} index={i + 1} onClick={() => choose(h.key)(v.id)} />
                   ))}
                 </div>
               </div>
