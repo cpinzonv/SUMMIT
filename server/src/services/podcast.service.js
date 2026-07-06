@@ -202,7 +202,7 @@ export async function generatePodcast(userId, classId, { sourceType = null } = {
          VALUES ($1,$2,$3,'audio/mpeg',$4,$5,'audio') RETURNING id`,
         [classId, userId, `${script.title}.mp3`, mp3.length, mp3.toString('base64')],
       );
-      audioUrl = `/api/files/${f.rows[0].id}/download`;
+      audioUrl = `/api/files/${f[0].id}/download`;
     }
   } catch (err) {
     if (!(err instanceof AppError)) throw err;
