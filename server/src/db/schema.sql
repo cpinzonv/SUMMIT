@@ -963,18 +963,16 @@ CREATE TABLE IF NOT EXISTS user_invites (
 CREATE INDEX IF NOT EXISTS idx_user_invites_user_id ON user_invites(user_id);
 
 -- ============================================================================
--- Activities (evidence-based anti-procrastination projects) — non-class work
--- (clubs, extracurriculars, freelance, volunteering). A non-academic sibling of
--- classes, with dated sub-tasks (a simplified assignment) + a Kanban workflow.
--- See docs/activities.md. WIP cap = 3 in-flight (active + in_progress); sub-tasks
--- and their due dates are optional (Decision #6 / Option C).
+-- Activities — 3-level anti-procrastination hierarchy: Activity → Project → Task.
+-- An Activity is non-class work (club, freelance, volunteering). Each Activity
+-- holds Projects (sub-goals) that carry the Kanban stage; each Project holds
+-- actionable Tasks with optional due dates. Task done = completed_at is set.
+-- Progress aggregates upward (project = its tasks; activity = all its tasks).
+-- See docs/activities.md.
 -- ============================================================================
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'activity_stage') THEN
     CREATE TYPE activity_stage AS ENUM ('backlog', 'active', 'in_progress', 'done');
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'activity_task_status') THEN
-    CREATE TYPE activity_task_status AS ENUM ('not_started', 'in_progress', 'done');
   END IF;
 END $$;
 
@@ -983,37 +981,46 @@ CREATE TABLE IF NOT EXISTS activities (
   user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name         TEXT NOT NULL,
   description  TEXT,
-  color        TEXT,                                   -- hex, for calendar/Kanban styling
+  color        TEXT,                                   -- hex, for card styling
   kind         TEXT NOT NULL DEFAULT 'other',          -- club | extracurricular | freelance | volunteer | other
-  stage        activity_stage NOT NULL DEFAULT 'backlog',
+  stage        activity_stage NOT NULL DEFAULT 'backlog', -- activity-level (Phase B board); detail uses project stages
   completed_at TIMESTAMPTZ,
   archived_at  TIMESTAMPTZ,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id);
-
 DROP TRIGGER IF EXISTS trg_activities_updated_at ON activities;
-CREATE TRIGGER trg_activities_updated_at
-  BEFORE UPDATE ON activities
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_activities_updated_at BEFORE UPDATE ON activities FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-CREATE TABLE IF NOT EXISTS activity_tasks (
+-- Projects — sub-goals within an activity; carry the Kanban stage.
+CREATE TABLE IF NOT EXISTS activity_projects (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   activity_id  UUID NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
-  title        TEXT NOT NULL,
+  name         TEXT NOT NULL,
   description  TEXT,
-  due_date     TIMESTAMPTZ,                            -- optional (Decision #6)
-  planned_date TIMESTAMPTZ,                            -- for drag-to-reschedule
-  status       activity_task_status NOT NULL DEFAULT 'not_started',
+  stage        activity_stage NOT NULL DEFAULT 'backlog',
   sort_order   INTEGER NOT NULL DEFAULT 0,
   completed_at TIMESTAMPTZ,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_activity_tasks_activity_id ON activity_tasks(activity_id);
+CREATE INDEX IF NOT EXISTS idx_activity_projects_activity_id ON activity_projects(activity_id);
+DROP TRIGGER IF EXISTS trg_activity_projects_updated_at ON activity_projects;
+CREATE TRIGGER trg_activity_projects_updated_at BEFORE UPDATE ON activity_projects FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+-- Tasks — actionable steps under a project. Done = completed_at set; due_date optional.
+CREATE TABLE IF NOT EXISTS activity_tasks (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id   UUID NOT NULL REFERENCES activity_projects(id) ON DELETE CASCADE,
+  title        TEXT NOT NULL,
+  due_date     TIMESTAMPTZ,
+  planned_date TIMESTAMPTZ,                            -- for calendar drag-reschedule (Phase C)
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  completed_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_activity_tasks_project_id ON activity_tasks(project_id);
 DROP TRIGGER IF EXISTS trg_activity_tasks_updated_at ON activity_tasks;
-CREATE TRIGGER trg_activity_tasks_updated_at
-  BEFORE UPDATE ON activity_tasks
-  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+CREATE TRIGGER trg_activity_tasks_updated_at BEFORE UPDATE ON activity_tasks FOR EACH ROW EXECUTE FUNCTION set_updated_at();

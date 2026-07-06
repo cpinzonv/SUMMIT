@@ -34,33 +34,45 @@ procrastination research and is meant to be **refined over a year of real use**
      appear on the calendar + feed "Next action"; undated tasks are plain checklist
      steps that sort last.
 
-## Data model
+## Data model — **3-level hierarchy: Activity → Project → Task**
 
-**`activities`** — the project container (a non-academic "class")
+A flat activity→tasks model wasn't enough. Activities are containers of **Projects**
+(sub-goals), and each Project holds actionable **Tasks**. The Kanban **stage lives on
+the Project**, not the activity; **progress aggregates upward**.
+
+**`activities`** — the container (a non-academic "class")
 
 | column | notes |
 |---|---|
-| `id, user_id` | owner-scoped |
-| `name, description` | |
-| `color` | hex, for calendar/Kanban styling (reuses the class-color pattern) |
-| `kind` | `club \| extracurricular \| freelance \| volunteer \| other` (future insights) |
-| `stage` | `backlog \| active \| in_progress \| done` — the Kanban column / lifecycle |
+| `id, user_id, name, description, color` | owner-scoped; `color` for card styling |
+| `kind` | `club \| extracurricular \| freelance \| volunteer \| other` |
+| `stage` | activity-level stage (kept for the Phase-B board); the detail page uses *project* stages |
 | `completed_at, archived_at, created_at, updated_at` | |
 
-**`activity_tasks`** — the sub-tasks (a simplified `assignment`)
+**`activity_projects`** — sub-goals within an activity (carry the Kanban stage)
 
 | column | notes |
 |---|---|
 | `id, activity_id` | cascade-delete with the activity |
-| `title, description` | |
-| `due_date` | **optional** (see Decision #6) |
-| `planned_date` | for drag-to-reschedule on the calendar |
-| `status` | `not_started \| in_progress \| done` |
-| `sort_order` | ordering under the activity |
-| `completed_at, created_at, updated_at` | |
+| `name, description` | |
+| `stage` | `backlog \| active \| in_progress \| done` |
+| `sort_order, completed_at, created_at, updated_at` | |
 
-Reuses existing `dueStatus`/`isDone` helpers for overdue logic and the calendar's
-per-container event aggregation (mirrors how class assignments render).
+**`activity_tasks`** — actionable steps under a **project**
+
+| column | notes |
+|---|---|
+| `id, project_id` | cascade-delete with the project |
+| `title` | |
+| `due_date` | **optional** (Decision #6) |
+| `planned_date` | for calendar drag-reschedule (Phase C) |
+| `completed_at` | **done = completed_at set** (no separate status enum) |
+| `sort_order, created_at, updated_at` | |
+
+**Aggregation + auto-complete:** project progress = its tasks; activity progress =
+*all* tasks across projects. All tasks done → **project** auto-moves to `done`; all
+projects done → **activity** auto-moves to `done` (reverts if no longer all-done).
+Reuses the `dueStatus` helper for overdue.
 
 ## Backend API
 
@@ -93,11 +105,17 @@ keeps a student's "everything I'm juggling" in one place.
   code/grade for **kind + progress % + "n/m steps" + Next-action countdown** (+ an
   "N overdue" badge). Clicking a **class → `/classes/:id`** (ClassDetailPage);
   clicking an **activity → `/activities/:id`** (ActivityDetailPage).
-- **ActivityDetailPage** (`/activities/:id`): activity-specific — name + kind,
-  **progress bar** (with "Planned ✓" endowed-progress framing), highlighted
-  **Next action**, **stage controls** (Backlog · Active · In Progress · Done), and a
-  **steps** editor (check off, add, reschedule via the date field, delete). No
-  assignments/grades.
+- **Create modal** = **name + type only** (fast). The breakdown happens one level
+  down: you add **Projects** on the detail page, and each project's add-form opens
+  with 3 step rows + the Option-C soft nudge.
+- **ActivityDetailPage** (`/activities/:id`): the 3-level view.
+  - **Activity header:** name + kind + **aggregate progress bar** (with "Planned ✓"
+    framing) + highlighted **Next action** (closest-due task across all projects).
+  - **Projects** = collapsible cards. Each shows its **own progress bar**,
+    **stage controls at the project level** (Backlog · Active · In Progress · Done),
+    and its **tasks** (checkbox · due date you can change to reschedule · delete) +
+    an add-step row. Projects auto-complete; the activity auto-completes when all
+    projects are done. No assignments/grades.
 - **Activities Kanban tab → Phase B.** The full Kanban board (Backlog · Active ·
   In Progress · Done) with WIP-guarded drag lives in Phase B, as its own tab.
 - **Calendar** (Req 4, Phase C): activity sub-tasks become a **new, visually

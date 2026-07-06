@@ -1,27 +1,32 @@
 /**
- * Activities — anti-procrastination projects. Owner-scoped via the service.
+ * Activities — 3-level (Activity → Project → Task). Owner-scoped via the service.
  * Mounted at /api/activities. See docs/activities.md.
  */
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import * as activities from '../controllers/activity.controller.js';
+import * as a from '../controllers/activity.controller.js';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/', asyncHandler(activities.list));
-router.post('/', validate(activities.createSchema), asyncHandler(activities.create));
+// Task routes (by task id) — most specific first, so they never collide with /:id.
+router.patch('/tasks/:taskId', validate(a.taskIdParam, 'params'), validate(a.updateTaskSchema), asyncHandler(a.updateTask));
+router.delete('/tasks/:taskId', validate(a.taskIdParam, 'params'), asyncHandler(a.removeTask));
 
-// Sub-task routes (by task id) — declared before /:id so they never collide.
-router.patch('/tasks/:taskId', validate(activities.taskIdParam, 'params'), validate(activities.updateTaskSchema), asyncHandler(activities.updateTask));
-router.delete('/tasks/:taskId', validate(activities.taskIdParam, 'params'), asyncHandler(activities.removeTask));
+// Project routes (by project id).
+router.patch('/projects/:projectId', validate(a.projectIdParam, 'params'), validate(a.updateProjectSchema), asyncHandler(a.updateProject));
+router.post('/projects/:projectId/stage', validate(a.projectIdParam, 'params'), validate(a.stageSchema), asyncHandler(a.projectStage));
+router.post('/projects/:projectId/tasks', validate(a.projectIdParam, 'params'), validate(a.addTaskSchema), asyncHandler(a.addTask));
+router.delete('/projects/:projectId', validate(a.projectIdParam, 'params'), asyncHandler(a.removeProject));
 
-router.get('/:id', validate(activities.idParam, 'params'), asyncHandler(activities.get));
-router.patch('/:id', validate(activities.idParam, 'params'), validate(activities.updateSchema), asyncHandler(activities.update));
-router.delete('/:id', validate(activities.idParam, 'params'), asyncHandler(activities.remove));
-router.post('/:id/stage', validate(activities.idParam, 'params'), validate(activities.stageSchema), asyncHandler(activities.stage));
-router.post('/:id/tasks', validate(activities.idParam, 'params'), validate(activities.addTaskSchema), asyncHandler(activities.addTask));
+// Activity routes.
+router.get('/', asyncHandler(a.list));
+router.post('/', validate(a.createSchema), asyncHandler(a.create));
+router.get('/:id', validate(a.idParam, 'params'), asyncHandler(a.get));
+router.patch('/:id', validate(a.idParam, 'params'), validate(a.updateSchema), asyncHandler(a.update));
+router.delete('/:id', validate(a.idParam, 'params'), asyncHandler(a.remove));
+router.post('/:id/projects', validate(a.idParam, 'params'), validate(a.addProjectSchema), asyncHandler(a.addProject));
 
 export default router;

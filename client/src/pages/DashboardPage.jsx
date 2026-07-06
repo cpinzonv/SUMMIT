@@ -15,7 +15,7 @@ import {
 import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
-import { activitiesApi, ACTIVITY_KINDS } from '../lib/activities';
+import { activitiesApi, ACTIVITY_KINDS, activityOverdue } from '../lib/activities';
 import { CreateActivityModal } from '../components/CreateActivityModal';
 
 export default function DashboardPage() {
@@ -474,8 +474,6 @@ function AddMenu({ onAddActivity }) {
 
 /* ---- Activity cards on the Dashboard (same look as classes, different link) --- */
 const activityKindLabel = (k) => ACTIVITY_KINDS.find((x) => x.value === k)?.label || 'Activity';
-const activityOverdue = (a) =>
-  a.tasks.filter((t) => t.status !== 'done' && t.dueDate && dueStatus(t.dueDate).isPastDue).length;
 
 function ActivityCard({ activity: a, index }) {
   const glass = isGlassColor(a.color);
