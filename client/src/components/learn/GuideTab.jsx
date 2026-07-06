@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import { Spinner, ErrorBanner } from '../ui';
-import { EmptyHero, NotepadIllustration } from '../EmptyHero';
+import { EmptyHero, GuideIllustration } from '../EmptyHero';
 import { renderMarkdown } from '../../utils/markdown';
 
 /** Study guides: list, generate (premium), and read (markdown + TOC + print). */
@@ -51,7 +51,7 @@ export function GuideTab({ classId, flash }) {
       {error && <ErrorBanner message={error} />}
       {guides.length === 0 ? (
         <EmptyHero
-          illustration={<NotepadIllustration />}
+          illustration={<GuideIllustration />}
           headline="No study guides yet"
           subheading="Generate a summarized guide of key concepts from this class."
           ctaLabel="✦ Generate a study guide"

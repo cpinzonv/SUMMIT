@@ -1,11 +1,11 @@
-import { EmptyHero, AssignmentsIllustration } from '../EmptyHero';
+import { EmptyHero, StatsIllustration } from '../EmptyHero';
 
 /** A fuller breakdown of the user's learning stats (the header shows the highlights). */
 export function StatsTab({ stats }) {
   if (!stats || stats.totalCards === 0) {
     return (
       <EmptyHero
-        illustration={<AssignmentsIllustration />}
+        illustration={<StatsIllustration />}
         headline="No study data yet"
         subheading="Create some flashcards and start a review session to see your progress here."
       />

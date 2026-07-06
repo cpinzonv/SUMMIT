@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
 import { Modal, Spinner, ErrorBanner } from '../ui';
-import { EmptyHero, AssignmentsIllustration } from '../EmptyHero';
+import { EmptyHero, QuizIllustration } from '../EmptyHero';
 import { Labeled } from './common';
 import { printHtml } from '../../lib/learnExport';
 
@@ -40,7 +40,7 @@ export function QuizTab({ classId, flash }) {
       {error && <ErrorBanner message={error} />}
       {quizzes.length === 0 ? (
         <EmptyHero
-          illustration={<AssignmentsIllustration />}
+          illustration={<QuizIllustration />}
           headline="No quizzes yet"
           subheading="Generate a multiple-choice quiz from this class's material."
           ctaLabel="✦ Generate a quiz"

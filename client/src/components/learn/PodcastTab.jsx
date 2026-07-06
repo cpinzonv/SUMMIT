@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, API_URL, errorMessage } from '../../api/client';
 import { Spinner, ErrorBanner } from '../ui';
-import { EmptyHero, NotepadIllustration } from '../EmptyHero';
+import { EmptyHero, PodcastIllustration } from '../EmptyHero';
 
 /** Podcasts: list, generate (premium), and play with an HTML5 audio player. */
 export function PodcastTab({ classId, flash }) {
@@ -47,7 +47,7 @@ export function PodcastTab({ classId, flash }) {
       {error && <ErrorBanner message={error} />}
       {podcasts.length === 0 ? (
         <EmptyHero
-          illustration={<NotepadIllustration />}
+          illustration={<PodcastIllustration />}
           headline="No podcasts yet"
           subheading="Generate an audio-style summary from this class's material."
           ctaLabel="✦ Generate a podcast"
