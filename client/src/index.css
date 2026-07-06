@@ -628,8 +628,20 @@
     .flip-card, .flip-input, .flip-colon { font-size: 1.4rem; }
     .flip-card, .flip-input { min-width: 2.1rem; }
   }
+  /* Voice picker — little animated faces (blink, idle bob, talk while previewing). */
+  @keyframes vfBlink { 0%, 92%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+  @keyframes vfBob { 0%, 100% { transform: translateY(0.5px); } 50% { transform: translateY(-2px); } }
+  @keyframes vfTalk { 0%, 100% { transform: scaleY(0.55); } 50% { transform: scaleY(1.2); } }
+  .vf-face { animation: vfBob 3s ease-in-out infinite; transform-origin: center; }
+  .vf-face.energetic { animation-duration: 1.7s; }
+  .vf-face.playful { animation-duration: 2.1s; }
+  .vf-face.calm { animation-duration: 4.6s; }
+  .vf-eyes { animation: vfBlink 4.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  .vf-mouth { transform-box: fill-box; transform-origin: center; }
+  .vf-talking { animation: vfTalk 0.26s ease-in-out infinite; }
+
   @media (prefers-reduced-motion: reduce) {
-    .flip-anim { animation: none; }
+    .flip-anim, .vf-face, .vf-eyes, .vf-talking { animation: none; }
   }
 
   /* Deck view — each deck is a tactile stack of flashcards: a glass front face

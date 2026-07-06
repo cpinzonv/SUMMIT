@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
@@ -294,6 +294,368 @@ function ChangePassword() {
   );
 }
 
+/* ---- Podcast host voices ----------------------------------------------- */
+const prettyLabel = (s) => (s || '').replace(/_/g, ' ');
+const voiceShortName = (v) => (v?.name || '').split(/\s*[-—]\s*/)[0].trim() || v?.name || '';
+const voiceMeta = (v) => {
+  const [gender = '', accent = '', style = ''] = (v?.description || '').split(' · ');
+  return { gender, accent, style };
+};
+const GENDER_GRAD = {
+  female: 'linear-gradient(135deg, #FF8A5B, #FF5E7E)',
+  male: 'linear-gradient(135deg, #4FC3DC, #5B8DEF)',
+  neutral: 'linear-gradient(135deg, #B084F5, #7E7BF5)',
+};
+const voiceGrad = (v) => GENDER_GRAD[voiceMeta(v).gender] || 'linear-gradient(135deg, #FF8A5B, #4FC3DC)';
+
+/** Map a voice's vibe to a face "personality" that drives its expression. */
+function faceArchetype(voice) {
+  const s = (voiceMeta(voice).style || '').toLowerCase();
+  const n = (voice?.name || '').toLowerCase();
+  if (s.includes('educational') || /educator|professor|teacher|knowledg/.test(n)) return 'smart';
+  if (s.includes('social')) return 'energetic';
+  if (s.includes('character') || s.includes('animation') || /trickster|warrior|quirky/.test(n)) return 'playful';
+  if (s.includes('narrative') || s.includes('story') || s.includes('meditation') || /calm|relaxed|velvety/.test(n)) return 'calm';
+  if (s.includes('advertisement') || s.includes('entertainment') || /confident|dominant|firm/.test(n)) return 'confident';
+  return 'friendly';
+}
+
+/* Cartoon-avatar palettes + a stable hash so each voice keeps the same look. */
+const SKINS = ['#F7D7B5', '#F0C49A', '#E0A878', '#C68A5E', '#A56A44', '#8A5636'];
+const HAIRS = ['#2C221B', '#4A3225', '#6B4A2E', '#9A6A3A', '#C99A5B', '#1F1F1F', '#7A4B3A', '#B5561E'];
+// Big anime/MLP-style irises: a darker base + a lighter lower tone for the "glow".
+const EYE_PAIRS = [
+  { base: '#6B4A2B', light: '#B07A45' }, // warm brown
+  { base: '#2E6FB0', light: '#7EC0E8' }, // bright blue
+  { base: '#3E8E5A', light: '#8AD79A' }, // green
+  { base: '#7E5AA8', light: '#C29BE0' }, // violet
+  { base: '#2E9AA0', light: '#7FD9D2' }, // teal
+  { base: '#B5762A', light: '#E6BE64' }, // amber
+];
+const SHIRTS = ['#5B8DEF', '#FF8A5B', '#4FC3DC', '#B084F5', '#57B894', '#F2777A'];
+const OUTFITS = ['crew', 'collar', 'stripe', 'hoodie', 'vneck', 'crew'];
+const ACC_COLORS = ['#FF6B9D', '#FF5E7E', '#7E5AA8', '#FF8A5B', '#4FC3DC', '#F2C94C'];
+const hashInt = (s) => { let h = 0; for (let i = 0; i < (s || '').length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+
+/** Pick a cute, gender-appropriate accessory (or none) from the hash. */
+function pickAccessory(gender, h) {
+  const list = gender === 'female' ? ['earrings', 'bow', 'headband']
+    : gender === 'male' ? ['cap', 'beanie', 'headphones', 'none']
+    : ['headphones', 'beanie', 'headband', 'none'];
+  return list[(h >> 9) % list.length];
+}
+
+function avatarParams(voice) {
+  if (!voice) {
+    return { skin: '#EAD7C2', hair: '#9AA3AF', eye: { base: '#6B7280', light: '#AAB2BD' }, shirt: '#B8C0CC', hairStyle: 'short', arch: 'friendly', lashes: false };
+  }
+  const h = hashInt(voice.id);
+  const { gender } = voiceMeta(voice);
+  const styles = gender === 'female' ? ['bob', 'long', 'bun', 'curly']
+    : gender === 'male' ? ['short', 'buzz', 'curly', 'short']
+    : ['short', 'bob', 'curly', 'bun'];
+  return {
+    skin: SKINS[h % SKINS.length],
+    hair: HAIRS[(h >> 3) % HAIRS.length],
+    eye: EYE_PAIRS[(h >> 6) % EYE_PAIRS.length],
+    shirt: SHIRTS[(h >> 8) % SHIRTS.length],
+    hairStyle: styles[(h >> 10) % styles.length],
+    arch: faceArchetype(voice),
+    lashes: gender === 'female',
+    outfit: OUTFITS[(h >> 16) % OUTFITS.length],
+    accent: SHIRTS[(h >> 18) % SHIRTS.length],
+    accessory: pickAccessory(gender, h),
+    accColor: ACC_COLORS[(h >> 20) % ACC_COLORS.length],
+  };
+}
+
+/**
+ * SVG hair over the head (head ~cx50 cy53 rx26 ry29). Drawn on top of the face
+ * with a low hairline so the forehead is covered (no "egg" look). A soft
+ * highlight adds a bit of shine.
+ */
+function Hair({ style, color }) {
+  const shine = 'rgba(255,255,255,0.18)';
+  switch (style) {
+    case 'buzz': // short crop, low fringe
+      return (
+        <g fill={color}>
+          <path d="M23 45 C21 25 35 16 50 16 C65 16 79 25 77 45 C74 40 70 37 63 37 Q56 33 50 34 Q44 33 37 37 C30 37 26 40 23 45 Z" />
+          <path d="M50 16 C63 16 76 24 76 42 C72 34 64 30 50 30 Z" fill={shine} />
+        </g>
+      );
+    case 'curly': // full rounded curls framing the face
+      return (
+        <g fill={color}>
+          <circle cx="31" cy="30" r="11" /><circle cx="44" cy="23" r="11" /><circle cx="57" cy="23" r="11" />
+          <circle cx="69" cy="30" r="11" /><circle cx="24" cy="42" r="9" /><circle cx="76" cy="42" r="9" />
+          <path d="M28 40 Q50 26 72 40 Q50 34 28 40 Z" fill={shine} />
+        </g>
+      );
+    case 'bun': // sleek cap + top bun
+      return (
+        <g fill={color}>
+          <circle cx="50" cy="13" r="8" />
+          <path d="M23 46 C22 25 36 17 50 17 C64 17 78 25 77 46 C74 38 69 34 61 34 Q50 31 39 34 C31 34 26 38 23 46 Z" />
+          <path d="M50 17 C64 17 76 25 76 42 C72 33 64 30 50 30 Z" fill={shine} />
+        </g>
+      );
+    case 'bob': // chin-length, frames the face
+      return (
+        <g fill={color}>
+          <path d="M20 64 C18 27 34 16 50 16 C66 16 82 27 80 64 L80 48 C78 39 71 35 63 34 Q50 31 37 34 C29 35 22 39 20 48 Z" />
+          <path d="M50 16 C64 16 78 26 79 46 C74 37 66 33 50 32 Z" fill={shine} />
+        </g>
+      );
+    case 'long': // flowing past the shoulders
+      return (
+        <g fill={color}>
+          <path d="M18 86 C16 27 34 14 50 14 C66 14 84 27 82 86 L82 44 C79 37 71 34 63 33 Q50 30 37 33 C29 34 21 37 18 44 Z" />
+          <path d="M50 14 C65 14 81 26 82 44 C76 35 66 31 50 30 Z" fill={shine} />
+        </g>
+      );
+    default: // short, textured with a soft side sweep
+      return (
+        <g fill={color}>
+          <path d="M22 46 C20 24 35 15 50 15 C65 15 80 24 78 46 C75 39 71 35 63 35 Q56 30 48 32 Q41 30 34 35 C28 36 25 40 22 46 Z" />
+          <path d="M50 15 C64 15 77 24 77 43 C72 34 63 31 49 32 Z" fill={shine} />
+        </g>
+      );
+  }
+}
+
+/** A cute cartoon-avatar face (bitmoji-style): skin, hair, colored eyes, blush, smile. */
+function VoiceFace({ voice, playing, index = 0 }) {
+  // The "default" option isn't a person — show a neutral microphone glyph so it
+  // reads as "app default voice", not a face/skin tone.
+  if (!voice) {
+    return (
+      <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
+        <g className="vf-face">
+          <rect x="41" y="27" width="18" height="34" rx="9" fill="#fff" />
+          <g fill="none" stroke="#fff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M33 50 a17 17 0 0 0 34 0" />
+            <line x1="50" y1="67" x2="50" y2="77" />
+            <line x1="40" y1="78" x2="60" y2="78" />
+          </g>
+        </g>
+      </svg>
+    );
+  }
+  const p = avatarParams(voice) || {};
+  const { skin, hair, shirt, hairStyle, arch, lashes, outfit, accent, accessory, accColor } = p;
+  const eye = p.eye || { base: '#6B7280', light: '#AAB2BD' };
+  const eyeDelay = `${(index % 6) * 0.65}s`;
+  // Big, glossy anime/MLP-style eye: sclera → two-tone iris → pupil → 2 highlights.
+  const Eye = (cx, out) => (
+    <g>
+      {lashes && (
+        <g stroke="#2b2320" strokeWidth="1.4" strokeLinecap="round">
+          <path d={`M${cx + out * 6.4} 42.6 q${out * 2} -1.4 ${out * 3.4} -2.6`} />
+          <path d={`M${cx + out * 5} 41.6 q${out * 1} -1.6 ${out * 1.8} -3`} />
+        </g>
+      )}
+      <ellipse cx={cx} cy="49" rx="6.6" ry="8.2" fill="#fff" />
+      <circle cx={cx} cy="50" r="5.7" fill={eye.base} />
+      <circle cx={cx} cy="52.4" r="4.4" fill={eye.light} />
+      <circle cx={cx} cy="50.4" r="2.9" fill="#231712" />
+      <ellipse cx={cx - 1.9} cy="47.2" rx="2.1" ry="2.7" fill="#fff" />
+      <circle cx={cx + 1.9} cy="52" r="1.15" fill="#fff" opacity="0.9" />
+    </g>
+  );
+  return (
+    <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
+      <g className={`vf-face ${arch}`} style={{ animationDelay: `${(index % 5) * 0.4}s` }}>
+        {/* shoulders / shirt + outfit details */}
+        <path d="M26 98 Q28 82 42 79 Q50 85 58 79 Q72 82 74 98 Z" fill={shirt} />
+        {outfit === 'stripe' && <path d="M27 89 Q50 95 73 89 L73 94 Q50 100 27 94 Z" fill={accent} />}
+        {outfit === 'hoodie' && (
+          <g>
+            <path d="M29 83 Q50 92 71 83 Q68 98 50 98 Q32 98 29 83 Z" fill={accent} />
+            <line x1="47" y1="86" x2="47" y2="95" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+            <line x1="53" y1="86" x2="53" y2="95" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+          </g>
+        )}
+        <path d="M43 76 Q50 82 57 76 L57 70 Q50 73 43 70 Z" fill={skin} />
+        {outfit === 'collar' && <g fill={accent}><path d="M44 79 L37 87 L46 84 Z" /><path d="M56 79 L63 87 L54 84 Z" /></g>}
+        {outfit === 'vneck' && <path d="M44 79 L50 89 L56 79 Z" fill={skin} />}
+        {/* head + ears */}
+        <circle cx="24" cy="55" r="4.5" fill={skin} />
+        <circle cx="76" cy="55" r="4.5" fill={skin} />
+        <ellipse cx="50" cy="53" rx="26" ry="29" fill={skin} />
+        {/* hair drawn in front so the forehead is always covered */}
+        <Hair style={hairStyle} color={hair} />
+        {/* eyebrows */}
+        <g stroke={hair} strokeWidth="2.2" strokeLinecap="round" fill="none">
+          <path d="M31 38 Q38 34.5 45 37.5" /><path d="M55 37.5 Q62 34.5 69 38" />
+        </g>
+        {/* eyes (blink) */}
+        <g className="vf-eyes" style={{ animationDelay: eyeDelay }}>{Eye(38, -1)}{Eye(62, 1)}</g>
+        {/* glasses for the studious ones */}
+        {arch === 'smart' && (
+          <g fill="none" stroke="#3b3b3b" strokeWidth="2.2" opacity="0.9">
+            <rect x="29.5" y="41.5" width="17" height="16" rx="6" />
+            <rect x="53.5" y="41.5" width="17" height="16" rx="6" />
+            <path d="M46.5 49 h7" strokeLinecap="round" />
+          </g>
+        )}
+        {/* nose + cheeks */}
+        <path d="M50 55 L48.4 59 Q50 60.2 51.6 59" fill="none" stroke="rgba(120,72,40,0.3)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        <ellipse cx="30" cy="62" rx="4.6" ry="2.9" fill="#FF8A7A" opacity="0.5" />
+        <ellipse cx="70" cy="62" rx="4.6" ry="2.9" fill="#FF8A7A" opacity="0.5" />
+        {/* mouth */}
+        <g className={`vf-mouth ${playing ? 'vf-talking' : ''}`}>
+          {playing ? (
+            <ellipse cx="50" cy="66" rx="3.4" ry="3.8" fill="#B5503F" />
+          ) : arch === 'playful' ? (
+            <g>
+              <path d="M44 64 Q50 71 56 64 Q50 67.5 44 64 Z" fill="#B5503F" />
+              <path d="M46 64.6 Q50 66 54 64.6 Q50 65.4 46 64.6 Z" fill="#fff" />
+            </g>
+          ) : arch === 'energetic' ? (
+            <path d="M45 64 Q50 70 55 64 Q50 67 45 64 Z" fill="#B5503F" />
+          ) : arch === 'confident' ? (
+            <path d="M45 66 Q51 69.5 57 64" fill="none" stroke="#B5503F" strokeWidth="2.4" strokeLinecap="round" />
+          ) : arch === 'calm' ? (
+            <path d="M46 65 Q50 68 54 65" fill="none" stroke="#B5503F" strokeWidth="2.4" strokeLinecap="round" />
+          ) : (
+            <path d="M45 64.5 Q50 68.5 55 64.5" fill="none" stroke="#B5503F" strokeWidth="2.4" strokeLinecap="round" />
+          )}
+        </g>
+        {/* accessories (drawn last so hats sit over the hair) */}
+        {accessory === 'earrings' && (
+          <g fill="#F3C969" stroke="#D9A93C" strokeWidth="0.5">
+            <circle cx="24" cy="61.5" r="2.1" /><circle cx="76" cy="61.5" r="2.1" />
+          </g>
+        )}
+        {accessory === 'bow' && (
+          <g fill={accColor}>
+            <path d="M30 25 L38 21 L38 30 Z" /><path d="M46 25 L38 21 L38 30 Z" />
+            <circle cx="38" cy="25.5" r="2.4" />
+          </g>
+        )}
+        {accessory === 'headband' && <path d="M24 35 Q50 25 76 35 L76 40 Q50 30 24 40 Z" fill={accColor} />}
+        {accessory === 'cap' && (
+          <g>
+            <path d="M20 39 Q50 11 80 39 Q50 31 20 39 Z" fill={accColor} />
+            <circle cx="50" cy="17" r="2" fill="#fff" opacity="0.85" />
+          </g>
+        )}
+        {accessory === 'beanie' && (
+          <g fill={accColor}>
+            <path d="M20 39 Q50 12 80 39 Q50 31 20 39 Z" />
+            <path d="M21 37 Q50 40 79 37 L79 39 Q50 42 21 39 Z" fill="rgba(0,0,0,0.14)" />
+            <circle cx="50" cy="14" r="4" />
+          </g>
+        )}
+        {accessory === 'headphones' && (
+          <g>
+            <path d="M21 45 Q50 15 79 45" fill="none" stroke="#3a3a3a" strokeWidth="4.5" strokeLinecap="round" />
+            <rect x="15.5" y="46" width="10" height="16" rx="4.5" fill="#3a3a3a" />
+            <rect x="74.5" y="46" width="10" height="16" rx="4.5" fill="#3a3a3a" />
+          </g>
+        )}
+      </g>
+    </svg>
+  );
+}
+
+/** A single profile bubble — animated face, name, vibe; ring when picked, talks while previewing. */
+function VoiceBubble({ voice, selected, playing, index, onClick }) {
+  const name = voice ? voiceShortName(voice) : 'Default';
+  const vibe = voice ? prettyLabel(voiceMeta(voice).style || voiceMeta(voice).accent || voiceMeta(voice).gender) : 'app default';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={voice ? `${voice.name} — ${voice.description}` : 'Use the app default voice'}
+      className={`group flex w-[4.75rem] shrink-0 snap-start flex-col items-center gap-1.5 rounded-2xl px-1 py-2 transition ${
+        selected ? 'bg-white/70 ring-2 ring-brand-400' : 'hover:bg-white/45'
+      }`}
+    >
+      <span
+        className="relative grid h-14 w-14 place-items-center overflow-hidden rounded-full shadow-md transition duration-200 group-hover:-translate-y-0.5 group-hover:scale-105"
+        style={{ backgroundImage: voice ? voiceGrad(voice) : 'linear-gradient(135deg, #cbd5e1, #94a3b8)' }}
+      >
+        <VoiceFace voice={voice} playing={playing} index={index} />
+        {selected && (
+          <span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full bg-brand-500 text-[10px] font-bold text-white ring-2 ring-white">✓</span>
+        )}
+      </span>
+      <span className="max-w-full truncate text-xs font-semibold text-ink">{name}</span>
+      <span className="max-w-full truncate text-[10px] capitalize text-muted">{vibe}</span>
+    </button>
+  );
+}
+
+function PodcastVoicesSection({ prefs, set }) {
+  const [voices, setVoices] = useState(null);
+  const [err, setErr] = useState('');
+  const [playingId, setPlayingId] = useState('');
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    api
+      .get('/api/learn/podcast-voices')
+      .then((r) => setVoices(r.data.voices))
+      .catch((e) => setErr(errorMessage(e)));
+    return () => audioRef.current?.pause?.();
+  }, []);
+
+  const preview = (voiceId) => {
+    audioRef.current?.pause?.();
+    const v = voices?.find((x) => x.id === voiceId);
+    if (!v?.previewUrl) { setPlayingId(''); return; }
+    const a = new Audio(v.previewUrl);
+    audioRef.current = a;
+    setPlayingId(voiceId);
+    a.onended = () => setPlayingId((p) => (p === voiceId ? '' : p));
+    a.onerror = () => setPlayingId('');
+    a.play().catch(() => setPlayingId(''));
+  };
+
+  // Click a bubble: select it (save pref) AND play its preview so you hear the pick.
+  const choose = (prefKey) => (voiceId) => { set(prefKey)(voiceId); preview(voiceId); };
+
+  const hosts = [
+    { key: 'podcastVoiceA', name: 'Host A — Maya', hint: 'The curious co-host.' },
+    { key: 'podcastVoiceB', name: 'Host B — Sam', hint: 'The expert who explains.' },
+  ];
+
+  return (
+    <Section title="Podcast voices" description="Tap a bubble to pick each host's voice — you'll hear a quick preview. Maya asks the questions; Sam explains.">
+      {err && <ErrorBanner message={err} />}
+      {!voices ? (
+        <p className="py-3 text-sm text-muted">Loading voices…</p>
+      ) : (
+        <div className="space-y-5">
+          {hosts.map((h) => {
+            const val = prefs[h.key] || '';
+            const sel = voices.find((v) => v.id === val);
+            return (
+              <div key={h.key}>
+                <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-ink">{h.name}</div>
+                    <div className="text-xs text-muted">{h.hint}</div>
+                  </div>
+                  <div className="truncate text-xs text-muted">{sel ? prettyLabel(`${voiceShortName(sel)} · ${sel.description}`) : 'App default'}</div>
+                </div>
+                <div className="-mx-1 flex snap-x gap-1 overflow-x-auto px-1 pb-1">
+                  <VoiceBubble voice={null} selected={!val} playing={false} index={0} onClick={() => choose(h.key)('')} />
+                  {voices.map((v, i) => (
+                    <VoiceBubble key={v.id} voice={v} selected={val === v.id} playing={playingId === v.id} index={i + 1} onClick={() => choose(h.key)(v.id)} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 /* ---- Preferences ------------------------------------------------------- */
 function PreferencesTab({ prefs, set }) {
   return (
@@ -325,6 +687,7 @@ function PreferencesTab({ prefs, set }) {
         </Row>
       </Section>
 
+      <PodcastVoicesSection prefs={prefs} set={set} />
       <SettingsGraduationSection />
       <LmsConnections />
       <CanvasAdminConfig />
