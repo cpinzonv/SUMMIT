@@ -333,7 +333,17 @@ const EYE_PAIRS = [
   { base: '#B5762A', light: '#E6BE64' }, // amber
 ];
 const SHIRTS = ['#5B8DEF', '#FF8A5B', '#4FC3DC', '#B084F5', '#57B894', '#F2777A'];
+const OUTFITS = ['crew', 'collar', 'stripe', 'hoodie', 'vneck', 'crew'];
+const ACC_COLORS = ['#FF6B9D', '#FF5E7E', '#7E5AA8', '#FF8A5B', '#4FC3DC', '#F2C94C'];
 const hashInt = (s) => { let h = 0; for (let i = 0; i < (s || '').length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+
+/** Pick a cute, gender-appropriate accessory (or none) from the hash. */
+function pickAccessory(gender, h) {
+  const list = gender === 'female' ? ['earrings', 'bow', 'headband']
+    : gender === 'male' ? ['cap', 'beanie', 'headphones', 'none']
+    : ['headphones', 'beanie', 'headband', 'none'];
+  return list[(h >> 9) % list.length];
+}
 
 function avatarParams(voice) {
   if (!voice) {
@@ -352,6 +362,10 @@ function avatarParams(voice) {
     hairStyle: styles[(h >> 10) % styles.length],
     arch: faceArchetype(voice),
     lashes: gender === 'female',
+    outfit: OUTFITS[(h >> 16) % OUTFITS.length],
+    accent: SHIRTS[(h >> 18) % SHIRTS.length],
+    accessory: pickAccessory(gender, h),
+    accColor: ACC_COLORS[(h >> 20) % ACC_COLORS.length],
   };
 }
 
@@ -429,7 +443,7 @@ function VoiceFace({ voice, playing, index = 0 }) {
     );
   }
   const p = avatarParams(voice) || {};
-  const { skin, hair, shirt, hairStyle, arch, lashes } = p;
+  const { skin, hair, shirt, hairStyle, arch, lashes, outfit, accent, accessory, accColor } = p;
   const eye = p.eye || { base: '#6B7280', light: '#AAB2BD' };
   const eyeDelay = `${(index % 6) * 0.65}s`;
   // Big, glossy anime/MLP-style eye: sclera → two-tone iris → pupil → 2 highlights.
@@ -452,9 +466,19 @@ function VoiceFace({ voice, playing, index = 0 }) {
   return (
     <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
       <g className={`vf-face ${arch}`} style={{ animationDelay: `${(index % 5) * 0.4}s` }}>
-        {/* shoulders / shirt */}
+        {/* shoulders / shirt + outfit details */}
         <path d="M26 98 Q28 82 42 79 Q50 85 58 79 Q72 82 74 98 Z" fill={shirt} />
+        {outfit === 'stripe' && <path d="M27 89 Q50 95 73 89 L73 94 Q50 100 27 94 Z" fill={accent} />}
+        {outfit === 'hoodie' && (
+          <g>
+            <path d="M29 83 Q50 92 71 83 Q68 98 50 98 Q32 98 29 83 Z" fill={accent} />
+            <line x1="47" y1="86" x2="47" y2="95" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+            <line x1="53" y1="86" x2="53" y2="95" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
+          </g>
+        )}
         <path d="M43 76 Q50 82 57 76 L57 70 Q50 73 43 70 Z" fill={skin} />
+        {outfit === 'collar' && <g fill={accent}><path d="M44 79 L37 87 L46 84 Z" /><path d="M56 79 L63 87 L54 84 Z" /></g>}
+        {outfit === 'vneck' && <path d="M44 79 L50 89 L56 79 Z" fill={skin} />}
         {/* head + ears */}
         <circle cx="24" cy="55" r="4.5" fill={skin} />
         <circle cx="76" cy="55" r="4.5" fill={skin} />
@@ -498,6 +522,41 @@ function VoiceFace({ voice, playing, index = 0 }) {
             <path d="M45 64.5 Q50 68.5 55 64.5" fill="none" stroke="#B5503F" strokeWidth="2.4" strokeLinecap="round" />
           )}
         </g>
+        {/* accessories (drawn last so hats sit over the hair) */}
+        {accessory === 'earrings' && (
+          <g fill="#F3C969" stroke="#D9A93C" strokeWidth="0.5">
+            <circle cx="24" cy="61.5" r="2.1" /><circle cx="76" cy="61.5" r="2.1" />
+          </g>
+        )}
+        {accessory === 'bow' && (
+          <g fill={accColor}>
+            <path d="M30 25 L38 21 L38 30 Z" /><path d="M46 25 L38 21 L38 30 Z" />
+            <circle cx="38" cy="25.5" r="2.4" />
+          </g>
+        )}
+        {accessory === 'headband' && <path d="M24 35 Q50 25 76 35 L76 40 Q50 30 24 40 Z" fill={accColor} />}
+        {accessory === 'cap' && (
+          <g>
+            <path d="M21 41 Q50 17 79 41 Q50 34 21 41 Z" fill={accColor} />
+            <path d="M17 41 Q34 47 50 45 L50 49 Q33 51 17 45 Z" fill={accColor} />
+            <path d="M17 41 Q34 47 50 45 L50 49 Q33 51 17 45 Z" fill="rgba(0,0,0,0.18)" />
+            <circle cx="50" cy="20.5" r="2" fill="#fff" opacity="0.85" />
+          </g>
+        )}
+        {accessory === 'beanie' && (
+          <g fill={accColor}>
+            <path d="M21 43 Q50 15 79 43 Q50 35 21 43 Z" />
+            <path d="M21 40 Q50 47 79 40 L79 46 Q50 53 21 46 Z" fill="rgba(0,0,0,0.14)" />
+            <circle cx="50" cy="15" r="4" />
+          </g>
+        )}
+        {accessory === 'headphones' && (
+          <g>
+            <path d="M21 45 Q50 15 79 45" fill="none" stroke="#3a3a3a" strokeWidth="4.5" strokeLinecap="round" />
+            <rect x="15.5" y="46" width="10" height="16" rx="4.5" fill="#3a3a3a" />
+            <rect x="74.5" y="46" width="10" height="16" rx="4.5" fill="#3a3a3a" />
+          </g>
+        )}
       </g>
     </svg>
   );
