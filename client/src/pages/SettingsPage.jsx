@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
@@ -294,6 +294,66 @@ function ChangePassword() {
   );
 }
 
+/* ---- Podcast host voices ----------------------------------------------- */
+function PodcastVoicesSection({ prefs, set }) {
+  const [voices, setVoices] = useState(null);
+  const [err, setErr] = useState('');
+  const previewRef = useRef(null);
+
+  useEffect(() => {
+    api
+      .get('/api/learn/podcast-voices')
+      .then((r) => setVoices(r.data.voices))
+      .catch((e) => setErr(errorMessage(e)));
+    return () => previewRef.current?.pause?.();
+  }, []);
+
+  const preview = (voiceId) => {
+    const v = voices?.find((x) => x.id === voiceId);
+    if (!v?.previewUrl) return;
+    previewRef.current?.pause?.();
+    const a = new Audio(v.previewUrl);
+    previewRef.current = a;
+    a.play().catch(() => {});
+  };
+
+  const Picker = ({ prefKey, defaultName }) => {
+    const val = prefs[prefKey] || '';
+    const canPreview = Boolean(val && voices?.find((x) => x.id === val)?.previewUrl);
+    return (
+      <div className="flex items-center gap-2">
+        <select value={val} onChange={(e) => set(prefKey)(e.target.value)} className="field !w-auto" disabled={!voices}>
+          <option value="">Default ({defaultName})</option>
+          {voices?.map((v) => (
+            <option key={v.id} value={v.id}>{v.name}{v.description ? ` — ${v.description}` : ''}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => preview(val)}
+          disabled={!canPreview}
+          title={canPreview ? 'Preview voice' : 'No preview available'}
+          className="btn btn-soft !px-2.5 !py-1 text-xs disabled:opacity-40"
+        >
+          ▶
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <Section title="Podcast voices" description="Choose the two hosts' voices for auto-generated Learn podcasts. Maya asks the questions; Sam explains.">
+      {err && <ErrorBanner message={err} />}
+      <Row label="Host A — Maya" hint="The curious co-host.">
+        <Picker prefKey="podcastVoiceA" defaultName="Sarah" />
+      </Row>
+      <Row label="Host B — Sam" hint="The expert who explains.">
+        <Picker prefKey="podcastVoiceB" defaultName="George" />
+      </Row>
+    </Section>
+  );
+}
+
 /* ---- Preferences ------------------------------------------------------- */
 function PreferencesTab({ prefs, set }) {
   return (
@@ -325,6 +385,7 @@ function PreferencesTab({ prefs, set }) {
         </Row>
       </Section>
 
+      <PodcastVoicesSection prefs={prefs} set={set} />
       <SettingsGraduationSection />
       <LmsConnections />
       <CanvasAdminConfig />

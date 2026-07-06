@@ -13,6 +13,7 @@ import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
 import { gatherClassContext } from './learnSource.js';
 import { runStructured } from './learnAi.js';
+import { getPreferences } from './user.service.js';
 
 const DAILY_LIMIT = 5;
 
@@ -99,10 +100,51 @@ export function chunkForTts(text, max = TTS_CHUNK_CHARS) {
   return chunks;
 }
 
-/** Resolve a host's ElevenLabs voice id, falling back to the primary voice. */
-function voiceFor(speaker) {
-  const key = HOSTS[speaker]?.voiceKey;
-  return env.elevenLabs[key] || env.elevenLabs.voiceIdA;
+/** Curated fallback list when ElevenLabs is unreachable / no key is set. */
+const FALLBACK_VOICES = [
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', description: 'Female · warm', previewUrl: null },
+  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George', description: 'Male · narrator', previewUrl: null },
+  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', description: 'Female · calm', previewUrl: null },
+  { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', description: 'Male · deep', previewUrl: null },
+  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'Male · authoritative', previewUrl: null },
+  { id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy', description: 'Female · pleasant', previewUrl: null },
+];
+
+let voicesCache = { at: 0, data: null };
+
+/**
+ * Voices a student can pick for their podcast hosts. Pulled live from the
+ * ElevenLabs voice library (stock + any custom voices) with a name, short
+ * description and a preview clip; cached 10 min. Falls back to a curated list.
+ */
+export async function listPodcastVoices() {
+  const { apiKey } = env.elevenLabs;
+  if (!apiKey) return FALLBACK_VOICES;
+  if (voicesCache.data && Date.now() - voicesCache.at < 10 * 60 * 1000) return voicesCache.data;
+  try {
+    const res = await fetch('https://api.elevenlabs.io/v1/voices', { headers: { 'xi-api-key': apiKey } });
+    if (!res.ok) return voicesCache.data || FALLBACK_VOICES;
+    const body = await res.json();
+    const voices = (body.voices || [])
+      .map((v) => ({
+        id: v.voice_id,
+        name: v.name,
+        description: [v.labels?.gender, v.labels?.accent, v.labels?.description || v.labels?.use_case]
+          .filter(Boolean)
+          .join(' · '),
+        previewUrl: v.preview_url || null,
+      }))
+      .filter((v) => v.id && v.name);
+    voicesCache = { at: Date.now(), data: voices.length ? voices : FALLBACK_VOICES };
+    return voicesCache.data;
+  } catch {
+    return voicesCache.data || FALLBACK_VOICES;
+  }
+}
+
+/** Resolve a host's voice id: user preference → env default → primary. */
+function voiceFor(speaker, voices = {}) {
+  return voices[speaker] || env.elevenLabs[HOSTS[speaker]?.voiceKey] || env.elevenLabs.voiceIdA;
 }
 
 /** Synthesize one chunk in a given voice. `previous_text`/`next_text` give
@@ -135,13 +177,13 @@ async function ttsChunk(text, { voiceId, previous, next }) {
  * (long turns are still sentence-chunked), then all the MP3 bytes are
  * concatenated in order. Returns a Buffer, or null if no key is configured.
  */
-async function synthesizeDialogue(turns) {
+async function synthesizeDialogue(turns, voices = {}) {
   if (!env.elevenLabs.apiKey) return null;
   const clean = (turns || []).filter((t) => t?.text?.trim());
   if (clean.length === 0) return null;
   const buffers = [];
   for (let i = 0; i < clean.length; i++) {
-    const voiceId = voiceFor(clean[i].speaker);
+    const voiceId = voiceFor(clean[i].speaker, voices);
     const chunks = chunkForTts(clean[i].text);
     for (let j = 0; j < chunks.length; j++) {
       buffers.push(
@@ -193,9 +235,13 @@ export async function generatePodcast(userId, classId, { sourceType = null } = {
   const durationSeconds = Math.max(60, Math.round((script.durationMinutes || 6) * 60));
 
   // Optional audio synthesis (seam). Failures here keep the transcript.
+  // Voices come from the student's preferences (Settings → Podcast voices),
+  // falling back to the env defaults.
+  const prefs = await getPreferences(userId);
+  const voices = { host_a: prefs.podcastVoiceA || null, host_b: prefs.podcastVoiceB || null };
   let audioUrl = null;
   try {
-    const mp3 = await synthesizeDialogue(script.turns);
+    const mp3 = await synthesizeDialogue(script.turns, voices);
     if (mp3) {
       const { rows: f } = await query(
         `INSERT INTO class_files (class_id, user_id, filename, mime_type, size_bytes, data, category)

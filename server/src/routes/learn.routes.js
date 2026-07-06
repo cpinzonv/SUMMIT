@@ -154,6 +154,7 @@ router.post(
   asyncHandler(learn.genPodcast),
 );
 router.get('/classes/:classId/podcasts', validate(learn.classIdParam, 'params'), asyncHandler(learn.listPodcasts));
+router.get('/podcast-voices', asyncHandler(learn.listPodcastVoices));
 router.post(
   '/podcasts/:podcastId/listen',
   validate(learn.podcastIdParam, 'params'),
