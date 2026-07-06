@@ -5,15 +5,22 @@
  * / animate-float utilities (no separate CSS file).
  */
 
-export function EmptyHero({ illustration, headline, subheading, ctaLabel, onCta }) {
+export function EmptyHero({ illustration, headline, subheading, ctaLabel, onCta, secondaryLabel, onSecondary }) {
   return (
     <div className="flex justify-center px-4 py-8">
       <div className="glass-panel animate-fade-up flex max-w-lg flex-col items-center p-8 text-center sm:p-12">
         <div className="animate-float flex h-40 w-40 items-center justify-center">{illustration}</div>
         <h2 className="mt-4 font-display text-2xl font-bold text-ink">{headline}</h2>
         <p className="mt-2 max-w-sm text-sm text-muted">{subheading}</p>
-        {ctaLabel && (
-          <button className="btn btn-primary mt-6" onClick={onCta}>{ctaLabel}</button>
+        {(ctaLabel || secondaryLabel) && (
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            {ctaLabel && (
+              <button className="btn btn-primary" onClick={onCta}>{ctaLabel}</button>
+            )}
+            {secondaryLabel && (
+              <button className="btn btn-soft" onClick={onSecondary}>{secondaryLabel}</button>
+            )}
+          </div>
         )}
       </div>
     </div>

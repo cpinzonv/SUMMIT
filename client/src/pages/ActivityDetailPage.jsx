@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, Toast } from '../components/ui';
@@ -43,6 +43,7 @@ export default function ActivityDetailPage() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
   const [addingProject, setAddingProject] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const load = () => api.get(`/api/activities/${id}`).then((r) => setA(r.data.activity)).catch((e) => setError(errorMessage(e)));
   useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -76,13 +77,21 @@ export default function ActivityDetailPage() {
 
       {/* Activity header + aggregate progress + next action */}
       <div className="glass-card p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h1 className="font-display text-2xl font-bold text-ink">{a.name}</h1>
-            <p className="text-sm text-muted">{kindLabel(a.kind)} · {a.projectCount} project{a.projectCount === 1 ? '' : 's'}</p>
+        {editing ? (
+          <ActivityEditForm
+            activity={a}
+            onCancel={() => setEditing(false)}
+            onSave={async (patch) => { await guard(() => activitiesApi.update(id, patch)); setEditing(false); }}
+          />
+        ) : (
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h1 className="font-display text-2xl font-bold text-ink">{a.name}</h1>
+              <p className="text-sm text-muted">{kindLabel(a.kind)} · {a.projectCount} project{a.projectCount === 1 ? '' : 's'}</p>
+            </div>
+            <ActivityMenu onEdit={() => setEditing(true)} onDelete={del} />
           </div>
-          <button onClick={del} className="text-xs font-semibold text-muted transition hover:text-rose-500">Delete</button>
-        </div>
+        )}
         <div className="mt-4"><ProgressBar {...activityProjectProgress(a)} unit="project" /></div>
         {a.nextAction && (
           <div className="mt-4 rounded-xl border border-brand-300/40 bg-brand-50/40 px-3 py-2">
@@ -134,6 +143,74 @@ export default function ActivityDetailPage() {
 
       <Toast toast={toast} />
     </div>
+  );
+}
+
+/* ---- ⋮ menu on the activity header (Edit · Delete) --------------------- */
+function ActivityMenu({ onEdit, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const pick = (fn) => () => { setOpen(false); fn(); };
+  return (
+    <div ref={ref} className="relative self-start">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Activity options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="grid h-9 w-9 place-items-center rounded-full text-xl leading-none text-muted transition hover:bg-white/60 hover:text-ink"
+      >
+        ⋮
+      </button>
+      {open && (
+        <div role="menu" className="glass-panel absolute right-0 z-20 mt-1 w-44 p-1.5 text-sm shadow-xl">
+          <button type="button" role="menuitem" onClick={pick(onEdit)} className="menu-item"><span>✎</span> Edit activity</button>
+          <button type="button" role="menuitem" onClick={pick(onDelete)} className="menu-item text-rose-600"><span>🗑</span> Delete activity</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- Inline edit for the activity header (name + kind) ----------------- */
+function ActivityEditForm({ activity: a, onCancel, onSave }) {
+  const [name, setName] = useState(a.name);
+  const [kind, setKind] = useState(a.kind);
+  const [saving, setSaving] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try { await onSave({ name: name.trim(), kind }); } finally { setSaving(false); }
+  };
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Activity name"
+        className="field w-full font-display text-lg font-bold"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={kind} onChange={(e) => setKind(e.target.value)} className="field !w-auto">
+          {ACTIVITY_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+        </select>
+        <div className="ml-auto flex items-center gap-2">
+          <button type="button" onClick={onCancel} className="btn btn-soft">Cancel</button>
+          <button type="submit" disabled={saving || !name.trim()} className="btn btn-primary">{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </form>
   );
 }
 

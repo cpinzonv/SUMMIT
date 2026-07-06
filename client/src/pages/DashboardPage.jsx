@@ -235,6 +235,8 @@ export default function DashboardPage() {
               subheading="Add your classes and activities (clubs, freelance, volunteering) to start climbing."
               ctaLabel="+ Add your first class"
               onCta={() => navigate('/classes/new')}
+              secondaryLabel="+ Add an activity"
+              onSecondary={() => setShowCreateActivity(true)}
             />
           ) : preferences.defaultDashboardView === 'list' ? (
             <div className="glass-card divide-y divide-white/40 overflow-hidden">
@@ -458,9 +460,11 @@ function AddMenu({ onAddActivity }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Add"
-        className="btn btn-primary flex h-10 w-10 items-center justify-center !p-0 text-2xl font-semibold leading-none"
+        className="btn btn-primary grid h-10 w-10 place-items-center !p-0"
       >
-        +
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
       </button>
       {open && (
         <div role="menu" className="glass-panel absolute right-0 z-30 mt-1 w-44 p-1.5 text-sm shadow-xl">
