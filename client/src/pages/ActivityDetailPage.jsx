@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, Toast } from '../components/ui';
-import { activitiesApi, ACTIVITY_KINDS, STAGE_LABELS, STAGES } from '../lib/activities';
+import { activitiesApi, ACTIVITY_KINDS, STAGE_LABELS, STAGES, activityProjectProgress } from '../lib/activities';
 import { dueStatus } from '../lib/dueDate';
 
 const kindLabel = (k) => ACTIVITY_KINDS.find((x) => x.value === k)?.label || 'Activity';
@@ -17,11 +17,11 @@ const STAGE_STYLE = {
   done: 'bg-emerald-50 text-emerald-600',
 };
 
-function ProgressBar({ done, total, percent }) {
+function ProgressBar({ done, total, percent, unit = 'step' }) {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-xs">
-        <span className="font-semibold text-ink">{done} of {total} step{total === 1 ? '' : 's'} complete</span>
+        <span className="font-semibold text-ink">{done} of {total} {unit}{total === 1 ? '' : 's'} complete</span>
         <span className="font-semibold text-brand-600">{total > 0 && done === 0 ? 'Planned ✓' : `${percent}%`}</span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-white/50">
@@ -83,7 +83,7 @@ export default function ActivityDetailPage() {
           </div>
           <button onClick={del} className="text-xs font-semibold text-muted transition hover:text-rose-500">Delete</button>
         </div>
-        <div className="mt-4"><ProgressBar {...a.progress} /></div>
+        <div className="mt-4"><ProgressBar {...activityProjectProgress(a)} unit="project" /></div>
         {a.nextAction && (
           <div className="mt-4 rounded-xl border border-brand-300/40 bg-brand-50/40 px-3 py-2">
             <div className="text-[10px] font-bold uppercase tracking-wide text-brand-600">Next action</div>

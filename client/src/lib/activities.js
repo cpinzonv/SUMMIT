@@ -28,6 +28,13 @@ export const ACTIVITY_KINDS = [
 export const STAGE_LABELS = { backlog: 'Backlog', active: 'Active', in_progress: 'In Progress', done: 'Done' };
 export const STAGES = ['backlog', 'active', 'in_progress', 'done'];
 
+/** Activity-level progress measured in PROJECTS (projects done / total). */
+export function activityProjectProgress(a) {
+  const total = (a.projects || []).length;
+  const done = (a.projects || []).filter((p) => p.stage === 'done').length;
+  return { done, total, percent: total ? Math.round((done / total) * 100) : 0 };
+}
+
 /** Count incomplete, past-due tasks across all of an activity's projects. */
 export function activityOverdue(a) {
   const now = Date.now();

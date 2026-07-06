@@ -15,7 +15,7 @@ import {
 import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
-import { activitiesApi, ACTIVITY_KINDS, activityOverdue } from '../lib/activities';
+import { activitiesApi, ACTIVITY_KINDS, activityOverdue, activityProjectProgress } from '../lib/activities';
 import { CreateActivityModal } from '../components/CreateActivityModal';
 
 export default function DashboardPage() {
@@ -479,7 +479,7 @@ function ActivityCard({ activity: a, index }) {
   const glass = isGlassColor(a.color);
   const gradient = classGradient(a, index);
   const overdue = activityOverdue(a);
-  const { done, total, percent } = a.progress;
+  const { done, total, percent } = activityProjectProgress(a);
   return (
     <Link
       to={`/activities/${a.id}`}
@@ -512,7 +512,7 @@ function ActivityCard({ activity: a, index }) {
         </div>
         <div className="text-right">
           <div className="text-3xl font-extrabold text-ink">{percent}%</div>
-          <div className="text-xs font-medium text-muted">{done}/{total} step{total === 1 ? '' : 's'}</div>
+          <div className="text-xs font-medium text-muted">{done}/{total} project{total === 1 ? '' : 's'}</div>
         </div>
       </div>
       <p className="relative mt-4 flex gap-3 text-xs text-muted">
@@ -524,7 +524,7 @@ function ActivityCard({ activity: a, index }) {
 
 function ActivityRow({ activity: a, index }) {
   const overdue = activityOverdue(a);
-  const { done, total, percent } = a.progress;
+  const { done, total, percent } = activityProjectProgress(a);
   return (
     <Link to={`/activities/${a.id}`} className="group flex items-center gap-4 px-5 py-3.5 transition hover:bg-white/40">
       <span className="h-9 w-1.5 rounded-full" style={{ backgroundImage: classAccent(a, index) }} />
@@ -544,7 +544,7 @@ function ActivityRow({ activity: a, index }) {
       </div>
       <div className="text-right">
         <div className="text-lg font-extrabold text-ink">{percent}%</div>
-        <div className="text-[10px] font-medium text-muted">{done}/{total} steps</div>
+        <div className="text-[10px] font-medium text-muted">{done}/{total} projects</div>
       </div>
     </Link>
   );
