@@ -499,7 +499,8 @@ function VoiceFace({ voice, playing, index = 0 }) {
             <path d="M46.5 49 h7" strokeLinecap="round" />
           </g>
         )}
-        {/* cheeks */}
+        {/* nose + cheeks */}
+        <path d="M50 55 L48.4 59 Q50 60.2 51.6 59" fill="none" stroke="rgba(120,72,40,0.3)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
         <ellipse cx="30" cy="62" rx="4.6" ry="2.9" fill="#FF8A7A" opacity="0.5" />
         <ellipse cx="70" cy="62" rx="4.6" ry="2.9" fill="#FF8A7A" opacity="0.5" />
         {/* mouth */}
@@ -536,10 +537,8 @@ function VoiceFace({ voice, playing, index = 0 }) {
         {accessory === 'headband' && <path d="M24 35 Q50 25 76 35 L76 40 Q50 30 24 40 Z" fill={accColor} />}
         {accessory === 'cap' && (
           <g>
-            <path d="M20 38 Q50 12 80 38 Q50 30 20 38 Z" fill={accColor} />
-            <path d="M13 38 Q31 40 49 38 L49 34 Q31 33 13 34 Z" fill={accColor} />
-            <path d="M13 38 Q31 40 49 38 L49 34 Q31 33 13 34 Z" fill="rgba(0,0,0,0.18)" />
-            <circle cx="50" cy="18" r="2" fill="#fff" opacity="0.85" />
+            <path d="M20 39 Q50 11 80 39 Q50 31 20 39 Z" fill={accColor} />
+            <circle cx="50" cy="17" r="2" fill="#fff" opacity="0.85" />
           </g>
         )}
         {accessory === 'beanie' && (
