@@ -15,6 +15,12 @@ export async function updatePreferences(userId, prefs) {
   return rows[0]?.preferences ?? {};
 }
 
+/** Read the user's stored preferences (JSONB), or {} if none. */
+export async function getPreferences(userId) {
+  const { rows } = await query(`SELECT preferences FROM users WHERE id = $1`, [userId]);
+  return rows[0]?.preferences ?? {};
+}
+
 /** Read the user's graduation requirements. */
 export async function getGraduationSettings(userId) {
   const { rows } = await query(

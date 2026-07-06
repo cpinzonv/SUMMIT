@@ -230,6 +230,9 @@ export async function genPodcast(req, res) {
 export async function listPodcasts(req, res) {
   res.json({ podcasts: await podcasts.listClassPodcasts(req.user.id, req.params.classId) });
 }
+export async function listPodcastVoices(req, res) {
+  res.json({ voices: await podcasts.listPodcastVoices() });
+}
 export async function listenPodcast(req, res) {
   res.json(await podcasts.recordListen(req.user.id, req.params.podcastId, req.body.completionPercent));
 }
