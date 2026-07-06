@@ -301,14 +301,25 @@ function TaskRow({ task: t, onToggle, onUpdate, onDelete }) {
     <div className="py-2">
       <div className="flex items-center gap-3">
         <input type="checkbox" checked={t.done} onChange={onToggle} className="h-4 w-4 accent-teal-500" />
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className={`min-w-0 flex-1 truncate text-left text-sm ${t.done ? 'text-muted line-through' : 'text-ink'}`}
-          title="Open step to add details"
-        >
-          {t.title}
-          {hasNote && <span className="ml-1.5 text-xs text-muted" title="Has details">📝</span>}
-        </button>
+        {open ? (
+          <input
+            defaultValue={t.title}
+            key={`title-${t.id}-${t.title}`}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== t.title) onUpdate({ title: v }); }}
+            className="field min-w-0 flex-1 !py-1 text-sm"
+            placeholder="Step title"
+            aria-label="Step title"
+          />
+        ) : (
+          <button
+            onClick={() => setOpen(true)}
+            className={`min-w-0 flex-1 truncate text-left text-sm ${t.done ? 'text-muted line-through' : 'text-ink'}`}
+            title="Open step to add details"
+          >
+            {t.title}
+            {hasNote && <span className="ml-1.5 text-xs text-muted" title="Has details">📝</span>}
+          </button>
+        )}
         <input
           type="date"
           value={toDateInput(t.dueDate)}
@@ -323,14 +334,7 @@ function TaskRow({ task: t, onToggle, onUpdate, onDelete }) {
       </div>
 
       {open && (
-        <div className="mt-2 space-y-2 pl-7">
-          <input
-            defaultValue={t.title}
-            key={`title-${t.id}-${t.title}`}
-            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== t.title) onUpdate({ title: v }); }}
-            className="field text-sm"
-            placeholder="Step title"
-          />
+        <div className="mt-2 pl-7">
           <NoteField
             value={t.description}
             onSave={(v) => onUpdate({ description: v })}

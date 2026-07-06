@@ -235,7 +235,7 @@ export default function DashboardPage() {
               subheading="Add your classes and activities (clubs, freelance, volunteering) to start climbing."
               ctaLabel="+ Add your first class"
               onCta={() => navigate('/classes/new')}
-              secondaryLabel="+ Add an activity"
+              secondaryLabel="+ Add your first activity"
               onSecondary={() => setShowCreateActivity(true)}
             />
           ) : preferences.defaultDashboardView === 'list' ? (
