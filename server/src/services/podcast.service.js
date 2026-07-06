@@ -60,20 +60,67 @@ function assembleTranscript({ intro, segments, conclusion }) {
   return parts.filter(Boolean).join('\n\n');
 }
 
+/** ElevenLabs caps characters per request, so a full 5–10 min script must be
+ * split. We chunk on sentence boundaries (~2.5k chars) so nothing is cut. */
+const TTS_CHUNK_CHARS = 2500;
+
+export function chunkForTts(text, max = TTS_CHUNK_CHARS) {
+  const sentences = String(text || '').trim().split(/(?<=[.!?])\s+/);
+  const chunks = [];
+  let cur = '';
+  const flush = () => { if (cur.trim()) chunks.push(cur.trim()); cur = ''; };
+  for (const s of sentences) {
+    if (s.length > max) {
+      // A single sentence longer than the cap — hard-split it.
+      flush();
+      for (let i = 0; i < s.length; i += max) chunks.push(s.slice(i, i + max));
+      continue;
+    }
+    if (cur && cur.length + s.length + 1 > max) flush();
+    cur += (cur ? ' ' : '') + s;
+  }
+  flush();
+  return chunks;
+}
+
+/** Synthesize one chunk. `previous_text`/`next_text` give ElevenLabs prosody
+ * continuity across chunk boundaries so it doesn't sound stitched. */
+async function ttsChunk(text, { previous, next }) {
+  const { apiKey, voiceId, model } = env.elevenLabs;
+  const res = await fetch(
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+    {
+      method: 'POST',
+      headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
+      body: JSON.stringify({
+        text,
+        model_id: model,
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+        ...(previous ? { previous_text: previous.slice(-400) } : {}),
+        ...(next ? { next_text: next.slice(0, 400) } : {}),
+      }),
+    },
+  );
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => '')).slice(0, 140);
+    throw new AppError(502, `Text-to-speech failed (${res.status}). The script was saved.${detail ? ` (${detail})` : ''}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
 /**
- * ElevenLabs TTS seam. Returns a Buffer of MP3 bytes, or null if no key is set.
- * Untested without a real key — kept small and isolated.
+ * ElevenLabs TTS seam. Returns a Buffer of the full MP3 (all chunks
+ * concatenated), or null if no key is configured.
  */
 async function synthesizeAudio(text) {
-  const { apiKey, voiceId, model } = env.elevenLabs;
-  if (!apiKey) return null;
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-    method: 'POST',
-    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', Accept: 'audio/mpeg' },
-    body: JSON.stringify({ text: text.slice(0, 5000), model_id: model }),
-  });
-  if (!res.ok) throw new AppError(502, `Text-to-speech failed (${res.status}). The script was saved.`);
-  return Buffer.from(await res.arrayBuffer());
+  if (!env.elevenLabs.apiKey) return null;
+  const chunks = chunkForTts(text);
+  if (chunks.length === 0) return null;
+  const buffers = [];
+  for (let i = 0; i < chunks.length; i++) {
+    buffers.push(await ttsChunk(chunks[i], { previous: chunks[i - 1], next: chunks[i + 1] }));
+  }
+  return Buffer.concat(buffers);
 }
 
 export async function generatePodcast(userId, classId, { sourceType = null } = {}) {
