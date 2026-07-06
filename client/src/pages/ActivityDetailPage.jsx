@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, Toast } from '../components/ui';
+import { EmptyHero, AssignmentsIllustration } from '../components/EmptyHero';
 import { activitiesApi, ACTIVITY_KINDS, STAGE_LABELS, STAGES, activityProjectProgress } from '../lib/activities';
 import { dueStatus } from '../lib/dueDate';
 
@@ -120,9 +121,13 @@ export default function ActivityDetailPage() {
       )}
 
       {a.projects.length === 0 && !addingProject ? (
-        <div className="glass-card p-8 text-center text-sm text-muted">
-          No projects yet. Add a sub-goal (e.g. “Spring showcase”) and break it into a few dated steps.
-        </div>
+        <EmptyHero
+          illustration={<AssignmentsIllustration />}
+          headline="No projects yet"
+          subheading="Add a sub-goal (e.g. “Spring showcase”) and break it into a few dated steps."
+          ctaLabel="+ Add your first project"
+          onCta={() => setAddingProject(true)}
+        />
       ) : (
         <div className="space-y-3">
           {a.projects.map((p) => (
