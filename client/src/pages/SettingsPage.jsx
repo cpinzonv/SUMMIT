@@ -499,8 +499,7 @@ function VoiceFace({ voice, playing, index = 0 }) {
             <path d="M46.5 49 h7" strokeLinecap="round" />
           </g>
         )}
-        {/* nose + cheeks */}
-        <path d="M50 55 L48.4 59 Q50 60.2 51.6 59" fill="none" stroke="rgba(120,72,40,0.3)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        {/* cheeks */}
         <ellipse cx="30" cy="62" rx="4.6" ry="2.9" fill="#FF8A7A" opacity="0.5" />
         <ellipse cx="70" cy="62" rx="4.6" ry="2.9" fill="#FF8A7A" opacity="0.5" />
         {/* mouth */}
@@ -537,17 +536,17 @@ function VoiceFace({ voice, playing, index = 0 }) {
         {accessory === 'headband' && <path d="M24 35 Q50 25 76 35 L76 40 Q50 30 24 40 Z" fill={accColor} />}
         {accessory === 'cap' && (
           <g>
-            <path d="M21 41 Q50 17 79 41 Q50 34 21 41 Z" fill={accColor} />
-            <path d="M17 41 Q34 47 50 45 L50 49 Q33 51 17 45 Z" fill={accColor} />
-            <path d="M17 41 Q34 47 50 45 L50 49 Q33 51 17 45 Z" fill="rgba(0,0,0,0.18)" />
-            <circle cx="50" cy="20.5" r="2" fill="#fff" opacity="0.85" />
+            <path d="M20 38 Q50 12 80 38 Q50 30 20 38 Z" fill={accColor} />
+            <path d="M13 38 Q31 40 49 38 L49 34 Q31 33 13 34 Z" fill={accColor} />
+            <path d="M13 38 Q31 40 49 38 L49 34 Q31 33 13 34 Z" fill="rgba(0,0,0,0.18)" />
+            <circle cx="50" cy="18" r="2" fill="#fff" opacity="0.85" />
           </g>
         )}
         {accessory === 'beanie' && (
           <g fill={accColor}>
-            <path d="M21 43 Q50 15 79 43 Q50 35 21 43 Z" />
-            <path d="M21 40 Q50 47 79 40 L79 46 Q50 53 21 46 Z" fill="rgba(0,0,0,0.14)" />
-            <circle cx="50" cy="15" r="4" />
+            <path d="M20 39 Q50 12 80 39 Q50 31 20 39 Z" />
+            <path d="M21 37 Q50 40 79 37 L79 39 Q50 42 21 39 Z" fill="rgba(0,0,0,0.14)" />
+            <circle cx="50" cy="14" r="4" />
           </g>
         )}
         {accessory === 'headphones' && (
