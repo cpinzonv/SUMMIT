@@ -320,55 +320,118 @@ function faceArchetype(voice) {
   return 'friendly';
 }
 
-/** A cute animated SVG face drawn in white on the bubble's gradient (hero-graphic style). */
+/* Cartoon-avatar palettes + a stable hash so each voice keeps the same look. */
+const SKINS = ['#F7D7B5', '#F0C49A', '#E0A878', '#C68A5E', '#A56A44', '#8A5636'];
+const HAIRS = ['#2C221B', '#4A3225', '#6B4A2E', '#9A6A3A', '#C99A5B', '#1F1F1F', '#7A4B3A', '#B5561E'];
+const EYE_COLORS = ['#6B4A2B', '#3E7CB1', '#4E8B57', '#7A5A34', '#5B7C99'];
+const SHIRTS = ['#5B8DEF', '#FF8A5B', '#4FC3DC', '#B084F5', '#57B894', '#F2777A'];
+const hashInt = (s) => { let h = 0; for (let i = 0; i < (s || '').length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
+
+function avatarParams(voice) {
+  if (!voice) return { skin: '#EAD7C2', hair: '#9AA3AF', eye: '#6B7280', shirt: '#B8C0CC', hairStyle: 'short', arch: 'friendly' };
+  const h = hashInt(voice.id);
+  const { gender } = voiceMeta(voice);
+  const styles = gender === 'female' ? ['bob', 'long', 'bun', 'curly']
+    : gender === 'male' ? ['short', 'buzz', 'curly', 'short']
+    : ['short', 'bob', 'curly', 'bun'];
+  return {
+    skin: SKINS[h % SKINS.length],
+    hair: HAIRS[(h >> 3) % HAIRS.length],
+    eye: EYE_COLORS[(h >> 6) % EYE_COLORS.length],
+    shirt: SHIRTS[(h >> 8) % SHIRTS.length],
+    hairStyle: styles[(h >> 10) % styles.length],
+    arch: faceArchetype(voice),
+  };
+}
+
+/** SVG hair shape over the head (head is ~cx50 cy53 rx26 ry29). */
+function Hair({ style, color }) {
+  switch (style) {
+    case 'buzz':
+      return <path d="M26 44 Q26 24 50 23 Q74 24 74 44 Q64 35 50 35 Q36 35 26 44 Z" fill={color} />;
+    case 'curly':
+      return (
+        <g fill={color}>
+          <circle cx="34" cy="27" r="10" /><circle cx="50" cy="22" r="11" /><circle cx="66" cy="27" r="10" />
+          <circle cx="26" cy="37" r="8" /><circle cx="74" cy="37" r="8" />
+        </g>
+      );
+    case 'bun':
+      return (
+        <g fill={color}>
+          <circle cx="50" cy="15" r="7" />
+          <path d="M24 46 Q24 24 50 22 Q76 24 76 46 Q66 33 50 33 Q34 33 24 46 Z" />
+        </g>
+      );
+    case 'bob':
+      return <path d="M22 64 Q20 26 50 20 Q80 26 78 64 L78 52 Q74 38 68 36 Q66 30 50 30 Q34 30 32 36 Q26 38 22 52 Z" fill={color} />;
+    case 'long':
+      return <path d="M20 84 Q18 26 50 18 Q82 26 80 84 L80 46 Q74 34 66 33 Q64 29 50 29 Q36 29 34 33 Q26 34 20 46 Z" fill={color} />;
+    default: // short
+      return <path d="M23 47 C21 24 37 17 50 17 C63 17 79 24 77 47 C72 33 66 28 50 28 C34 28 27 34 23 47 Z" fill={color} />;
+  }
+}
+
+/** A cute cartoon-avatar face (bitmoji-style): skin, hair, colored eyes, blush, smile. */
 function VoiceFace({ voice, playing, index = 0 }) {
-  const arch = voice ? faceArchetype(voice) : 'friendly';
-  const W = '#ffffff';
+  const { skin, hair, eye, shirt, hairStyle, arch } = avatarParams(voice);
   const eyeDelay = `${(index % 6) * 0.65}s`;
-  const cheeks = arch === 'playful' || arch === 'friendly' || arch === 'energetic';
+  const Eye = (cx) => (
+    <g>
+      <ellipse cx={cx} cy="50" rx="5.4" ry="6.2" fill="#fff" />
+      <circle cx={cx} cy="51" r="3.4" fill={eye} />
+      <circle cx={cx} cy="51.4" r="1.7" fill="#241a12" />
+      <circle cx={cx - 1.2} cy="49.4" r="1.15" fill="#fff" />
+    </g>
+  );
+  const backHair = hairStyle === 'long' || hairStyle === 'bob';
   return (
     <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden="true">
       <g className={`vf-face ${arch}`} style={{ animationDelay: `${(index % 5) * 0.4}s` }}>
-        {cheeks && (
-          <g fill="#fff" opacity="0.22">
-            <circle cx="29" cy="59" r="6" />
-            <circle cx="71" cy="59" r="6" />
-          </g>
-        )}
-        {/* eyes */}
-        {arch === 'calm' ? (
-          <g stroke={W} strokeWidth="4" strokeLinecap="round" fill="none">
-            <path d="M31 47 Q39 41 47 47" />
-            <path d="M53 47 Q61 41 69 47" />
-          </g>
-        ) : (
-          <g className="vf-eyes" style={{ animationDelay: eyeDelay }} fill={W}>
-            <circle cx="39" cy="45" r="5.5" />
-            <circle cx="61" cy="45" r="5.5" />
-          </g>
-        )}
+        {/* shoulders / shirt */}
+        <path d="M26 98 Q28 82 42 79 Q50 85 58 79 Q72 82 74 98 Z" fill={shirt} />
+        <path d="M43 76 Q50 82 57 76 L57 70 Q50 73 43 70 Z" fill={skin} />
+        {backHair && <Hair style={hairStyle} color={hair} />}
+        {/* head + ears */}
+        <circle cx="24" cy="55" r="4.5" fill={skin} />
+        <circle cx="76" cy="55" r="4.5" fill={skin} />
+        <ellipse cx="50" cy="53" rx="26" ry="29" fill={skin} />
+        {!backHair && <Hair style={hairStyle} color={hair} />}
+        {/* eyebrows */}
+        <g stroke={hair} strokeWidth="2.3" strokeLinecap="round" fill="none">
+          <path d="M33 41 Q39 38 45 40" /><path d="M55 40 Q61 38 67 41" />
+        </g>
+        {/* eyes (blink) */}
+        <g className="vf-eyes" style={{ animationDelay: eyeDelay }}>{Eye(39)}{Eye(61)}</g>
         {/* glasses for the studious ones */}
         {arch === 'smart' && (
-          <g stroke={W} strokeWidth="3" fill="none" opacity="0.92">
-            <circle cx="39" cy="45" r="10" />
-            <circle cx="61" cy="45" r="10" />
-            <path d="M49 45 h2" strokeLinecap="round" />
+          <g fill="none" stroke="#3b3b3b" strokeWidth="2.2" opacity="0.9">
+            <rect x="31" y="44.5" width="14" height="11" rx="4.5" />
+            <rect x="55" y="44.5" width="14" height="11" rx="4.5" />
+            <path d="M45 50 h10" strokeLinecap="round" />
           </g>
         )}
-        {/* sparkle for the energetic ones */}
-        {arch === 'energetic' && <text x="70" y="33" fontSize="15" fill={W}>✦</text>}
+        {/* nose + cheeks */}
+        <path d="M50 53 L48 58 Q50 59.4 52 58" fill="none" stroke="rgba(120,72,40,0.32)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <ellipse cx="32" cy="61" rx="4.4" ry="2.7" fill="#FF8A7A" opacity="0.5" />
+        <ellipse cx="68" cy="61" rx="4.4" ry="2.7" fill="#FF8A7A" opacity="0.5" />
         {/* mouth */}
         <g className={`vf-mouth ${playing ? 'vf-talking' : ''}`}>
           {playing ? (
-            <ellipse cx="50" cy="65" rx="7" ry="6" fill={W} />
+            <ellipse cx="50" cy="65" rx="5" ry="5" fill="#B5503F" />
           ) : arch === 'playful' ? (
-            <path d="M38 60 Q50 75 62 60 Z" fill={W} />
+            <g>
+              <path d="M40 62 Q50 74 60 62 Q50 68 40 62 Z" fill="#B5503F" />
+              <path d="M43 63 Q50 65.5 57 63 Q50 64.5 43 63 Z" fill="#fff" />
+            </g>
+          ) : arch === 'energetic' ? (
+            <path d="M41 62 Q50 72 59 62 Q50 67 41 62 Z" fill="#B5503F" />
           ) : arch === 'confident' ? (
-            <path d="M40 63 Q52 71 61 61" stroke={W} strokeWidth="4" strokeLinecap="round" fill="none" />
+            <path d="M42 65 Q51 70 60 62" fill="none" stroke="#B5503F" strokeWidth="2.6" strokeLinecap="round" />
           ) : arch === 'calm' ? (
-            <path d="M42 63 Q50 69 58 63" stroke={W} strokeWidth="4" strokeLinecap="round" fill="none" />
+            <path d="M43 64 Q50 68 57 64" fill="none" stroke="#B5503F" strokeWidth="2.6" strokeLinecap="round" />
           ) : (
-            <path d="M39 61 Q50 72 61 61" stroke={W} strokeWidth="4" strokeLinecap="round" fill="none" />
+            <path d="M42 63 Q50 70 58 63" fill="none" stroke="#B5503F" strokeWidth="2.6" strokeLinecap="round" />
           )}
         </g>
       </g>
