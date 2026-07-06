@@ -121,9 +121,10 @@ export default function ActivityDetailPage() {
               key={p.id}
               project={p}
               onStage={(stage) => guard(() => activitiesApi.setProjectStage(p.id, stage))}
+              onUpdate={(patch) => guard(() => activitiesApi.updateProject(p.id, patch))}
               onDelete={() => { if (confirm(`Delete project "${p.name}"?`)) guard(() => activitiesApi.removeProject(p.id)); }}
               onToggleTask={(t) => guard(() => activitiesApi.updateTask(t.id, { done: !t.done }))}
-              onDueTask={(t, val) => guard(() => activitiesApi.updateTask(t.id, { dueDate: val || null }))}
+              onUpdateTask={(t, patch) => guard(() => activitiesApi.updateTask(t.id, patch))}
               onDeleteTask={(t) => guard(() => activitiesApi.removeTask(t.id))}
               onAddTask={(title, dueDate) => guard(() => activitiesApi.addTask(p.id, { title, dueDate: dueDate || null }))}
             />
@@ -137,7 +138,7 @@ export default function ActivityDetailPage() {
 }
 
 /* ---- Project card (collapsible, stage controls, tasks) ------------------ */
-function ProjectCard({ project: p, onStage, onDelete, onToggleTask, onDueTask, onDeleteTask, onAddTask }) {
+function ProjectCard({ project: p, onStage, onUpdate, onDelete, onToggleTask, onUpdateTask, onDeleteTask, onAddTask }) {
   const [open, setOpen] = useState(true);
   const [step, setStep] = useState({ title: '', dueDate: '' });
   const { done, total, percent } = p.progress;
@@ -180,23 +181,26 @@ function ProjectCard({ project: p, onStage, onDelete, onToggleTask, onDueTask, o
 
       {open && (
         <div className="mt-3">
+          {/* Project description */}
+          <NoteField
+            value={p.description}
+            onSave={(v) => onUpdate({ description: v })}
+            placeholder="Add a description for this project…"
+            className="mb-3"
+          />
+
           {total === 0 ? (
             <p className="text-sm text-muted">No steps yet — add 3+ dated steps to break this down.</p>
           ) : (
             <div className="divide-y divide-white/40">
               {p.tasks.map((t) => (
-                <div key={t.id} className="flex items-center gap-3 py-2">
-                  <input type="checkbox" checked={t.done} onChange={() => onToggleTask(t)} className="h-4 w-4 accent-teal-500" />
-                  <span className={`min-w-0 flex-1 truncate text-sm ${t.done ? 'text-muted line-through' : 'text-ink'}`}>{t.title}</span>
-                  <input
-                    type="date"
-                    value={toDateInput(t.dueDate)}
-                    onChange={(e) => onDueTask(t, e.target.value)}
-                    className={`field !w-36 !py-1 text-xs ${isOverdue(t) ? '!border-rose-300 text-rose-600' : ''}`}
-                    title="Due date — change to reschedule"
-                  />
-                  <button onClick={() => onDeleteTask(t)} aria-label="Remove step" className="text-muted transition hover:text-rose-500">×</button>
-                </div>
+                <TaskRow
+                  key={t.id}
+                  task={t}
+                  onToggle={() => onToggleTask(t)}
+                  onUpdate={(patch) => onUpdateTask(t, patch)}
+                  onDelete={() => onDeleteTask(t)}
+                />
               ))}
             </div>
           )}
@@ -208,6 +212,70 @@ function ProjectCard({ project: p, onStage, onDelete, onToggleTask, onDueTask, o
         </div>
       )}
     </div>
+  );
+}
+
+/* ---- Task row (expand to edit title + description) --------------------- */
+function TaskRow({ task: t, onToggle, onUpdate, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const hasNote = Boolean(t.description);
+
+  return (
+    <div className="py-2">
+      <div className="flex items-center gap-3">
+        <input type="checkbox" checked={t.done} onChange={onToggle} className="h-4 w-4 accent-teal-500" />
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className={`min-w-0 flex-1 truncate text-left text-sm ${t.done ? 'text-muted line-through' : 'text-ink'}`}
+          title="Open step to add details"
+        >
+          {t.title}
+          {hasNote && <span className="ml-1.5 text-xs text-muted" title="Has details">📝</span>}
+        </button>
+        <input
+          type="date"
+          value={toDateInput(t.dueDate)}
+          onChange={(e) => onUpdate({ dueDate: e.target.value || null })}
+          className={`field !w-36 !py-1 text-xs ${isOverdue(t) ? '!border-rose-300 text-rose-600' : ''}`}
+          title="Due date — change to reschedule"
+        />
+        <button onClick={() => setOpen((o) => !o)} aria-label="Details" className={`text-sm transition ${open ? 'text-ink' : 'text-muted hover:text-ink'}`}>
+          {open ? '▾' : '⋯'}
+        </button>
+        <button onClick={onDelete} aria-label="Remove step" className="text-muted transition hover:text-rose-500">×</button>
+      </div>
+
+      {open && (
+        <div className="mt-2 space-y-2 pl-7">
+          <input
+            defaultValue={t.title}
+            key={`title-${t.id}-${t.title}`}
+            onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== t.title) onUpdate({ title: v }); }}
+            className="field text-sm"
+            placeholder="Step title"
+          />
+          <NoteField
+            value={t.description}
+            onSave={(v) => onUpdate({ description: v })}
+            placeholder="Add details or notes for this step…"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- Editable note / description (saves on blur) ---------------------- */
+function NoteField({ value, onSave, placeholder, className = '' }) {
+  return (
+    <textarea
+      defaultValue={value || ''}
+      key={value || ''}
+      rows={2}
+      onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== (value || null)) onSave(v); }}
+      placeholder={placeholder}
+      className={`field w-full resize-y text-sm ${className}`}
+    />
   );
 }
 

@@ -1014,6 +1014,7 @@ CREATE TABLE IF NOT EXISTS activity_tasks (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id   UUID NOT NULL REFERENCES activity_projects(id) ON DELETE CASCADE,
   title        TEXT NOT NULL,
+  description  TEXT,
   due_date     TIMESTAMPTZ,
   planned_date TIMESTAMPTZ,                            -- for calendar drag-reschedule (Phase C)
   sort_order   INTEGER NOT NULL DEFAULT 0,
@@ -1021,6 +1022,7 @@ CREATE TABLE IF NOT EXISTS activity_tasks (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE activity_tasks ADD COLUMN IF NOT EXISTS description TEXT;
 CREATE INDEX IF NOT EXISTS idx_activity_tasks_project_id ON activity_tasks(project_id);
 DROP TRIGGER IF EXISTS trg_activity_tasks_updated_at ON activity_tasks;
 CREATE TRIGGER trg_activity_tasks_updated_at BEFORE UPDATE ON activity_tasks FOR EACH ROW EXECUTE FUNCTION set_updated_at();

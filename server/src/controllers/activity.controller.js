@@ -34,12 +34,14 @@ export const stageSchema = z.object({ stage: z.enum(['backlog', 'active', 'in_pr
 /* ---- tasks -------------------------------------------------------------- */
 export const addTaskSchema = z.object({
   title: z.string().trim().min(1, 'Title is required').max(300),
+  description: nullableStr,
   dueDate: dateStr,
   plannedDate: dateStr,
 });
 export const updateTaskSchema = z
   .object({
     title: z.string().trim().min(1).max(300).optional(),
+    description: nullableStr,
     dueDate: dateStr,
     plannedDate: dateStr,
     done: z.boolean().optional(),

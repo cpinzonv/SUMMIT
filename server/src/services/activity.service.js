@@ -30,6 +30,7 @@ function toTask(r) {
     id: r.id,
     projectId: r.project_id,
     title: r.title,
+    description: r.description ?? null,
     dueDate: r.due_date ?? null,
     plannedDate: r.planned_date ?? null,
     sortOrder: r.sort_order,
@@ -273,9 +274,9 @@ export async function addTask(userId, projectId, input) {
   if (!title) throw AppError.badRequest('Give the task a title.');
   const { rows: ord } = await query('SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM activity_tasks WHERE project_id = $1', [projectId]);
   await query(
-    `INSERT INTO activity_tasks (project_id, title, due_date, planned_date, sort_order)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [projectId, title, input.dueDate || null, input.plannedDate || null, ord[0].n],
+    `INSERT INTO activity_tasks (project_id, title, description, due_date, planned_date, sort_order)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [projectId, title, input.description?.trim() || null, input.dueDate || null, input.plannedDate || null, ord[0].n],
   );
   await reconcileProject(projectId);
   return getActivity(userId, p.activity_id);
@@ -287,6 +288,7 @@ export async function updateTask(userId, taskId, input) {
   const values = [];
   let i = 1;
   if ('title' in input) { sets.push(`title = $${i++}`); values.push((input.title || '').trim() || task.title); }
+  if ('description' in input) { sets.push(`description = $${i++}`); values.push(input.description?.trim() || null); }
   if ('dueDate' in input) { sets.push(`due_date = $${i++}`); values.push(input.dueDate || null); }
   if ('plannedDate' in input) { sets.push(`planned_date = $${i++}`); values.push(input.plannedDate || null); }
   if ('done' in input) { sets.push(`completed_at = ${input.done ? 'now()' : 'NULL'}`); }
