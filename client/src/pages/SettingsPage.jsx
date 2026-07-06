@@ -295,61 +295,119 @@ function ChangePassword() {
 }
 
 /* ---- Podcast host voices ----------------------------------------------- */
+const prettyLabel = (s) => (s || '').replace(/_/g, ' ');
+const voiceShortName = (v) => (v?.name || '').split(/\s*[-—]\s*/)[0].trim() || v?.name || '';
+const voiceMeta = (v) => {
+  const [gender = '', accent = '', style = ''] = (v?.description || '').split(' · ');
+  return { gender, accent, style };
+};
+const GENDER_GRAD = {
+  female: 'linear-gradient(135deg, #FF8A5B, #FF5E7E)',
+  male: 'linear-gradient(135deg, #4FC3DC, #5B8DEF)',
+  neutral: 'linear-gradient(135deg, #B084F5, #7E7BF5)',
+};
+const voiceGrad = (v) => GENDER_GRAD[voiceMeta(v).gender] || 'linear-gradient(135deg, #FF8A5B, #4FC3DC)';
+
+/** A single profile bubble — avatar, name, vibe; ring when picked, equalizer while previewing. */
+function VoiceBubble({ voice, selected, playing, onClick }) {
+  const name = voice ? voiceShortName(voice) : 'Default';
+  const vibe = voice ? prettyLabel(voiceMeta(voice).style || voiceMeta(voice).accent || voiceMeta(voice).gender) : 'app default';
+  const initial = (name[0] || '?').toUpperCase();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={voice ? `${voice.name} — ${voice.description}` : 'Use the app default voice'}
+      className={`group flex w-[4.75rem] shrink-0 snap-start flex-col items-center gap-1.5 rounded-2xl px-1 py-2 transition ${
+        selected ? 'bg-white/70 ring-2 ring-brand-400' : 'hover:bg-white/45'
+      }`}
+    >
+      <span
+        className="relative grid h-14 w-14 place-items-center rounded-full text-lg font-bold text-white shadow-md transition duration-200 group-hover:-translate-y-0.5 group-hover:scale-105"
+        style={{ backgroundImage: voice ? voiceGrad(voice) : 'linear-gradient(135deg, #cbd5e1, #94a3b8)' }}
+      >
+        {playing ? (
+          <span className="voice-eq"><span /><span /><span /><span /></span>
+        ) : (
+          <span className="transition group-hover:opacity-0">{initial}</span>
+        )}
+        {!playing && voice?.previewUrl && (
+          <span className="absolute inset-0 grid place-items-center opacity-0 transition group-hover:opacity-100">▶</span>
+        )}
+        {selected && (
+          <span className="absolute -bottom-0.5 -right-0.5 grid h-5 w-5 place-items-center rounded-full bg-brand-500 text-[10px] font-bold text-white ring-2 ring-white">✓</span>
+        )}
+      </span>
+      <span className="max-w-full truncate text-xs font-semibold text-ink">{name}</span>
+      <span className="max-w-full truncate text-[10px] capitalize text-muted">{vibe}</span>
+    </button>
+  );
+}
+
 function PodcastVoicesSection({ prefs, set }) {
   const [voices, setVoices] = useState(null);
   const [err, setErr] = useState('');
-  const previewRef = useRef(null);
+  const [playingId, setPlayingId] = useState('');
+  const audioRef = useRef(null);
 
   useEffect(() => {
     api
       .get('/api/learn/podcast-voices')
       .then((r) => setVoices(r.data.voices))
       .catch((e) => setErr(errorMessage(e)));
-    return () => previewRef.current?.pause?.();
+    return () => audioRef.current?.pause?.();
   }, []);
 
   const preview = (voiceId) => {
+    audioRef.current?.pause?.();
     const v = voices?.find((x) => x.id === voiceId);
-    if (!v?.previewUrl) return;
-    previewRef.current?.pause?.();
+    if (!v?.previewUrl) { setPlayingId(''); return; }
     const a = new Audio(v.previewUrl);
-    previewRef.current = a;
-    a.play().catch(() => {});
+    audioRef.current = a;
+    setPlayingId(voiceId);
+    a.onended = () => setPlayingId((p) => (p === voiceId ? '' : p));
+    a.onerror = () => setPlayingId('');
+    a.play().catch(() => setPlayingId(''));
   };
 
-  const Picker = ({ prefKey, defaultName }) => {
-    const val = prefs[prefKey] || '';
-    const canPreview = Boolean(val && voices?.find((x) => x.id === val)?.previewUrl);
-    return (
-      <div className="flex items-center gap-2">
-        <select value={val} onChange={(e) => set(prefKey)(e.target.value)} className="field !w-auto" disabled={!voices}>
-          <option value="">Default ({defaultName})</option>
-          {voices?.map((v) => (
-            <option key={v.id} value={v.id}>{v.name}{v.description ? ` — ${v.description}` : ''}</option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={() => preview(val)}
-          disabled={!canPreview}
-          title={canPreview ? 'Preview voice' : 'No preview available'}
-          className="btn btn-soft !px-2.5 !py-1 text-xs disabled:opacity-40"
-        >
-          ▶
-        </button>
-      </div>
-    );
-  };
+  // Click a bubble: select it (save pref) AND play its preview so you hear the pick.
+  const choose = (prefKey) => (voiceId) => { set(prefKey)(voiceId); preview(voiceId); };
+
+  const hosts = [
+    { key: 'podcastVoiceA', name: 'Host A — Maya', hint: 'The curious co-host.' },
+    { key: 'podcastVoiceB', name: 'Host B — Sam', hint: 'The expert who explains.' },
+  ];
 
   return (
-    <Section title="Podcast voices" description="Choose the two hosts' voices for auto-generated Learn podcasts. Maya asks the questions; Sam explains.">
+    <Section title="Podcast voices" description="Tap a bubble to pick each host's voice — you'll hear a quick preview. Maya asks the questions; Sam explains.">
       {err && <ErrorBanner message={err} />}
-      <Row label="Host A — Maya" hint="The curious co-host.">
-        <Picker prefKey="podcastVoiceA" defaultName="Sarah" />
-      </Row>
-      <Row label="Host B — Sam" hint="The expert who explains.">
-        <Picker prefKey="podcastVoiceB" defaultName="George" />
-      </Row>
+      {!voices ? (
+        <p className="py-3 text-sm text-muted">Loading voices…</p>
+      ) : (
+        <div className="space-y-5">
+          {hosts.map((h) => {
+            const val = prefs[h.key] || '';
+            const sel = voices.find((v) => v.id === val);
+            return (
+              <div key={h.key}>
+                <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-ink">{h.name}</div>
+                    <div className="text-xs text-muted">{h.hint}</div>
+                  </div>
+                  <div className="truncate text-xs text-muted">{sel ? prettyLabel(`${voiceShortName(sel)} · ${sel.description}`) : 'App default'}</div>
+                </div>
+                <div className="-mx-1 flex snap-x gap-1 overflow-x-auto px-1 pb-1">
+                  <VoiceBubble voice={null} selected={!val} playing={false} onClick={() => choose(h.key)('')} />
+                  {voices.map((v) => (
+                    <VoiceBubble key={v.id} voice={v} selected={val === v.id} playing={playingId === v.id} onClick={() => choose(h.key)(v.id)} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Section>
   );
 }

@@ -622,8 +622,17 @@
     .flip-card, .flip-input, .flip-colon { font-size: 2rem; }
     .flip-card, .flip-input { min-width: 2.75rem; }
   }
+  /* Voice picker — profile bubbles with a live equalizer while previewing. */
+  @keyframes voiceEq { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+  .voice-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; }
+  .voice-eq span { width: 3px; height: 100%; border-radius: 2px; background: #fff; transform-origin: bottom; animation: voiceEq 0.8s ease-in-out infinite; }
+  .voice-eq span:nth-child(2) { animation-delay: 0.18s; }
+  .voice-eq span:nth-child(3) { animation-delay: 0.36s; }
+  .voice-eq span:nth-child(4) { animation-delay: 0.1s; }
+
   @media (prefers-reduced-motion: reduce) {
     .flip-anim { animation: none; }
+    .voice-eq span { animation: none; }
   }
 
   /* Deck view — each deck is a tactile stack of flashcards: a glass front face
