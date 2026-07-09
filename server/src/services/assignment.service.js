@@ -14,7 +14,7 @@ function toPublicAssignment(row) {
     pointValue: row.point_value == null ? null : Number(row.point_value),
     estimatedHours: row.estimated_hours == null ? null : Number(row.estimated_hours),
     status: row.status,
-    stage: row.stage ?? 'backlog', // Kanban column (independent of academic status)
+    stage: row.stage ?? 'planning', // Kanban column (independent of academic status)
     submissionText: row.submission_text ?? null,
     priority: row.priority ?? 'none',
     externalSource: row.external_source ?? null, // 'canvas' if synced from an LMS
@@ -161,15 +161,17 @@ export async function listAssignments(userId, classId) {
 
 /** Kanban WIP limit: how many of a class's assignments may be in-flight. */
 export const WIP_LIMIT = 3;
-const IN_FLIGHT = ['active', 'in_progress'];
+// Both non-Done columns count toward the limit.
+const IN_FLIGHT = ['planning', 'in_progress'];
 
 /**
- * Move an assignment to a Kanban stage. Entering `active`/`in_progress` is
- * blocked (409) when it would exceed the class's WIP limit of in-flight cards.
+ * Move an assignment to a Kanban stage. Entering an in-flight column
+ * (`planning`/`in_progress`) is blocked (409) when it would exceed the class's
+ * WIP limit of in-flight cards.
  */
 export async function setAssignmentStage(userId, assignmentId, stage) {
   const row = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
-  if (!['backlog', 'active', 'in_progress', 'done'].includes(stage)) {
+  if (!['planning', 'in_progress', 'done'].includes(stage)) {
     throw AppError.badRequest('Invalid stage.');
   }
   // Only enforce WIP when moving INTO an in-flight column from outside it.

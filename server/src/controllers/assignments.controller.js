@@ -46,7 +46,7 @@ export const updateAssignmentSchema = z
   });
 
 export const stageSchema = z.object({
-  stage: z.enum(['backlog', 'active', 'in_progress', 'done']),
+  stage: z.enum(['planning', 'in_progress', 'done']),
 });
 
 export const assignmentIdParam = z.object({

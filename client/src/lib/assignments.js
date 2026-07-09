@@ -20,17 +20,16 @@ export const assignmentsApi = {
 
 export const WIP_LIMIT = 3;
 
-/** Kanban columns in board order. `inFlight` cols count toward the WIP limit. */
+/** Kanban columns in board order. Both non-Done columns count toward the WIP limit. */
 export const STAGES = [
-  { key: 'backlog', label: 'Backlog', tint: 'bg-slate-200 text-slate-600', dot: '#94a3b8' },
-  { key: 'active', label: 'Active', tint: 'bg-sky-100 text-sky-700', dot: '#0ea5e9', inFlight: true },
+  { key: 'planning', label: 'Planning', tint: 'bg-sky-100 text-sky-700', dot: '#0ea5e9', inFlight: true },
   { key: 'in_progress', label: 'In Progress', tint: 'bg-indigo-100 text-indigo-700', dot: '#6366f1', inFlight: true },
   { key: 'done', label: 'Done', tint: 'bg-emerald-100 text-emerald-700', dot: '#10b981' },
 ];
 
 export const stageMeta = (key) => STAGES.find((s) => s.key === key) || STAGES[0];
 
-/** Count of in-flight (active + in_progress) assignments. */
+/** Count of in-flight (planning + in_progress) assignments. */
 export function inFlightCount(assignments) {
-  return (assignments || []).filter((a) => a.stage === 'active' || a.stage === 'in_progress').length;
+  return (assignments || []).filter((a) => a.stage === 'planning' || a.stage === 'in_progress').length;
 }

@@ -64,7 +64,7 @@ export default function AssignmentsBoard({ classId, assignments, onChanged }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {STAGES.map((s) => {
           const cards = items.filter((a) => a.stage === s.key);
           return (
@@ -129,7 +129,7 @@ function Card({ a, dragging, onOpen, onDragStart, onDragEnd }) {
       className={`glass-panel cursor-pointer rounded-xl p-3 transition hover:-translate-y-0.5 hover:shadow-md ${dragging ? 'opacity-40' : ''}`}
     >
       <p className="text-sm font-semibold text-ink">{a.title}</p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <div className="mt-1.5">
         {a.dueDate ? (
           overdue ? (
             <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">{ds.lateLabel}</span>
@@ -139,8 +139,6 @@ function Card({ a, dragging, onOpen, onDragStart, onDragEnd }) {
         ) : (
           <span className="text-[11px] text-muted">No due date</span>
         )}
-        {a.category && <span className="rounded-full bg-white/60 px-2 py-0.5 text-[10px] font-medium text-muted">{a.category}</span>}
-        {a.submissionText && <span className="text-[11px] text-muted" title="Has a submission">📝</span>}
       </div>
     </div>
   );
@@ -203,10 +201,10 @@ function AssignmentDetail({ classId, assignment: a, onClose, onPatched, onRemove
           {ds.isPastDue && a.stage !== 'done' && <span className="text-xs font-bold text-rose-600">{ds.lateLabel}</span>}
         </div>
 
-        {/* stage controls + mark complete */}
+        {/* stage controls + complete toggle */}
         <div>
           <div className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">Move to</div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {STAGES.map((s) => (
               <button
                 key={s.key}
@@ -217,11 +215,24 @@ function AssignmentDetail({ classId, assignment: a, onClose, onPatched, onRemove
                 {s.label}
               </button>
             ))}
-            {a.stage !== 'done' && (
+            {a.stage === 'done' ? (
+              <button onClick={() => onMove('planning')} className="btn btn-soft !px-2.5 !py-1 text-xs">↩ Reopen</button>
+            ) : (
               <button onClick={() => onMove('done')} className="btn btn-soft !px-2.5 !py-1 text-xs">✓ Mark complete</button>
             )}
           </div>
         </div>
+
+        {/* academic status (feeds grades) */}
+        <label className="block">
+          <span className="mb-1 block text-xs font-bold uppercase tracking-wide text-muted">Status</span>
+          <select value={a.status} onChange={(e) => save({ status: e.target.value })} className="field !w-56">
+            <option value="not_started">Not started</option>
+            <option value="in_progress">In progress</option>
+            <option value="submitted">Submitted</option>
+            <option value="graded">Graded</option>
+          </select>
+        </label>
 
         {/* due date */}
         <label className="block">

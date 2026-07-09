@@ -1,51 +1,52 @@
 # Assignments Kanban board
 
-A drag-and-drop workflow board for a class's assignments, living in
-**Class detail → Assignments**. It complements (does not replace) the existing
-assignments table — a **Table · Board** toggle switches between them. Grounded in
-the same WIP-limited Kanban model as the Activities board.
+A drag-and-drop workflow board for a class's assignments, in **Class detail →
+Assignments** (a **Table · Board** toggle switches views). WIP-limited, like the
+Activities board.
 
 ## Locked decisions
-1. **View:** Board is a new view *alongside* the table. A toggle in the
-   Assignments tab picks Table or Board; both read the same assignments.
-2. **Stage vs. status:** the board is driven by a **new `stage`** field
-   (`backlog · active · in_progress · done`), independent of the academic
-   `status` enum (`not_started · in_progress · submitted · graded`) that feeds
-   grades. Dragging changes `stage` only.
-3. **WIP limit:** `active + in_progress ≤ 3`. Server-enforced on stage change;
-   the blocked 4th shows *"You have 3/3 active. Pause or complete one first."*
-4. **Auto-Done:** past-due assignments **stay in place** with a red "N days
-   overdue" badge — they do **not** auto-move. Only **Mark complete** (or a drag
-   to Done) sets `stage = done`. (Overdue ≠ done.)
-5. **Submissions:** the detail view has a **text submission** + **file
-   attachments** (reuses the existing file storage, tagged to the assignment).
+1. **View:** Board alongside the table; a toggle picks Table or Board. Board is the default.
+2. **Columns / stage:** three columns — **Planning · In Progress · Done** — driven by
+   a `stage` field (`planning · in_progress · done`, default `planning`), independent
+   of the academic `status` enum that feeds grades. Dragging changes `stage` only.
+3. **WIP limit:** `planning + in_progress ≤ 3` (both non-Done columns count).
+   Server-enforced on stage change into an in-flight column; the blocked move shows
+   *"You have 3/3 active. Pause or complete one first."* + an in-flight badge.
+4. **Auto-Done:** only on **Mark complete** (or a drag to Done). Past-due cards stay
+   in place; the card's due date turns red ("OVERDUE" / "N days late").
+5. **Detail status control:** *both* — a **complete toggle** (Mark complete ⇄ Reopen,
+   which moves the card to/from Done) **and** an academic **Status** select
+   (`Not started · In progress · Submitted · Graded`, feeds grades).
+6. **Submissions:** the detail has a **text submission** + **file attachments**
+   (reuses class file storage, tagged to the assignment).
+
+> **Note — no Backlog column.** New assignments default to `planning`, which counts
+> toward WIP. A brand-new class with many assignments therefore starts *over* the
+> in-flight limit (a "you're over-committed" signal); the hard block then prevents
+> pulling *more* cards into the active columns. Re-adding an uncounted inbox column
+> is the alternative if that's not wanted.
 
 ## Data model (`assignments`, `class_files`)
-- `assignments.stage` — enum `assignment_stage ('backlog','active','in_progress','done')`, default `backlog`.
-- `assignments.submission_text` — TEXT, the student's typed submission/notes.
-- `class_files.assignment_id` — nullable UUID; a file tagged to an assignment is
-  a submission (category `submission`). Reuses upload/download/delete as-is.
+- `assignments.stage` — enum `assignment_stage ('planning','in_progress','done')`, default `planning`.
+- `assignments.submission_text` — TEXT.
+- `class_files.assignment_id` — nullable UUID; a tagged file is a submission (category `submission`).
 
 ## API
 ```
-GET   /api/classes/:id/assignments          list (+ stage, submissionText, wip { active, limit })
-PATCH /api/assignments/:assignmentId         edit (title/desc/due/…/submissionText)
+GET   /api/classes/:id/assignments          list (+ stage, submissionText)
+PATCH /api/assignments/:assignmentId         edit (…/submissionText/status)
 POST  /api/assignments/:assignmentId/stage   move column { stage } — enforces WIP
 GET   /api/assignments/:assignmentId/files   list submission files
-POST  /api/classes/:id/files                 upload (now accepts assignmentId + category)
+POST  /api/classes/:id/files                 upload (accepts assignmentId + category)
 ```
-`wip.active = count(stage in ('active','in_progress'))`, cap 3. Setting a stage
-to `active`/`in_progress` past the cap → 409 with the block message.
 
 ## Frontend
-- **AssignmentsBoard** — 4 columns; cards show **title · due date · stage badge**
-  (overdue = red). Native HTML5 drag-and-drop (no new dependency). The Active
-  column header shows `n/3`; a blocked drop shows the WIP toast.
-- **AssignmentDetail** (modal on card click) — instructions (description), due
-  date, **submission** (textarea + file upload/list), stage controls,
-  **Mark complete**, delete.
-- **Class → Assignments** gains a **Table · Board** segmented toggle.
+- **AssignmentsBoard** — 3 columns; cards show **name · due date** (overdue = red).
+  Native HTML5 drag-and-drop (no dependency). Board header shows `n/3 in flight`.
+- **AssignmentDetail** (modal) — move-to buttons + Mark-complete/Reopen, Status select,
+  due date, instructions, submission (text + file), delete.
+- **Class → Assignments** has a **Table · Board** toggle.
 
 ## Testing
-Create a class with 5+ assignments · drag between columns · try to start a 4th
-while 3 are active → blocked · Mark complete → leaves the active columns for Done.
+5+ assignments · drag between columns · try to activate a 4th while 3 in-flight →
+blocked · Mark complete → moves to Done.

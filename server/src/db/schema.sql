@@ -363,10 +363,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_assignments_external
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_stage') THEN
-    CREATE TYPE assignment_stage AS ENUM ('backlog', 'active', 'in_progress', 'done');
+    CREATE TYPE assignment_stage AS ENUM ('planning', 'in_progress', 'done');
   END IF;
 END$$;
-ALTER TABLE assignments ADD COLUMN IF NOT EXISTS stage assignment_stage NOT NULL DEFAULT 'backlog';
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS stage assignment_stage NOT NULL DEFAULT 'planning';
 ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_text TEXT;
 -- A class_file tagged with an assignment_id is a submission attachment.
 ALTER TABLE class_files ADD COLUMN IF NOT EXISTS assignment_id UUID;
