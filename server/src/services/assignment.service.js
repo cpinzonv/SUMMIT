@@ -1,7 +1,8 @@
 import { query } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
-import { createFile, deleteFile } from './file.service.js';
+import { createFile, deleteFile, renameFile, listAssignmentFiles } from './file.service.js';
+import { estimateMinutes } from './estimate.service.js';
 
 function toPublicAssignment(row) {
   return {
@@ -9,6 +10,9 @@ function toPublicAssignment(row) {
     classId: row.class_id,
     title: row.title,
     description: row.description,
+    instructions: row.instructions ?? null,      // rich HTML (detail modal), separate from description
+    workingContent: row.working_content ?? null, // Working-tab HTML (autosaved)
+    workingSavedAt: row.working_saved_at ?? null,
     category: row.category,
     dueDate: row.due_date,
     plannedDate: row.planned_date,
@@ -108,6 +112,8 @@ export async function createAssignment(userId, classId, input) {
 const UPDATABLE = {
   title: 'title',
   description: 'description',
+  instructions: 'instructions',
+  workingContent: 'working_content',
   category: 'category',
   dueDate: 'due_date',
   plannedDate: 'planned_date',
@@ -136,6 +142,9 @@ export async function updateAssignment(userId, assignmentId, input) {
       i++;
     }
   }
+
+  // Stamp the Working-tab save time whenever its content changes.
+  if ('workingContent' in input) sets.push('working_saved_at = now()');
 
   if (sets.length > 0) {
     values.push(assignmentId);
@@ -207,4 +216,129 @@ export async function clearSubmission(userId, assignmentId) {
     [assignmentId],
   );
   return fetchPublicAssignment(assignmentId);
+}
+
+/* ------------------------------------------------ Detail modal: AI estimate */
+
+/** Estimate the assignment's duration with Claude and persist it (decimal hours). */
+export async function estimateTime(userId, assignmentId, instructions) {
+  const a = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  const { minutes } = await estimateMinutes({ title: a.title, instructions: instructions ?? a.instructions });
+  const hours = Math.round((minutes / 60) * 100) / 100; // 2 dp, matches NUMERIC(5,2)
+  await query('UPDATE assignments SET estimated_hours = $1 WHERE id = $2', [hours, assignmentId]);
+  return { minutes, estimatedHours: hours };
+}
+
+/* --------------------------------------------- Detail modal: instruction files */
+
+/** List the instruction files uploaded to an assignment. */
+export async function listInstructionFiles(userId, assignmentId) {
+  await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  return listAssignmentFiles(userId, assignmentId, 'assignment_instructions');
+}
+
+/** Attach an uploaded instruction file to an assignment. */
+export async function addInstructionFile(userId, assignmentId, file) {
+  const a = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  return createFile(userId, a.class_id, file, 'assignment_instructions', assignmentId);
+}
+
+/** Rename an instruction file (ownership enforced via the file's class). */
+export async function renameInstructionFile(userId, assignmentId, fileId, filename) {
+  await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  return renameFile(userId, fileId, filename);
+}
+
+/** Delete an instruction file. */
+export async function deleteInstructionFile(userId, assignmentId, fileId) {
+  await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  await deleteFile(userId, fileId);
+}
+
+/* ------------------------------------------- Detail modal: submission history */
+
+function toPublicSubmission(row) {
+  return {
+    id: row.id,
+    kind: row.kind, // 'file' | 'link' | 'working'
+    text: row.text ?? null,
+    url: row.url ?? null,
+    file: row.file_id ? { id: row.file_id, filename: row.file_name ?? 'attachment' } : null,
+    createdAt: row.created_at,
+  };
+}
+
+/** Full submission history for an assignment, newest first. */
+export async function listSubmissions(userId, assignmentId) {
+  await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  const { rows } = await query(
+    `SELECT s.*, f.filename AS file_name
+       FROM assignment_submissions s
+       LEFT JOIN class_files f ON f.id = s.file_id
+      WHERE s.assignment_id = $1
+      ORDER BY s.created_at DESC`,
+    [assignmentId],
+  );
+  return rows.map(toPublicSubmission);
+}
+
+/**
+ * Record a new submission of one kind:
+ *   'file'    → an uploaded file (multer buffer)
+ *   'link'    → an external URL (Google Doc, etc.)
+ *   'working' → a snapshot of the Working-tab HTML (passed as text)
+ * Also stamps the assignment as submitted so the card/table badge updates.
+ */
+export async function addSubmission(userId, assignmentId, { kind, text, url, file } = {}) {
+  const a = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+
+  let fileId = null;
+  if (kind === 'file') {
+    if (!file) throw AppError.badRequest('Attach a file to submit.');
+    const stored = await createFile(userId, a.class_id, file, 'submission', assignmentId);
+    fileId = stored.id;
+  } else if (kind === 'link') {
+    if (!url || !/^https?:\/\//i.test(url)) throw AppError.badRequest('Enter a valid link (starting with http).');
+  } else if (kind === 'working') {
+    if (!text || !text.trim()) throw AppError.badRequest('There is nothing in your Working tab to submit yet.');
+  } else {
+    throw AppError.badRequest('Unknown submission type.');
+  }
+
+  const { rows } = await query(
+    `INSERT INTO assignment_submissions (assignment_id, kind, text, url, file_id)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [assignmentId, kind, text ?? null, url ?? null, fileId],
+  );
+  // Mark submitted so existing badges (card/table) reflect it.
+  await query("UPDATE assignments SET submitted_at = now(), status = 'submitted' WHERE id = $1", [assignmentId]);
+
+  const withName = (await query(
+    `SELECT s.*, f.filename AS file_name FROM assignment_submissions s
+       LEFT JOIN class_files f ON f.id = s.file_id WHERE s.id = $1`,
+    [rows[0].id],
+  )).rows[0];
+  return toPublicSubmission(withName);
+}
+
+/** Delete a single submission from the history (and its file, if any). */
+export async function deleteSubmission(userId, assignmentId, submissionId) {
+  await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  const { rows } = await query(
+    'SELECT file_id FROM assignment_submissions WHERE id = $1 AND assignment_id = $2',
+    [submissionId, assignmentId],
+  );
+  if (!rows[0]) throw AppError.notFound('Submission not found');
+  await query('DELETE FROM assignment_submissions WHERE id = $1', [submissionId]);
+  if (rows[0].file_id) await deleteFile(userId, rows[0].file_id).catch(() => {});
+
+  // If no submissions remain, clear the submitted stamp so the badge disappears.
+  const { rows: remaining } = await query(
+    'SELECT 1 FROM assignment_submissions WHERE assignment_id = $1 LIMIT 1',
+    [assignmentId],
+  );
+  if (!remaining[0]) {
+    await query("UPDATE assignments SET submitted_at = NULL WHERE id = $1 AND status = 'submitted'", [assignmentId]);
+  }
 }

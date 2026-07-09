@@ -41,4 +41,57 @@ router.delete(
   asyncHandler(assignments.unsubmit),
 );
 
+// ---- Detail modal ---------------------------------------------------------
+
+// AI time estimate from the (optionally just-pasted) instructions.
+router.post(
+  '/:assignmentId/estimate-time',
+  validate(assignments.assignmentIdParam, 'params'),
+  validate(assignments.estimateSchema),
+  asyncHandler(assignments.estimateTime),
+);
+
+// Instruction files: list / upload / rename / delete.
+router.get(
+  '/:assignmentId/files',
+  validate(assignments.assignmentIdParam, 'params'),
+  asyncHandler(assignments.listFiles),
+);
+router.post(
+  '/:assignmentId/files',
+  validate(assignments.assignmentIdParam, 'params'),
+  submissionUpload.single('file'),
+  asyncHandler(assignments.addFile),
+);
+router.patch(
+  '/:assignmentId/files/:fileId',
+  validate(assignments.fileIdParam, 'params'),
+  validate(assignments.renameFileSchema),
+  asyncHandler(assignments.renameFile),
+);
+router.delete(
+  '/:assignmentId/files/:fileId',
+  validate(assignments.fileIdParam, 'params'),
+  asyncHandler(assignments.removeFile),
+);
+
+// Submission history: list / add (file|link|working) / delete.
+router.get(
+  '/:assignmentId/submissions',
+  validate(assignments.assignmentIdParam, 'params'),
+  asyncHandler(assignments.listSubmissions),
+);
+router.post(
+  '/:assignmentId/submissions',
+  validate(assignments.assignmentIdParam, 'params'),
+  submissionUpload.single('file'),
+  validate(assignments.newSubmissionSchema),
+  asyncHandler(assignments.addSubmission),
+);
+router.delete(
+  '/:assignmentId/submissions/:submissionId',
+  validate(assignments.submissionIdParam, 'params'),
+  asyncHandler(assignments.removeSubmission),
+);
+
 export default router;
