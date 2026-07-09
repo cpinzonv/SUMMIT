@@ -63,6 +63,12 @@ async function fetchPublicAssignment(assignmentId, db = { query }) {
   return rows[0] ? toPublicAssignment(rows[0]) : null;
 }
 
+/** Fetch one assignment (with grade + submission), owner-scoped, in the API shape. */
+export async function getAssignmentForUser(userId, assignmentId) {
+  await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  return fetchPublicAssignment(assignmentId);
+}
+
 /**
  * Fetch an assignment scoped to its owner (via the parent class). Throws 404 if
  * it doesn't exist or belongs to another user.

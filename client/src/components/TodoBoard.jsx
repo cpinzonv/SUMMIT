@@ -6,6 +6,7 @@ import { classGradient, isGlassColor, Spinner, ErrorBanner } from './ui';
 import { dueStatus } from '../lib/dueDate';
 import { boardColumns, visibleStage } from '../lib/board';
 import { StageBoard } from './StageBoard';
+import { AssignmentDetailModal, estimateLabel } from './AssignmentDetailModal';
 
 /**
  * To-Do board — assignments + activity tasks (mixed), grouped by board_stage.
@@ -19,6 +20,7 @@ export function TodoBoard({ onChange }) {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [openAssignment, setOpenAssignment] = useState(null); // assignment card opened in the detail modal
 
   const load = useCallback(async () => {
     try {
@@ -60,23 +62,45 @@ export function TodoBoard({ onChange }) {
     }
   };
 
-  const openCard = (card) =>
-    navigate(card.source === 'task' ? `/activities/${card.contextId}` : `/classes/${card.contextId}`);
+  // Assignments open the rich detail modal in place; activity tasks still deep-link.
+  const openCard = (card) => {
+    if (card.source === 'assignment') {
+      setOpenAssignment({
+        id: card.id,
+        title: card.title,
+        dueDate: card.dueDate,
+        boardStage: card.boardStage,
+        priority: card.priority,
+        estimatedHours: card.estimatedHours ?? null,
+      });
+    } else {
+      navigate(`/activities/${card.contextId}`);
+    }
+  };
 
   if (loading) return <Spinner label="Loading board…" />;
   if (error) return <ErrorBanner message={error} />;
 
   const showExtra = !!preferences.boardExtraColumns;
   return (
-    <StageBoard
-      columns={boardColumns(showExtra)}
-      cards={cards}
-      stageOf={(c) => visibleStage(c.boardStage, showExtra)}
-      cardKey={(c) => `${c.source}:${c.id}`}
-      onMove={move}
-      onOpen={openCard}
-      renderCard={(c) => <TodoCardBody card={c} />}
-    />
+    <>
+      <StageBoard
+        columns={boardColumns(showExtra)}
+        cards={cards}
+        stageOf={(c) => visibleStage(c.boardStage, showExtra)}
+        cardKey={(c) => `${c.source}:${c.id}`}
+        onMove={move}
+        onOpen={openCard}
+        renderCard={(c) => <TodoCardBody card={c} />}
+      />
+      {openAssignment && (
+        <AssignmentDetailModal
+          assignment={openAssignment}
+          onClose={() => setOpenAssignment(null)}
+          onChanged={() => { load(); onChange?.(); }}
+        />
+      )}
+    </>
   );
 }
 
@@ -113,6 +137,9 @@ function TodoCardBody({ card }) {
             <span className={`font-semibold ${st.isPastDue ? 'text-rose-600' : 'text-muted'}`}>
               {st.isPastDue ? st.lateLabel : st.countdownLabel}
             </span>
+          )}
+          {card.source === 'assignment' && estimateLabel(card.estimatedHours) && !card.done && (
+            <span className="font-semibold text-violet-600">⏱ {estimateLabel(card.estimatedHours)}</span>
           )}
           {card.done && <span className="font-semibold text-emerald-600">✓ Done</span>}
         </div>

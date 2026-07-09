@@ -15,7 +15,7 @@ import {
 import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
-import { estimateLabel } from '../components/AssignmentDetailModal';
+import { AssignmentDetailModal, estimateLabel } from '../components/AssignmentDetailModal';
 import { activitiesApi, ACTIVITY_KINDS, activityOverdue, activityProjectProgress } from '../lib/activities';
 import { CreateActivityModal } from '../components/CreateActivityModal';
 
@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const [plannerNotice, setPlannerNotice] = useState(0);
   const [toast, setToast] = useState(null);
   const [syncingProvider, setSyncingProvider] = useState(null);
+  const [openAssignment, setOpenAssignment] = useState(null); // assignment opened in the detail modal
   // Connected LMS providers (each gets its own "Sync" button).
   const [connectedLms, setConnectedLms] = useState([]);
   // Weekly estimated-hours workload (this week + next week + per-day breakdown).
@@ -101,6 +102,11 @@ export default function DashboardPage() {
       active = false;
     };
   }, []);
+
+  // Refresh the weekly workload (e.g. after editing an assignment in the modal).
+  const reloadWorkload = () => {
+    api.get('/api/workload/weekly').then((r) => setWorkload(r.data)).catch(() => {});
+  };
 
   const reloadActivities = () => activitiesApi.list().then((d) => setActivities(d.activities)).catch(() => {});
 
@@ -226,7 +232,7 @@ export default function DashboardPage() {
           </div>
 
           {workload && (workload.thisWeek.totalHours > 0 || workload.nextWeek.totalHours > 0) && (
-            <WorkloadWidget workload={workload} />
+            <WorkloadWidget workload={workload} onOpen={setOpenAssignment} />
           )}
 
           {classes.length === 0 && activities.length === 0 ? (
@@ -267,6 +273,13 @@ export default function DashboardPage() {
           onCreated={(a) => { setShowCreateActivity(false); navigate(`/activities/${a.id}`); }}
         />
       )}
+      {openAssignment && (
+        <AssignmentDetailModal
+          assignment={openAssignment}
+          onClose={() => setOpenAssignment(null)}
+          onChanged={reloadWorkload}
+        />
+      )}
       <Toast toast={toast} />
     </div>
   );
@@ -281,7 +294,7 @@ const FEASIBILITY = {
   overloaded: { label: 'Overloaded', cls: 'bg-rose-100 text-rose-700' },
 };
 
-function WorkloadWidget({ workload }) {
+function WorkloadWidget({ workload, onOpen }) {
   const days = workload.thisWeek.byDay;
   const items = workload.thisWeek.items || [];
   const feas = workload.thisWeek.feasibility;
@@ -336,10 +349,15 @@ function WorkloadWidget({ workload }) {
             const st = dueStatus(it.dueDate);
             return (
               <li key={it.id} className="flex items-center gap-2 text-sm">
-                <span className="min-w-0 flex-1 truncate">
+                <button
+                  type="button"
+                  onClick={() => onOpen?.({ id: it.id, title: it.title, dueDate: it.dueDate, estimatedHours: it.aiEstimated ? it.hours : null })}
+                  className="min-w-0 flex-1 truncate text-left hover:opacity-80"
+                  title="Open assignment"
+                >
                   <span className="font-semibold text-ink">{it.title}</span>
                   <span className="text-muted"> · {it.className}</span>
-                </span>
+                </button>
                 <span className={`shrink-0 text-xs font-semibold ${countdownTone(st)}`}>{st.countdownLabel}</span>
                 <span
                   className="inline-flex shrink-0 items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700"
