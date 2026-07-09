@@ -691,6 +691,9 @@ function PreferencesTab({ prefs, set }) {
         >
           <Toggle on={!!prefs.boardExtraColumns} onChange={() => set('boardExtraColumns')(!prefs.boardExtraColumns)} />
         </Row>
+        <Row label="Hide Planner tab" hint="Remove Planner from the navigation.">
+          <Toggle on={!!prefs.hidePlanner} onChange={() => set('hidePlanner')(!prefs.hidePlanner)} />
+        </Row>
       </Section>
 
       <PodcastVoicesSection prefs={prefs} set={set} />

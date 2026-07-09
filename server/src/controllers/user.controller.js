@@ -15,6 +15,8 @@ export const preferencesSchema = z
     // Kanban: show the optional Backlog + Planning columns (default off) on both
     // the To-Do board and the per-class boards.
     boardExtraColumns: z.boolean().optional(),
+    // Hide the Planner tab from the primary nav.
+    hidePlanner: z.boolean().optional(),
     // Podcast host voices (ElevenLabs voice ids); '' clears back to the default.
     podcastVoiceA: z.string().max(64).optional(),
     podcastVoiceB: z.string().max(64).optional(),

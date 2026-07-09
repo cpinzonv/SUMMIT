@@ -77,16 +77,19 @@ const navItems = [
 ];
 
 export function Layout() {
-  const { user } = useAuth();
+  const { user, preferences } = useAuth();
+
+  // Students can hide the Planner tab from the nav (Settings → Preferences).
+  const studentNav = preferences?.hidePlanner ? navItems.filter((i) => i.to !== '/planner') : navItems;
 
   // Admins get an extra nav link; institution admins get their own (they aren't
   // students, so the student nav is replaced). The routes + backend are gated too.
   const items =
     user?.role === 'admin'
-      ? [...navItems, { to: '/admin', label: 'Admin', short: 'Admin', icon: 'admin' }]
+      ? [...studentNav, { to: '/admin', label: 'Admin', short: 'Admin', icon: 'admin' }]
       : user?.role === 'institution_admin'
         ? [{ to: '/institution', label: 'Institution', short: 'Institution', icon: 'institution' }]
-        : navItems;
+        : studentNav;
 
   return (
     <div className="min-h-screen">
