@@ -117,9 +117,12 @@ export default function AssignmentsBoard({ classId, assignments, onChanged }) {
 }
 
 /* ---- Card -------------------------------------------------------------- */
+const fmtDue = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
 function Card({ a, dragging, onOpen, onDragStart, onDragEnd }) {
+  const done = a.stage === 'done';
   const ds = dueStatus(a.dueDate);
-  const overdue = ds.isPastDue && a.stage !== 'done';
+  const overdue = ds.isPastDue && !done;
   return (
     <div
       draggable
@@ -130,14 +133,15 @@ function Card({ a, dragging, onOpen, onDragStart, onDragEnd }) {
     >
       <p className="text-sm font-semibold text-ink">{a.title}</p>
       <div className="mt-1.5">
-        {a.dueDate ? (
-          overdue ? (
-            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">{ds.lateLabel}</span>
-          ) : (
-            <span className={`text-[11px] font-semibold ${countdownTone(ds)}`}>{ds.countdownLabel}</span>
-          )
-        ) : (
+        {!a.dueDate ? (
           <span className="text-[11px] text-muted">No due date</span>
+        ) : done ? (
+          // Done: show the plain due date, never an overdue warning.
+          <span className="text-[11px] text-muted">Due {fmtDue(a.dueDate)}</span>
+        ) : overdue ? (
+          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">{ds.lateLabel}</span>
+        ) : (
+          <span className={`text-[11px] font-semibold ${countdownTone(ds)}`}>{ds.countdownLabel}</span>
         )}
       </div>
     </div>

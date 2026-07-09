@@ -22,7 +22,7 @@ export const WIP_LIMIT = 3;
 
 /** Kanban columns in board order. Both non-Done columns count toward the WIP limit. */
 export const STAGES = [
-  { key: 'planning', label: 'Planning', tint: 'bg-sky-100 text-sky-700', dot: '#0ea5e9', inFlight: true },
+  { key: 'planning', label: 'Not Started', tint: 'bg-sky-100 text-sky-700', dot: '#0ea5e9', inFlight: true },
   { key: 'in_progress', label: 'In Progress', tint: 'bg-indigo-100 text-indigo-700', dot: '#6366f1', inFlight: true },
   { key: 'done', label: 'Done', tint: 'bg-emerald-100 text-emerald-700', dot: '#10b981' },
 ];
