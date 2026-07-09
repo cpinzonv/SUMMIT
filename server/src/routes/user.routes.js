@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
+import { sensitiveLimiter } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as user from '../controllers/user.controller.js';
 
@@ -23,9 +24,10 @@ router.patch(
 );
 
 // Two-factor authentication setup/management (the user is authenticated).
+// Confirm/disable verify a code or password, so throttle them (code guessing).
 router.post('/2fa/setup', asyncHandler(user.twofaSetup));
-router.post('/2fa/confirm', validate(user.twofaConfirmSchema), asyncHandler(user.twofaConfirm));
-router.post('/2fa/disable', validate(user.twofaDisableSchema), asyncHandler(user.twofaDisable));
+router.post('/2fa/confirm', sensitiveLimiter, validate(user.twofaConfirmSchema), asyncHandler(user.twofaConfirm));
+router.post('/2fa/disable', sensitiveLimiter, validate(user.twofaDisableSchema), asyncHandler(user.twofaDisable));
 
 // Account security & recovery — phone (SMS), backup email, change primary email.
 router.post('/phone', validate(user.phoneSchema), asyncHandler(user.addPhone));

@@ -1,16 +1,16 @@
 import { Router } from 'express';
-import multer from 'multer';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { documentUpload } from '../utils/uploads.js';
 import * as assignments from '../controllers/assignments.controller.js';
 
 // Update/delete a single assignment by id (creation + listing are nested under
 // /api/classes/:id/assignments). Ownership is enforced via the parent class.
 const router = Router();
 
-// Submission attachments: kept in memory, 32MB cap (matches class file uploads).
-const submissionUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 32 * 1024 * 1024 } });
+// Instruction files + submissions: in memory, MIME-whitelisted, 25MB cap.
+const submissionUpload = documentUpload(25);
 
 router.use(requireAuth);
 

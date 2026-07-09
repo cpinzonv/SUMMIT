@@ -3,6 +3,7 @@ import { api, errorMessage } from '../../api/client';
 import { Spinner, ErrorBanner, KebabMenu, ConfirmModal } from '../ui';
 import { EmptyHero, GuideIllustration } from '../EmptyHero';
 import { renderMarkdown } from '../../utils/markdown';
+import { sanitizeHtml } from '../../utils/sanitize';
 
 /** Study guides: list, generate (premium), and read (markdown + TOC + print). */
 export function GuideTab({ classId, flash }) {
@@ -145,7 +146,7 @@ function GuideViewer({ guideId, onExit, onFlash }) {
           <ul className="text-sm text-brand-600">{toc.map((h) => <li key={h}>· {h}</li>)}</ul>
         </div>
       )}
-      <div className="glass-panel note-prose p-6" dangerouslySetInnerHTML={{ __html: renderMarkdown(guide.content) }} />
+      <div className="glass-panel note-prose p-6" dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMarkdown(guide.content)) }} />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { logSecurityEvent } from '../services/audit.service.js';
 import * as authService from '../services/auth.service.js';
 
 // Allowed "How'd you hear about us?" values (kept in sync with the client form).
@@ -92,16 +93,32 @@ export async function forgotPassword(req, res) {
 }
 
 export async function resetPassword(req, res) {
-  res.json(await authService.resetPassword(req.body));
+  const result = await authService.resetPassword(req.body);
+  await logSecurityEvent({ action: 'password_reset', outcome: 'success', email: req.body.email, ip: req.ip });
+  res.json(result);
 }
 
 export async function login(req, res) {
-  const result = await authService.login(req.body);
+  let result;
+  try {
+    result = await authService.login(req.body);
+  } catch (err) {
+    // Record the failed attempt (bad credentials / locked, etc.) then rethrow.
+    await logSecurityEvent({ action: 'login', outcome: 'failure', email: req.body.email, ip: req.ip });
+    throw err;
+  }
+  // A verification/2FA challenge isn't a completed login; log only token issuance.
+  if (result?.user) {
+    await logSecurityEvent({ action: 'login', outcome: 'success', userId: result.user.id, email: result.user.email, ip: req.ip });
+  }
   res.json(result);
 }
 
 export async function loginTwoFactor(req, res) {
   const result = await authService.loginTwoFactor(req.body);
+  if (result?.user) {
+    await logSecurityEvent({ action: 'login_2fa', outcome: 'success', userId: result.user.id, email: result.user.email, ip: req.ip });
+  }
   res.json(result);
 }
 
@@ -121,10 +138,16 @@ export async function me(req, res) {
 }
 
 export async function changePassword(req, res) {
-  await authService.changePassword(
-    req.user.id,
-    req.body.currentPassword,
-    req.body.newPassword,
-  );
+  try {
+    await authService.changePassword(
+      req.user.id,
+      req.body.currentPassword,
+      req.body.newPassword,
+    );
+  } catch (err) {
+    await logSecurityEvent({ action: 'password_change', outcome: 'failure', userId: req.user.id, ip: req.ip });
+    throw err;
+  }
+  await logSecurityEvent({ action: 'password_change', outcome: 'success', userId: req.user.id, ip: req.ip });
   res.json({ ok: true });
 }

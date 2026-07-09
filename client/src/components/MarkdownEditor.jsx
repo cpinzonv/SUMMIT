@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { renderMarkdown } from '../utils/markdown';
+import { sanitizeHtml } from '../utils/sanitize';
 
 /**
  * Lightweight Markdown editor: a formatting toolbar + write/preview toggle.
@@ -65,7 +66,7 @@ export function MarkdownEditor({ value, onChange, placeholder, rows = 12, fullHe
         <div
           className={`note-prose overflow-y-auto rounded-[10px] px-4 py-3 text-sm ${fullHeight ? 'flex-1' : 'min-h-[12rem]'}`}
           style={{ background: '#fff', border: '1px solid var(--note-border)', color: 'var(--note-text)' }}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(value) || '<p class="opacity-50">Nothing to preview</p>' }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMarkdown(value)) || '<p class="opacity-50">Nothing to preview</p>' }}
         />
       ) : (
         <textarea

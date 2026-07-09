@@ -1145,3 +1145,22 @@ END $$;
 -- was first created with the earlier 'backlog' default).
 ALTER TABLE assignments ALTER COLUMN board_stage SET DEFAULT 'not_started';
 ALTER TABLE activity_tasks ALTER COLUMN board_stage SET DEFAULT 'not_started';
+
+-- ----------------------------------------------------------------------------
+-- security_events — append-only audit trail for account-security actions
+-- (logins, password changes/resets, 2FA enable/disable). Stores who/what/when/
+-- outcome + client IP; NEVER passwords, tokens, or codes. user_id is nullable so
+-- a failed login for an unknown email is still recorded. Retained for review.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS security_events (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+  email      CITEXT,                              -- the attempted/affected email
+  action     TEXT NOT NULL,                       -- 'login' | 'password_change' | '2fa_enable' | …
+  outcome    TEXT NOT NULL,                       -- 'success' | 'failure'
+  ip         TEXT,
+  detail     JSONB,                               -- small, non-sensitive context
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events(action, created_at DESC);
