@@ -1,22 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Modal, Spinner, ErrorBanner, EmptyState, Toggle } from '../ui';
+import { Modal, Spinner, ErrorBanner, EmptyState } from '../ui';
 import { Labeled } from './common';
 import { exportDeck } from '../../lib/learnExport';
-import { CardFace, CardTypeBadge } from './CardTypes';
+import { CardFace } from './CardTypes';
 import { LearnEmptyState } from './LearnEmptyState';
 import DeckCompletionAnimation from './DeckCompletionAnimation';
-import { DeckGrid } from './DeckGrid';
+import { DeckBoard } from './DeckBoard';
 
 /** Flashcards: manage a class's cards and run spaced-repetition review sessions. */
 
-const MASTERY = {
-  new: { label: 'New', cls: 'bg-slate-400/15 text-slate-500' },
-  learning: { label: 'Learning', cls: 'bg-amber-400/15 text-amber-600' },
-  review: { label: 'Review', cls: 'bg-sky-400/15 text-sky-600' },
-  mastered: { label: 'Mastered', cls: 'bg-emerald-400/15 text-emerald-600' },
-};
-const DIFFICULTY = { easy: 'text-emerald-500', medium: 'text-amber-500', hard: 'text-rose-500' };
 // Classic SM-2 5-button rating: 1=Again … 5=Easy. Ratings < 3 fail the card.
 const RATINGS = [
   { v: 1, label: 'Again', cls: 'border-rose-300 text-rose-600 hover:bg-rose-50' },
@@ -62,7 +55,6 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   const [reviewing, setReviewing] = useState(false);
   const [editorCard, setEditorCard] = useState(undefined); // undefined=closed, null=new, obj=edit
   const [generating, setGenerating] = useState(false);
-  const [studyToken, setStudyToken] = useState(0); // bump to refresh the deck panel
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -87,7 +79,6 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   const afterChange = useCallback(() => {
     load();
     refreshStats?.();
-    setStudyToken((t) => t + 1);
   }, [load, refreshStats]);
 
   const renameDeck = async (deckId, name) => {
@@ -100,10 +91,10 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
     }
   };
 
-  // Scope the grid + "Study" to the selected deck (null = all cards).
-  const shownCards = activeDeck ? cards.filter((c) => c.deckId === activeDeck) : cards;
-  const dueCount = shownCards.filter(isDue).length;
+  // "Study due" studies the deck being reviewed (activeDeck) or all cards.
+  const dueCount = cards.filter(isDue).length;
   const activeDeckName = activeDeck ? decks.find((d) => d.id === activeDeck)?.name : null;
+  const studyCards = activeDeck ? cards.filter((c) => c.deckId === activeDeck) : cards;
 
   if (loading) return <Spinner label="Loading cards…" />;
 
@@ -115,38 +106,21 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
           <button
             className="btn btn-primary"
             disabled={dueCount === 0}
-            onClick={() => setReviewing(true)}
+            onClick={() => { setActiveDeck(null); setReviewing(true); }}
             title={dueCount === 0 ? 'Nothing due right now' : undefined}
           >
-            {activeDeckName ? `Study this deck (${dueCount})` : `Study due (${dueCount})`}
+            Study due ({dueCount})
           </button>
           <button className="btn btn-soft" onClick={() => setGenerating(true)}>✦ Generate with AI</button>
           <button className="btn btn-soft" onClick={() => setEditorCard(null)}>+ Add card</button>
           <details className="relative">
             <summary className="btn btn-soft cursor-pointer list-none">⬇ Export</summary>
             <div className="glass-panel absolute right-0 z-10 mt-1 w-44 p-1 text-sm">
-              <button className="menu-item" onClick={() => exportDeck(shownCards, className, 'tsv')}>Anki deck (.txt)</button>
-              <button className="menu-item" onClick={() => exportDeck(shownCards, className, 'csv')}>CSV spreadsheet</button>
+              <button className="menu-item" onClick={() => exportDeck(cards, className, 'tsv')}>Anki deck (.txt)</button>
+              <button className="menu-item" onClick={() => exportDeck(cards, className, 'csv')}>CSV spreadsheet</button>
             </div>
           </details>
         </div>
-      )}
-
-      {/* Deck selector — each deck is a tappable stack of flashcards. */}
-      {decks.length > 0 && (
-        <DeckGrid
-          decks={decks}
-          totalCards={cards.length}
-          activeDeck={activeDeck}
-          onSelect={setActiveDeck}
-          onStudy={(deckId) => { setActiveDeck(deckId); setReviewing(true); }}
-          onRename={renameDeck}
-        />
-      )}
-
-      {/* Per-deck study plan: progress, deadline, daily limits, interleaving. */}
-      {activeDeck && (
-        <DeckStudyPanel deckId={activeDeck} token={studyToken} flash={flash} />
       )}
 
       {error && <ErrorBanner message={error} />}
@@ -157,28 +131,16 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
           onGenerate={() => setGenerating(true)}
           onAddManual={() => setEditorCard(null)}
         />
-      ) : shownCards.length === 0 ? (
-        <div className="glass-card p-8 text-center text-sm text-muted">No cards in this deck yet.</div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {shownCards.map((card) => (
-            <CardTile
-              key={card.id}
-              card={card}
-              onEdit={() => setEditorCard(card)}
-              onDelete={async () => {
-                if (!confirm('Delete this card?')) return;
-                try {
-                  await api.delete(`/api/learn/cards/${card.id}`);
-                  flash('Card deleted');
-                  afterChange();
-                } catch (err) {
-                  flash(errorMessage(err), 'error');
-                }
-              }}
-            />
-          ))}
-        </div>
+        <DeckBoard
+          decks={decks}
+          cards={cards}
+          flash={flash}
+          onRenameDeck={renameDeck}
+          onEditCard={(card) => setEditorCard(card)}
+          onChanged={afterChange}
+          onStudy={(deckId) => { setActiveDeck(deckId); setReviewing(true); }}
+        />
       )}
 
       {editorCard !== undefined && (
@@ -201,7 +163,7 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
           classId={classId}
           deckId={activeDeck}
           deckName={activeDeckName}
-          cards={shownCards}
+          cards={studyCards}
           className={className}
           flash={flash}
           onClose={() => { setReviewing(false); afterChange(); }}
@@ -211,41 +173,6 @@ export function FlashcardsTab({ classId, className, refreshStats, flash }) {
   );
 }
 
-
-function CardTile({ card, onEdit, onDelete }) {
-  const [flipped, setFlipped] = useState(false);
-  const m = MASTERY[card.mastery?.status || 'new'];
-  const pct = card.mastery?.masteryPercent ?? 0;
-  return (
-    <div className="glass-panel flex flex-col gap-2 p-4" onDoubleClick={onEdit} title="Double-click to edit">
-      <div className="flex items-start justify-between gap-2">
-        <span className="flex items-center gap-1.5">
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${m.cls}`}>{m.label}</span>
-          <CardTypeBadge type={card.cardType} />
-        </span>
-        <div className="flex items-center gap-1 text-xs">
-          <span className={`mr-1 font-bold uppercase ${DIFFICULTY[card.difficulty]}`}>{card.difficulty}</span>
-          <button onClick={onEdit} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-white/50 hover:text-ink" aria-label="Edit card">✎</button>
-          <button onClick={onDelete} className="flex h-8 w-8 items-center justify-center rounded-full text-muted hover:bg-white/50 hover:text-rose-500" aria-label="Delete card">🗑</button>
-        </div>
-      </div>
-      <button onClick={() => setFlipped((f) => !f)} className="flex max-h-[300px] w-full flex-col overflow-hidden text-left text-sm">
-        <CardFace card={card} revealed={flipped} preview />
-        {!flipped && <p className="mt-1 text-xs text-muted/70">Click to reveal</p>}
-      </button>
-      {card.tags?.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {card.tags.map((t) => (
-            <span key={t} className="rounded-full bg-white/50 px-2 py-0.5 text-[10px] font-medium text-muted">#{t}</span>
-          ))}
-        </div>
-      )}
-      <div className="mt-auto h-1.5 overflow-hidden rounded-full bg-white/40">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: 'var(--grad-teal-purple)' }} />
-      </div>
-    </div>
-  );
-}
 
 function CardEditorModal({ classId, card, onClose, onSaved }) {
   const editing = Boolean(card);
@@ -521,131 +448,6 @@ function StudyCardMenu({ onAction, disabled }) {
         </div>
       )}
     </div>
-  );
-}
-
-/** Per-deck study plan: progress, deadline, daily limits, interleaving toggle. */
-function DeckStudyPanel({ deckId, token, flash }) {
-  const [plan, setPlan] = useState(null);
-  const [settings, setSettings] = useState(null);
-  const [editingDeadline, setEditingDeadline] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const [p, s] = await Promise.all([
-        api.get(`/api/decks/${deckId}/study-plan`),
-        api.get(`/api/decks/${deckId}/settings`),
-      ]);
-      setPlan(p.data);
-      setSettings(s.data);
-    } catch { /* non-fatal — panel just stays hidden */ }
-  }, [deckId]);
-
-  useEffect(() => { load(); }, [load, token]);
-
-  if (!plan || !settings) return null;
-  const { deck, deadline, daysRemaining, plan: proj, today } = plan;
-
-  const toggleInterleaving = async () => {
-    const next = !settings.interleavingEnabled;
-    setSettings((s) => ({ ...s, interleavingEnabled: next }));
-    try {
-      await api.post(`/api/decks/${deckId}/settings`, { interleavingEnabled: next });
-    } catch { load(); }
-  };
-
-  return (
-    <div className="glass-panel space-y-3 p-4">
-      <div>
-        <div className="mb-1 flex items-center justify-between text-sm">
-          <span className="font-semibold text-ink">
-            {deck.cardsLearned} / {deck.totalCards} cards learned
-          </span>
-          <span className="text-muted">{deck.progressPercent}%</span>
-        </div>
-        <div className="h-2 overflow-hidden rounded-full bg-white/50">
-          <div className="h-full rounded-full transition-all" style={{ width: `${deck.progressPercent}%`, backgroundImage: 'var(--grad-teal-purple)' }} />
-        </div>
-      </div>
-
-      <p className="text-xs text-muted">
-        Today: {today.newCardsToday} new + {today.cardsReviewedToday} reviews ={' '}
-        {today.totalInteractionsToday} interactions ({today.totalInteractionsToday}/{settings.userDailyStudyLimit} used)
-      </p>
-
-      {deadline ? (
-        <div className="rounded-xl border border-white/60 bg-white/45 p-3 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold text-ink">Deadline {deadline} · {daysRemaining} days left</span>
-            <button className="text-xs font-semibold text-brand-600 hover:underline" onClick={() => setEditingDeadline(true)}>Change</button>
-          </div>
-          {proj && (
-            <div className="mt-1 text-xs text-muted">
-              ~{proj.dailyNewCardsNeeded} new/day · ~{proj.estimatedMinutesPerDay} min/day · {proj.recommendedSessionsPerDay} session{proj.recommendedSessionsPerDay === 1 ? '' : 's'}/day
-            </div>
-          )}
-          {proj && !proj.isOnTrack && (
-            <div className="mt-2 rounded-lg border border-rose-300/50 bg-rose-50/70 px-3 py-1.5 text-xs font-semibold text-rose-700">
-              Off track — need {proj.dailyNewCardsNeeded}/day but only adding {proj.recentAvgNewPerDay}/day.
-            </div>
-          )}
-          {proj && proj.isOnTrack && <div className="mt-2 text-xs font-semibold text-emerald-600">On track ✓</div>}
-        </div>
-      ) : (
-        <button className="btn btn-soft" onClick={() => setEditingDeadline(true)}>+ Set deadline</button>
-      )}
-
-      <label className="flex items-center justify-between gap-3 pt-1 text-sm">
-        <span className="font-medium text-ink">
-          Mix topics while studying <span className="text-muted">(interleaving)</span>
-        </span>
-        <Toggle on={!!settings.interleavingEnabled} onChange={toggleInterleaving} />
-      </label>
-
-      {editingDeadline && (
-        <DeadlineModal
-          deckId={deckId}
-          current={deadline}
-          onClose={() => setEditingDeadline(false)}
-          onSaved={() => { setEditingDeadline(false); load(); flash?.('Deadline updated'); }}
-        />
-      )}
-    </div>
-  );
-}
-
-function DeadlineModal({ deckId, current, onClose, onSaved }) {
-  const [date, setDate] = useState(current || '');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!date) return;
-    setSaving(true);
-    setErr('');
-    try {
-      await api.post(`/api/decks/${deckId}/deadline`, { deadline: date });
-      onSaved();
-    } catch (e2) {
-      setErr(errorMessage(e2, 'Could not set deadline'));
-      setSaving(false);
-    }
-  };
-  return (
-    <Modal title="Set deck deadline" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-3">
-        {err && <ErrorBanner message={err} />}
-        <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-ink">Target date</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="field" required />
-        </label>
-        <p className="text-xs text-muted">Summit will work out how many new cards per day you need to finish in time.</p>
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="btn btn-soft">Cancel</button>
-          <button type="submit" disabled={saving || !date} className="btn btn-primary">{saving ? 'Saving…' : 'Save deadline'}</button>
-        </div>
-      </form>
-    </Modal>
   );
 }
 
