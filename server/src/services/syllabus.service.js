@@ -104,49 +104,40 @@ const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 /**
- * Build the user content blocks for a syllabus upload, per file type:
- *   - PDF        → a document block (Claude reads the PDF natively)
- *   - JPG / PNG  → an image block (Claude vision reads the image)
- *   - DOCX       → text is extracted with mammoth and sent as a text block
- * The instruction prompt always comes last.
+ * Turn a stored file into Claude content blocks Claude can read directly:
+ *   - PDF        → a document block (read natively)
+ *   - JPG / PNG  → an image block (vision)
+ *   - DOCX       → mammoth-extracted text block
+ * Returns [] for unsupported/empty files (callers just skip them). Reused by the
+ * Learn source picker to generate flashcards/quizzes/etc. from class files.
+ */
+export async function fileContentBlocks(file, { label } = {}) {
+  const { buffer, mimetype } = file;
+  if (mimetype === 'application/pdf') {
+    return [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') } }];
+  }
+  if (mimetype === 'image/jpeg' || mimetype === 'image/png') {
+    return [{ type: 'image', source: { type: 'base64', media_type: mimetype, data: buffer.toString('base64') } }];
+  }
+  if (mimetype === DOCX_MIME) {
+    try {
+      const { value: text } = await mammoth.extractRawText({ buffer });
+      if (text?.trim()) return [{ type: 'text', text: `## File: ${label || 'document'}\n${text.trim()}` }];
+    } catch {
+      /* unreadable DOCX → skip */
+    }
+  }
+  return [];
+}
+
+/**
+ * Build the user content blocks for a syllabus upload: the file's own blocks
+ * followed by the extraction instruction prompt.
  */
 async function buildContent(file) {
-  const { buffer, mimetype } = file;
-
-  if (mimetype === 'application/pdf') {
-    return [
-      {
-        type: 'document',
-        source: { type: 'base64', media_type: 'application/pdf', data: buffer.toString('base64') },
-      },
-      { type: 'text', text: PROMPT },
-    ];
-  }
-
-  if (mimetype === 'image/jpeg' || mimetype === 'image/png') {
-    return [
-      {
-        type: 'image',
-        source: { type: 'base64', media_type: mimetype, data: buffer.toString('base64') },
-      },
-      { type: 'text', text: PROMPT },
-    ];
-  }
-
-  if (mimetype === DOCX_MIME) {
-    let text;
-    try {
-      ({ value: text } = await mammoth.extractRawText({ buffer }));
-    } catch {
-      throw AppError.badRequest('Could not read the Word document.');
-    }
-    if (!text || !text.trim()) {
-      throw AppError.badRequest('The Word document appears to be empty.');
-    }
-    return [{ type: 'text', text: `${PROMPT}\n\nSyllabus text:\n"""\n${text}\n"""` }];
-  }
-
-  throw AppError.badRequest('Unsupported file type.');
+  const blocks = await fileContentBlocks(file);
+  if (!blocks.length) throw AppError.badRequest('Unsupported or empty file.');
+  return [...blocks, { type: 'text', text: PROMPT }];
 }
 
 /**
