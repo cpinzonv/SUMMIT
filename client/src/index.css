@@ -900,3 +900,29 @@ html[data-color-scheme='sunset']:not([data-theme='dark']) body {
     radial-gradient(52rem 52rem at 78% 92%, rgba(191, 44, 32, 0.42), transparent 60%),
     radial-gradient(46rem 46rem at 10% 96%, rgba(122, 107, 94, 0.32), transparent 60%);
 }
+
+/* ---- Per-theme dark backgrounds (dark mode tints with the palette) ------- */
+html[data-theme='dark'][data-color-scheme='ocean'] body {
+  background-color: #0a1826;
+  background-image:
+    radial-gradient(46rem 46rem at 4% -8%, rgba(38, 101, 140, 0.3), transparent 56%),
+    radial-gradient(48rem 48rem at 96% 4%, rgba(84, 172, 191, 0.24), transparent 58%),
+    radial-gradient(52rem 52rem at 78% 92%, rgba(2, 56, 89, 0.34), transparent 60%),
+    radial-gradient(46rem 46rem at 10% 96%, rgba(167, 235, 242, 0.16), transparent 60%);
+}
+html[data-theme='dark'][data-color-scheme='forest'] body {
+  background-color: #0a1613;
+  background-image:
+    radial-gradient(46rem 46rem at 4% -8%, rgba(22, 59, 50, 0.34), transparent 56%),
+    radial-gradient(48rem 48rem at 96% 4%, rgba(142, 182, 155, 0.22), transparent 58%),
+    radial-gradient(52rem 52rem at 78% 92%, rgba(35, 83, 103, 0.3), transparent 60%),
+    radial-gradient(46rem 46rem at 10% 96%, rgba(218, 241, 222, 0.14), transparent 60%);
+}
+html[data-theme='dark'][data-color-scheme='sunset'] body {
+  background-color: #1c1210;
+  background-image:
+    radial-gradient(46rem 46rem at 4% -8%, rgba(213, 81, 35, 0.3), transparent 56%),
+    radial-gradient(48rem 48rem at 96% 4%, rgba(228, 122, 36, 0.26), transparent 58%),
+    radial-gradient(52rem 52rem at 78% 92%, rgba(191, 44, 32, 0.3), transparent 60%),
+    radial-gradient(46rem 46rem at 10% 96%, rgba(122, 107, 94, 0.2), transparent 60%);
+}
