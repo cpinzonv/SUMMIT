@@ -3,6 +3,7 @@ import { api, errorMessage } from '../api/client';
 import { Modal, ErrorBanner, ConfirmModal } from './ui';
 import { RichTextEditor } from './RichTextEditor';
 import { dueStatus, isDone } from '../lib/dueDate';
+import { sanitizeHtml } from '../utils/sanitize';
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -378,7 +379,7 @@ function FilesTab({ a }) {
           {preview.type === 'docx' ? (
             <div
               className="note-prose max-h-[55vh] overflow-y-auto rounded-lg bg-white p-4"
-              dangerouslySetInnerHTML={{ __html: preview.html }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(preview.html) }}
             />
           ) : preview.type.startsWith('image/') ? (
             <img src={preview.url} alt={preview.name} className="mx-auto max-h-[50vh] rounded-lg" />
