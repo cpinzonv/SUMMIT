@@ -1209,14 +1209,50 @@ function CanvasAdminConfig() {
   );
 }
 
-/* ---- Display ----------------------------------------------------------- */
-const COLOR_SCHEMES = [
-  { value: 'default', label: 'Default (Coral / Teal)', enabled: true },
-  { value: 'ocean', label: 'Ocean Blue', enabled: false },
-  { value: 'forest', label: 'Forest Green', enabled: false },
-  { value: 'sunset', label: 'Sunset Orange', enabled: false },
+/* ---- Color theme picker (lives in the Display tab) --------------------- */
+const THEMES = [
+  { value: 'default', label: 'Default', sub: 'Coral / Teal', grad: 'linear-gradient(135deg, #ff8a4c 0%, #ff6f73 45%, #4f9fd6 100%)' },
+  { value: 'ocean', label: 'Ocean Blue', sub: 'Deep sea', grad: 'linear-gradient(135deg, #011c40 0%, #26658c 50%, #54acbf 100%)' },
+  { value: 'forest', label: 'Forest Green', sub: 'Woodland', grad: 'linear-gradient(135deg, #051f20 0%, #235367 50%, #8eb69b 100%)' },
+  { value: 'sunset', label: 'Sunset Orange', sub: 'Warm dusk', grad: 'linear-gradient(135deg, #951a21 0%, #d55123 50%, #e47a24 100%)' },
 ];
 
+function ThemePicker({ prefs, set }) {
+  const current = prefs.colorScheme || 'default';
+  return (
+    <div className="border-b border-white/40 py-3">
+      <div className="mb-2.5 text-sm font-semibold text-ink">Color theme</div>
+      <div role="radiogroup" aria-label="Color theme" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {THEMES.map((t) => {
+          const active = current === t.value;
+          return (
+            <button
+              key={t.value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              title={t.sub}
+              onClick={() => set('colorScheme')(t.value)}
+              className={`relative flex flex-col items-center gap-1.5 rounded-2xl border p-2.5 transition ${
+                active ? 'border-brand-400 bg-white/70 ring-2 ring-brand-400' : 'border-white/50 bg-white/40 hover:-translate-y-0.5 hover:bg-white/70'
+              }`}
+            >
+              <span className="h-10 w-full rounded-lg shadow-sm" style={{ backgroundImage: t.grad }} />
+              <span className="text-[11px] font-semibold text-ink">{t.label}</span>
+              {active && (
+                <span className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-white text-[10px] font-bold shadow" style={{ color: 'var(--color-brand-600)' }}>
+                  ✓
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---- Display ----------------------------------------------------------- */
 function DisplayTab({ prefs, set }) {
   return (
     <>
@@ -1228,15 +1264,7 @@ function DisplayTab({ prefs, set }) {
             <option value="auto">Auto (system)</option>
           </select>
         </Row>
-        <Row label="Color scheme">
-          <select value={prefs.colorScheme} onChange={(e) => set('colorScheme')(e.target.value)} className="field !w-auto">
-            {COLOR_SCHEMES.map((c) => (
-              <option key={c.value} value={c.value} disabled={!c.enabled}>
-                {c.label}{c.enabled ? '' : ' — Coming soon'}
-              </option>
-            ))}
-          </select>
-        </Row>
+        <ThemePicker prefs={prefs} set={set} />
         <Row label="Font size">
           <RadioGroup
             name="fontsize"

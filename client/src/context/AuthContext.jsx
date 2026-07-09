@@ -42,6 +42,7 @@ function applyPreferences(prefs) {
         : 'light'
       : theme;
   root.dataset.theme = resolved;
+  root.dataset.colorScheme = prefs.colorScheme || 'default';
   root.dataset.font = prefs.fontSize || 'normal';
   root.dataset.compact = prefs.compactMode ? 'true' : 'false';
 }
