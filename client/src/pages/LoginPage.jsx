@@ -7,7 +7,7 @@ import { MountainMark } from '../components/MountainMark';
 import { SocialAuthButtons } from '../components/SocialAuthButtons';
 
 export default function LoginPage() {
-  const { user, login, completeTwoFactor, register, loading } = useAuth();
+  const { user, login, completeTwoFactor, register, verifyEmail, resendVerification, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
@@ -24,6 +24,8 @@ export default function LoginPage() {
   const [error, setError] = useState(location.state?.oauthError || '');
   const [submitting, setSubmitting] = useState(false);
   const [twoFactor, setTwoFactor] = useState(null); // { challengeToken } when 2FA prompt is shown
+  const [verify, setVerify] = useState(null); // { email, devCode } when email-confirmation step is shown
+  const [resent, setResent] = useState('');
   const [code, setCode] = useState('');
 
   // Already authenticated → skip the form.
@@ -44,8 +46,14 @@ export default function LoginPage() {
           setSubmitting(false);
           return; // show the 2FA code step instead of navigating
         }
+        if (res?.verificationRequired) {
+          setVerify({ email: res.email, devCode: res.devCode });
+          setCode('');
+          setSubmitting(false);
+          return; // account not yet confirmed — show the email code step
+        }
       } else {
-        await register({
+        const res = await register({
           email: form.email,
           password: form.password,
           fullName: form.fullName,
@@ -54,12 +62,43 @@ export default function LoginPage() {
             ? { referralSourceDetail: form.referralSourceDetail }
             : {}),
         });
+        if (res?.verificationRequired) {
+          setVerify({ email: res.email, devCode: res.devCode });
+          setCode('');
+          setSubmitting(false);
+          return; // confirm the emailed code before the account is active
+        }
       }
       navigate(from, { replace: true });
     } catch (err) {
       setError(errorMessage(err, 'Authentication failed'));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const submitVerify = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      await verifyEmail(verify.email, code.trim());
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(errorMessage(err, 'Verification failed'));
+      setSubmitting(false);
+    }
+  };
+
+  const resend = async () => {
+    setError('');
+    setResent('');
+    try {
+      const res = await resendVerification(verify.email);
+      setVerify((v) => ({ ...v, devCode: res?.devCode ?? v.devCode }));
+      setResent('A new code is on its way.');
+    } catch (err) {
+      setError(errorMessage(err, 'Could not resend the code'));
     }
   };
 
@@ -111,7 +150,48 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {twoFactor ? (
+        {verify ? (
+          <form onSubmit={submitVerify} className="glass-panel space-y-4 p-6">
+            <div>
+              <h2 className="text-lg font-bold text-ink">Confirm your email</h2>
+              <p className="mt-0.5 text-sm text-muted">
+                We sent a 6-digit code to <span className="font-semibold text-ink">{verify.email}</span>. Enter it below to activate your account.
+              </p>
+            </div>
+            <ErrorBanner message={error} />
+            {verify.devCode && (
+              <p className="rounded-lg bg-amber-100/70 px-3 py-2 text-sm text-amber-900">
+                Dev mode — your code is <span className="font-mono font-bold">{verify.devCode}</span>
+              </p>
+            )}
+            {resent && <p className="text-sm font-medium text-brand-600">{resent}</p>}
+            <Field
+              label="Confirmation code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
+              autoFocus
+              autoComplete="one-time-code"
+              inputMode="numeric"
+              required
+            />
+            <button type="submit" disabled={submitting || !code.trim()} className="btn btn-primary w-full">
+              {submitting ? 'Confirming…' : 'Confirm & continue'}
+            </button>
+            <div className="flex items-center justify-between text-sm">
+              <button
+                type="button"
+                onClick={() => { setVerify(null); setCode(''); setError(''); setResent(''); }}
+                className="font-semibold text-muted hover:text-ink"
+              >
+                ← Back
+              </button>
+              <button type="button" onClick={resend} className="font-semibold text-brand-600 hover:underline">
+                Resend code
+              </button>
+            </div>
+          </form>
+        ) : twoFactor ? (
           <form onSubmit={verifyTwoFactor} className="glass-panel space-y-4 p-6">
             <div>
               <h2 className="text-lg font-bold text-ink">Two-factor authentication</h2>

@@ -46,6 +46,14 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'refreshToken is required'),
 });
 
+export const verifyEmailSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  code: z.string().min(1, 'Enter the code we emailed you'),
+});
+export const resendVerificationSchema = z.object({
+  email: z.string().email().toLowerCase(),
+});
+
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Current password is required'),
   newPassword: z.string().min(8, 'New password must be at least 8 characters'),
@@ -59,6 +67,14 @@ export async function referralAnalytics(req, res) {
 export async function register(req, res) {
   const result = await authService.register(req.body);
   res.status(201).json(result);
+}
+
+export async function verifyEmail(req, res) {
+  res.json(await authService.verifyEmail(req.body));
+}
+
+export async function resendVerification(req, res) {
+  res.json(await authService.resendVerification(req.body));
 }
 
 export async function login(req, res) {

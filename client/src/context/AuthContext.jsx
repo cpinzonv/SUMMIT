@@ -84,6 +84,8 @@ export function AuthProvider({ children }) {
     const { data } = await api.post('/api/auth/login', { email, password });
     // 2FA accounts get a challenge instead of tokens — caller shows the code step.
     if (data.twoFactorRequired) return { twoFactorRequired: true, challengeToken: data.challengeToken };
+    // Unverified accounts must confirm the emailed code first.
+    if (data.verificationRequired) return { verificationRequired: true, email: data.email, devCode: data.devCode };
     setTokens(data);
     setUser(data.user);
     return data.user;
@@ -111,9 +113,25 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async (payload) => {
     const { data } = await api.post('/api/auth/register', payload);
+    // New signups must confirm an emailed code before any tokens are issued.
+    if (data.verificationRequired) return { verificationRequired: true, email: data.email, devCode: data.devCode };
     setTokens(data);
     setUser(data.user);
     return data.user;
+  }, []);
+
+  /** Confirm the emailed signup code; on success the server logs the user in. */
+  const verifyEmail = useCallback(async (email, code) => {
+    const { data } = await api.post('/api/auth/verify-email', { email, code });
+    setTokens(data);
+    setUser(data.user);
+    return data.user;
+  }, []);
+
+  /** Re-send the signup verification code (returns devCode when unconfigured). */
+  const resendVerification = useCallback(async (email) => {
+    const { data } = await api.post('/api/auth/resend-verification', { email });
+    return data;
   }, []);
 
   const logout = useCallback(async () => {
@@ -155,7 +173,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, preferences, login, completeTwoFactor, loginWithTokens, register, logout, savePreferences, refreshUser }}
+      value={{ user, loading, preferences, login, completeTwoFactor, loginWithTokens, register, verifyEmail, resendVerification, logout, savePreferences, refreshUser }}
     >
       {children}
     </AuthContext.Provider>

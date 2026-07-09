@@ -122,8 +122,8 @@ export async function createInstitution(creatorId, input) {
 
     // Admin user: no password yet (activates via the invite link).
     const { rows: userRows } = await client.query(
-      `INSERT INTO users (email, password_hash, full_name, role, institution_id, auth_method)
-       VALUES ($1, NULL, $2, 'institution_admin', $3, 'invite') RETURNING id`,
+      `INSERT INTO users (email, password_hash, full_name, role, institution_id, auth_method, email_verified)
+       VALUES ($1, NULL, $2, 'institution_admin', $3, 'invite', true) RETURNING id`,
       [adminEmail, `${input.name.trim()} Admin`, inst.id],
     );
     const adminUserId = userRows[0].id;
@@ -237,8 +237,8 @@ export async function addStudents(institutionId, students) {
         continue;
       }
       const { rows } = await client.query(
-        `INSERT INTO users (email, password_hash, full_name, role, institution_id, auth_method)
-         VALUES ($1, NULL, $2, 'user', $3, 'invite') RETURNING id`,
+        `INSERT INTO users (email, password_hash, full_name, role, institution_id, auth_method, email_verified)
+         VALUES ($1, NULL, $2, 'user', $3, 'invite', true) RETURNING id`,
         [email, s.name?.trim() || email, institutionId],
       );
       const token = await mintInvite(client, rows[0].id);

@@ -50,6 +50,14 @@ export const env = {
   anthropicApiKey: optional('ANTHROPIC_API_KEY', ''),
   anthropicModel: optional('ANTHROPIC_MODEL', 'claude-opus-4-8'),
 
+  // Transactional messaging. Empty = dev fallback: codes are logged server-side
+  // and (outside production) returned in the API response so flows are testable.
+  resendApiKey: optional('RESEND_API_KEY', ''),
+  emailFrom: optional('EMAIL_FROM', 'Summit <onboarding@resend.dev>'),
+  twilioSid: optional('TWILIO_ACCOUNT_SID', ''),
+  twilioToken: optional('TWILIO_AUTH_TOKEN', ''),
+  twilioFrom: optional('TWILIO_FROM', ''),
+
   // Optional: OpenAI Whisper for lecture speech-to-text (transcription.service).
   // Empty string = unconfigured → recordings still save; auto-transcription is a
   // graceful no-op the student fills in by hand.
