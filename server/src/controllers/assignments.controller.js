@@ -39,10 +39,15 @@ export const updateAssignmentSchema = z
     estimatedHours: z.number().nonnegative().max(999).nullable().optional(),
     status: statusEnum.optional(),
     priority: priorityEnum.optional(),
+    submissionText: z.string().max(20000).nullable().optional(),
   })
   .refine((obj) => Object.keys(obj).length > 0, {
     message: 'Provide at least one field to update',
   });
+
+export const stageSchema = z.object({
+  stage: z.enum(['backlog', 'active', 'in_progress', 'done']),
+});
 
 export const assignmentIdParam = z.object({
   assignmentId: z.string().uuid('Invalid assignment id'),
@@ -72,6 +77,20 @@ export async function update(req, res) {
     req.body,
   );
   res.json({ assignment });
+}
+
+export async function setStage(req, res) {
+  const assignment = await assignmentService.setAssignmentStage(
+    req.user.id,
+    req.params.assignmentId,
+    req.body.stage,
+  );
+  res.json({ assignment });
+}
+
+export async function listFiles(req, res) {
+  const files = await assignmentService.listAssignmentFiles(req.user.id, req.params.assignmentId);
+  res.json({ files });
 }
 
 export async function remove(req, res) {

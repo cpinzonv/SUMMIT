@@ -16,6 +16,7 @@ import {
   CLASS_COLOR_PRESETS,
 } from '../components/ui';
 import { EmptyHero, AssignmentsIllustration } from '../components/EmptyHero';
+import AssignmentsBoard from '../components/AssignmentsBoard';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
 import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
 import { suggestHours } from '../lib/workload';
@@ -43,6 +44,7 @@ export default function ClassDetailPage() {
   // Active modal: { type: 'assignment', assignment? } or { type: 'grade', assignment }
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('assignments');
+  const [asgView, setAsgView] = useState('board'); // 'board' | 'table'
   const [toast, setToast] = useState(null);
   // Plays the archive exit animation on the header before navigating away.
   const [archiving, setArchiving] = useState(false);
@@ -84,6 +86,11 @@ export default function ClassDetailPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Light refresh of just the assignments (used by the Kanban board after a move).
+  const reloadAssignments = useCallback(() => {
+    api.get(`/api/classes/${id}/assignments`).then((r) => setAssignments(r.data.assignments)).catch(() => {});
+  }, [id]);
 
   const doArchive = async () => {
     // Play the exit animation on the header, then archive + leave.
@@ -247,11 +254,26 @@ export default function ClassDetailPage() {
 
       {tab === 'assignments' && (
       <section className="mt-5">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold">Assignments</h2>
-          <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
-            + Add assignment
-          </button>
+          <div className="flex items-center gap-2">
+            {assignments.length > 0 && (
+              <div className="flex rounded-xl bg-white/50 p-0.5 text-xs font-semibold">
+                {['board', 'table'].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setAsgView(v)}
+                    className={`rounded-lg px-3 py-1 capitalize transition ${asgView === v ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
+              + Add assignment
+            </button>
+          </div>
         </div>
 
         {assignments.length === 0 ? (
@@ -262,6 +284,8 @@ export default function ClassDetailPage() {
             ctaLabel="Add your first assignment"
             onCta={() => setModal({ type: 'assignment' })}
           />
+        ) : asgView === 'board' ? (
+          <AssignmentsBoard classId={id} assignments={assignments} onChanged={reloadAssignments} />
         ) : (
           <>
           <div className="glass-card overflow-hidden">

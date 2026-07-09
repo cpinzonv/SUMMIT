@@ -17,6 +17,19 @@ router.patch(
   asyncHandler(assignments.update),
 );
 
+router.post(
+  '/:assignmentId/stage',
+  validate(assignments.assignmentIdParam, 'params'),
+  validate(assignments.stageSchema),
+  asyncHandler(assignments.setStage),
+);
+
+router.get(
+  '/:assignmentId/files',
+  validate(assignments.assignmentIdParam, 'params'),
+  asyncHandler(assignments.listFiles),
+);
+
 router.delete(
   '/:assignmentId',
   validate(assignments.assignmentIdParam, 'params'),

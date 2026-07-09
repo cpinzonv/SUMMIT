@@ -10,7 +10,13 @@ export async function list(req, res) {
 
 export async function upload(req, res) {
   if (!req.file) throw AppError.badRequest('No file uploaded.');
-  const file = await fileService.createFile(req.user.id, req.params.id, req.file, req.body.category);
+  const file = await fileService.createFile(
+    req.user.id,
+    req.params.id,
+    req.file,
+    req.body.category,
+    req.body.assignmentId || null,
+  );
   res.status(201).json(file);
 }
 

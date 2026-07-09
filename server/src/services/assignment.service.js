@@ -14,6 +14,8 @@ function toPublicAssignment(row) {
     pointValue: row.point_value == null ? null : Number(row.point_value),
     estimatedHours: row.estimated_hours == null ? null : Number(row.estimated_hours),
     status: row.status,
+    stage: row.stage ?? 'backlog', // Kanban column (independent of academic status)
+    submissionText: row.submission_text ?? null,
     priority: row.priority ?? 'none',
     externalSource: row.external_source ?? null, // 'canvas' if synced from an LMS
     grade:
@@ -101,6 +103,7 @@ const UPDATABLE = {
   status: 'status',
   priority: 'priority',
   estimatedHours: 'estimated_hours',
+  submissionText: 'submission_text',
 };
 
 // Enum columns need a cast on the placeholder so a text value type-checks.
@@ -154,4 +157,62 @@ export async function listAssignments(userId, classId) {
     [classId],
   );
   return rows.map(toPublicAssignment);
+}
+
+/** Kanban WIP limit: how many of a class's assignments may be in-flight. */
+export const WIP_LIMIT = 3;
+const IN_FLIGHT = ['active', 'in_progress'];
+
+/**
+ * Move an assignment to a Kanban stage. Entering `active`/`in_progress` is
+ * blocked (409) when it would exceed the class's WIP limit of in-flight cards.
+ */
+export async function setAssignmentStage(userId, assignmentId, stage) {
+  const row = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  if (!['backlog', 'active', 'in_progress', 'done'].includes(stage)) {
+    throw AppError.badRequest('Invalid stage.');
+  }
+  // Only enforce WIP when moving INTO an in-flight column from outside it.
+  if (IN_FLIGHT.includes(stage) && !IN_FLIGHT.includes(row.stage)) {
+    const { rows: cnt } = await query(
+      `SELECT count(*)::int AS n FROM assignments
+        WHERE class_id = $1 AND stage = ANY($2) AND id <> $3`,
+      [row.class_id, IN_FLIGHT, assignmentId],
+    );
+    if (cnt[0].n >= WIP_LIMIT) {
+      throw new AppError(409, `You have ${WIP_LIMIT}/${WIP_LIMIT} active. Pause or complete one first.`, {
+        code: 'wip_limit',
+      });
+    }
+  }
+  await query(`UPDATE assignments SET stage = $1::assignment_stage WHERE id = $2`, [stage, assignmentId]);
+  return fetchPublicAssignment(assignmentId);
+}
+
+/** List a class's in-flight count + limit (for the board's WIP badge). */
+export async function assignmentWip(userId, classId) {
+  await getOwnedClass(userId, classId);
+  const { rows } = await query(
+    `SELECT count(*)::int AS n FROM assignments WHERE class_id = $1 AND stage = ANY($2)`,
+    [classId, IN_FLIGHT],
+  );
+  return { active: rows[0].n, limit: WIP_LIMIT };
+}
+
+/** Submission files attached to an assignment (class_files tagged with its id). */
+export async function listAssignmentFiles(userId, assignmentId) {
+  await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  const { rows } = await query(
+    `SELECT id, filename, mime_type, category, size_bytes, uploaded_at
+       FROM class_files WHERE assignment_id = $1 ORDER BY uploaded_at DESC`,
+    [assignmentId],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    filename: r.filename,
+    mimeType: r.mime_type,
+    sizeBytes: r.size_bytes,
+    uploadedAt: r.uploaded_at,
+    downloadUrl: `/api/files/${r.id}/download`,
+  }));
 }

@@ -9,7 +9,7 @@ import { getOwnedClass } from './class.service.js';
 
 // 'audio' backs lecture recordings (hidden from the document sections); the
 // rest are the document categories shown in the Files tab.
-export const FILE_CATEGORIES = ['pdf', 'slides', 'textbook', 'formula_sheet', 'audio', 'other'];
+export const FILE_CATEGORIES = ['pdf', 'slides', 'textbook', 'formula_sheet', 'audio', 'submission', 'other'];
 
 function toPublicFile(row) {
   return {
@@ -28,21 +28,21 @@ export async function listFiles(userId, classId) {
   await getOwnedClass(userId, classId); // 404s if not owned
   const { rows } = await query(
     `SELECT id, class_id, filename, mime_type, category, size_bytes, uploaded_at
-       FROM class_files WHERE class_id = $1 ORDER BY uploaded_at DESC`,
+       FROM class_files WHERE class_id = $1 AND assignment_id IS NULL ORDER BY uploaded_at DESC`,
     [classId],
   );
   return rows.map(toPublicFile);
 }
 
 /** Store an uploaded file (multer memory buffer) against a class. */
-export async function createFile(userId, classId, { buffer, originalname, mimetype }, category) {
+export async function createFile(userId, classId, { buffer, originalname, mimetype }, category, assignmentId = null) {
   await getOwnedClass(userId, classId);
   const cat = FILE_CATEGORIES.includes(category) ? category : 'other';
   const { rows } = await query(
-    `INSERT INTO class_files (class_id, user_id, filename, mime_type, category, size_bytes, data)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO class_files (class_id, user_id, filename, mime_type, category, size_bytes, data, assignment_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id, class_id, filename, mime_type, category, size_bytes, uploaded_at`,
-    [classId, userId, originalname, mimetype ?? null, cat, buffer.length, buffer.toString('base64')],
+    [classId, userId, originalname, mimetype ?? null, cat, buffer.length, buffer.toString('base64'), assignmentId || null],
   );
   return toPublicFile(rows[0]);
 }

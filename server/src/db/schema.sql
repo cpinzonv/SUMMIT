@@ -357,6 +357,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_assignments_external
   ON assignments(class_id, external_source, external_id)
   WHERE external_id IS NOT NULL;
 
+-- Kanban board (Class → Assignments): a workflow `stage` distinct from the
+-- academic `status` above, plus a typed text submission. Files attach via
+-- class_files.assignment_id (below). See docs/assignments-kanban.md.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'assignment_stage') THEN
+    CREATE TYPE assignment_stage AS ENUM ('backlog', 'active', 'in_progress', 'done');
+  END IF;
+END$$;
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS stage assignment_stage NOT NULL DEFAULT 'backlog';
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_text TEXT;
+-- A class_file tagged with an assignment_id is a submission attachment.
+ALTER TABLE class_files ADD COLUMN IF NOT EXISTS assignment_id UUID;
+CREATE INDEX IF NOT EXISTS idx_class_files_assignment_id ON class_files(assignment_id);
+
 CREATE INDEX IF NOT EXISTS idx_assignments_class_id ON assignments(class_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_due_date ON assignments(due_date);
 
