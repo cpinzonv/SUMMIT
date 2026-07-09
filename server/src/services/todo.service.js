@@ -23,6 +23,7 @@ function toCard(row) {
     boardStage: row.board_stage,
     done: row.board_stage === 'done',
     priority: row.priority ?? 'none',
+    estimatedHours: row.estimated_hours == null ? null : Number(row.estimated_hours),
     contextId: row.context_id, // classId or activityId (for click-through)
     contextName: row.context_name,
     color: row.color ?? null,
@@ -33,14 +34,14 @@ function toCard(row) {
 export async function listTodo(userId) {
   const { rows } = await query(
     `SELECT a.id, 'assignment' AS source, a.title, a.due_date, a.planned_date,
-            a.board_stage, a.priority::text AS priority,
+            a.board_stage, a.priority::text AS priority, a.estimated_hours,
             a.class_id AS context_id, c.name AS context_name, c.color
        FROM assignments a
        JOIN classes c ON c.id = a.class_id
       WHERE c.user_id = $1
      UNION ALL
      SELECT t.id, 'task' AS source, t.title, t.due_date, t.planned_date,
-            t.board_stage, 'none' AS priority,
+            t.board_stage, 'none' AS priority, NULL AS estimated_hours,
             act.id AS context_id, act.name AS context_name, act.color
        FROM activity_tasks t
        JOIN activity_projects p ON p.id = t.project_id

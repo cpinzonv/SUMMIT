@@ -54,6 +54,19 @@ export function AssignmentDetailModal({ assignment, onClose, onChanged }) {
   const [a, setA] = useState(assignment);
   const [tab, setTab] = useState('instructions');
   const [error, setError] = useState('');
+  const [hydrated, setHydrated] = useState(assignment.instructions !== undefined);
+
+  // Callers may pass only a partial card (To-Do board, Dashboard). Fetch the full
+  // assignment once on open so every tab has instructions/working/etc. The tab
+  // editors mount off `hydrated` so they initialize with the loaded content.
+  useEffect(() => {
+    let active = true;
+    api.get(`/api/assignments/${assignment.id}`)
+      .then(({ data }) => { if (active) { setA(data.assignment); setHydrated(true); } })
+      .catch((err) => { if (active) setError(errorMessage(err)); });
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignment.id]);
 
   // Push a partial change to the server, update local state, and refresh parent.
   const patch = useCallback(async (payload) => {
@@ -159,10 +172,16 @@ export function AssignmentDetailModal({ assignment, onClose, onChanged }) {
       <ErrorBanner message={error} />
 
       <div className="mt-4">
-        {tab === 'instructions' && <InstructionsTab a={a} patch={patch} onEstimated={(hours) => setA((x) => ({ ...x, estimatedHours: hours }))} />}
-        {tab === 'files' && <FilesTab a={a} />}
-        {tab === 'working' && <WorkingTab a={a} patch={patch} />}
-        {tab === 'submission' && <SubmissionTab a={a} onChanged={onChanged} />}
+        {!hydrated ? (
+          <p className="py-8 text-center text-sm text-muted">Loading…</p>
+        ) : (
+          <>
+            {tab === 'instructions' && <InstructionsTab a={a} patch={patch} onEstimated={(hours) => setA((x) => ({ ...x, estimatedHours: hours }))} />}
+            {tab === 'files' && <FilesTab a={a} />}
+            {tab === 'working' && <WorkingTab a={a} patch={patch} />}
+            {tab === 'submission' && <SubmissionTab a={a} onChanged={onChanged} />}
+          </>
+        )}
       </div>
     </Modal>
   );

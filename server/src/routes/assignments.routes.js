@@ -14,6 +14,12 @@ const submissionUpload = multer({ storage: multer.memoryStorage(), limits: { fil
 
 router.use(requireAuth);
 
+router.get(
+  '/:assignmentId',
+  validate(assignments.assignmentIdParam, 'params'),
+  asyncHandler(assignments.getOne),
+);
+
 router.patch(
   '/:assignmentId',
   validate(assignments.assignmentIdParam, 'params'),

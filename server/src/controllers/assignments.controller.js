@@ -95,6 +95,11 @@ export async function list(req, res) {
   res.json({ assignments });
 }
 
+export async function getOne(req, res) {
+  const assignment = await assignmentService.getAssignmentForUser(req.user.id, req.params.assignmentId);
+  res.json({ assignment });
+}
+
 export async function update(req, res) {
   const assignment = await assignmentService.updateAssignment(
     req.user.id,
