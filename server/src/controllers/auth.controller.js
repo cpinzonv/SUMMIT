@@ -59,6 +59,16 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(8, 'New password must be at least 8 characters'),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  method: z.enum(['email', 'recovery_email', 'sms']).optional(),
+});
+export const resetPasswordSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  code: z.string().min(1, 'Enter the code we sent you'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
 /** Signup attribution analytics (admin/future use). */
 export async function referralAnalytics(req, res) {
   res.json({ sources: await authService.referralSourceCounts() });
@@ -75,6 +85,14 @@ export async function verifyEmail(req, res) {
 
 export async function resendVerification(req, res) {
   res.json(await authService.resendVerification(req.body));
+}
+
+export async function forgotPassword(req, res) {
+  res.json(await authService.requestPasswordReset(req.body));
+}
+
+export async function resetPassword(req, res) {
+  res.json(await authService.resetPassword(req.body));
 }
 
 export async function login(req, res) {

@@ -181,6 +181,66 @@ export async function verifyEmail({ email, code }) {
   return { user: toPublicUser(fresh), ...tokens };
 }
 
+/* ---- Forgot password (Phase 3): reset via email / recovery email / SMS -- */
+
+/**
+ * Send a password-reset code to one of the account's recovery channels:
+ *   'email'          → the primary login email
+ *   'recovery_email' → the verified backup email
+ *   'sms'            → the verified phone
+ * Always resolves generically ({ sent: true }) so the response never reveals
+ * whether the account — or that channel — exists. In dev (no provider), the code
+ * is returned so the flow is testable.
+ */
+export async function requestPasswordReset({ email, method = 'email' }) {
+  const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
+  const user = rows[0];
+
+  let channel = 'email';
+  let destination = null;
+  if (user) {
+    if (method === 'sms') {
+      if (user.phone && user.phone_verified) { channel = 'sms'; destination = user.phone; }
+    } else if (method === 'recovery_email') {
+      if (user.recovery_email && user.recovery_email_verified) destination = user.recovery_email;
+    } else {
+      destination = user.email; // primary email is inherently the login address
+    }
+  }
+
+  // No account, or the requested channel isn't set up/verified → say nothing.
+  if (!user || !destination) return { sent: true };
+
+  const { devCode } = await issueCode({
+    userId: user.id,
+    purpose: 'password_reset',
+    channel,
+    destination,
+    subject: 'Reset your Summit password',
+    intro: 'Your Summit password reset code is',
+  });
+  return { sent: true, ...(devCode ? { devCode } : {}) };
+}
+
+/**
+ * Confirm a reset code and set a new password. Revokes every existing session so
+ * a compromised old password can't keep a foothold. The user then signs in fresh.
+ */
+export async function resetPassword({ email, code, newPassword }) {
+  const { rows } = await query('SELECT id FROM users WHERE email = $1', [email]);
+  const user = rows[0];
+  // Generic failure — don't leak whether the email is registered.
+  if (!user) throw AppError.badRequest('That code is not valid. Request a new one.');
+
+  await verifyCode({ userId: user.id, purpose: 'password_reset', code });
+
+  const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, user.id]);
+  // Invalidate all outstanding refresh tokens — every device must re-authenticate.
+  await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [user.id]);
+  return { ok: true };
+}
+
 export async function login({ email, password }) {
   const { rows } = await query(
     `SELECT u.*, i.name AS institution_name, i.revoked_at AS institution_revoked_at
