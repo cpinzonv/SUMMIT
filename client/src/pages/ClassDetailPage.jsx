@@ -408,6 +408,7 @@ export default function ClassDetailPage() {
           classId={id}
           assignment={modal.assignment}
           onClose={() => setModal(null)}
+          onChanged={load}
           onSaved={async () => {
             setModal(null);
             await load();
@@ -1086,10 +1087,11 @@ function dateInputToISO(value) {
   return new Date(`${value}T00:00:00`).toISOString();
 }
 
-function AssignmentModal({ classId, assignment, onClose, onSaved }) {
+function AssignmentModal({ classId, assignment, onClose, onSaved, onChanged }) {
   const isEdit = Boolean(assignment);
   const [form, setForm] = useState({
     title: assignment?.title ?? '',
+    description: assignment?.description ?? '',
     category: assignment?.category ?? '',
     dueDate: toDateInput(assignment?.dueDate),
     plannedDate: toDateInput(assignment?.plannedDate),
@@ -1112,6 +1114,7 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
     const blank = isEdit ? null : undefined;
     const payload = {
       title: form.title,
+      description: form.description.trim() || blank,
       category: form.category || blank,
       dueDate: form.dueDate ? dateInputToISO(form.dueDate) : blank,
       plannedDate: form.plannedDate ? dateInputToISO(form.plannedDate) : blank,
@@ -1137,6 +1140,16 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
       <form onSubmit={submit} className="space-y-3">
         <ErrorBanner message={error} />
         <Input label="Title" value={form.title} onChange={update('title')} required />
+        <label className="block">
+          <span className="mb-1 block text-xs font-semibold text-ink">Instructions</span>
+          <textarea
+            value={form.description}
+            onChange={update('description')}
+            rows={3}
+            placeholder="What does this assignment ask for?"
+            className="field"
+          />
+        </label>
         <Input label="Category" value={form.category} onChange={update('category')} placeholder="Homework, Exam…" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Due date" type="date" value={form.dueDate} onChange={update('dueDate')} />
@@ -1180,7 +1193,123 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
         </label>
         <ModalActions saving={saving} disabled={!form.title} onClose={onClose} label={isEdit ? 'Save changes' : 'Add assignment'} />
       </form>
+
+      {isEdit && <SubmissionSection assignment={assignment} onChanged={onChanged} />}
     </Modal>
+  );
+}
+
+/**
+ * "Your submission" — optional text + an optional file attachment, with
+ * Submit / Update / Withdraw. Keeps its own state so the modal reflects the new
+ * submission in place; `onChanged` quietly refreshes the list/board behind it.
+ */
+function SubmissionSection({ assignment, onChanged }) {
+  const [submission, setSubmission] = useState(assignment.submission ?? null);
+  const [text, setText] = useState(assignment.submission?.text ?? '');
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submitted = Boolean(submission?.submittedAt);
+
+  const submit = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      const fd = new FormData();
+      if (text.trim()) fd.append('text', text.trim());
+      if (file) fd.append('file', file);
+      const { data } = await api.post(`/api/assignments/${assignment.id}/submission`, fd);
+      setSubmission(data.assignment.submission);
+      setFile(null);
+      onChanged?.();
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const withdraw = async () => {
+    setBusy(true);
+    setErr('');
+    try {
+      await api.delete(`/api/assignments/${assignment.id}/submission`);
+      setSubmission(null);
+      setText('');
+      setFile(null);
+      onChanged?.();
+    } catch (e) {
+      setErr(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 border-t border-white/50 pt-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-sm font-bold text-ink">Your submission</h4>
+        {submitted && (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+            ✓ Submitted {new Date(submission.submittedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+          </span>
+        )}
+      </div>
+      {err && <p className="mb-2 text-xs font-semibold text-rose-600">{err}</p>}
+
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        placeholder="Write your answer, notes, or a link…"
+        className="field"
+      />
+
+      {submission?.file ? (
+        <div className="mt-2 flex items-center gap-2 text-sm">
+          <span className="text-muted">📎</span>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await api.get(`/api/files/${submission.file.id}/download`, { responseType: 'blob' });
+                const url = URL.createObjectURL(res.data);
+                window.open(url, '_blank', 'noopener');
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+              } catch (e) { setErr(errorMessage(e)); }
+            }}
+            className="font-semibold text-brand-600 hover:underline"
+          >
+            {submission.file.filename}
+          </button>
+        </div>
+      ) : (
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-muted">
+          <span className="rounded-lg border border-white/60 bg-white/55 px-3 py-1.5 font-semibold text-ink transition hover:bg-white/80">
+            📎 Attach file
+          </span>
+          <span className="truncate">{file ? file.name : 'Optional'}</span>
+          <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
+      )}
+
+      <div className="mt-3 flex justify-end gap-2">
+        {submitted && (
+          <button type="button" className="btn btn-soft" disabled={busy} onClick={withdraw}>
+            Withdraw
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy || (!text.trim() && !file && !submission?.file)}
+          onClick={submit}
+        >
+          {busy ? 'Saving…' : submitted ? 'Update submission' : 'Submit'}
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -1,6 +1,7 @@
 import { query } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
+import { createFile, deleteFile } from './file.service.js';
 
 function toPublicAssignment(row) {
   return {
@@ -17,6 +18,16 @@ function toPublicAssignment(row) {
     boardStage: row.board_stage ?? 'not_started', // shared Kanban stage (To-Do + class boards)
     priority: row.priority ?? 'none',
     externalSource: row.external_source ?? null, // 'canvas' if synced from an LMS
+    submission:
+      row.submitted_at || row.submission_text || row.submission_file_id
+        ? {
+            text: row.submission_text ?? null,
+            submittedAt: row.submitted_at ?? null,
+            file: row.submission_file_id
+              ? { id: row.submission_file_id, filename: row.submission_file_name ?? 'attachment' }
+              : null,
+          }
+        : null,
     grade:
       row.grade_id == null
         ? null
@@ -37,9 +48,11 @@ async function fetchPublicAssignment(assignmentId, db = { query }) {
   const { rows } = await db.query(
     `SELECT a.*,
             g.id AS grade_id, g.points_earned, g.points_possible,
-            g.feedback, g.graded_at
+            g.feedback, g.graded_at,
+            sf.filename AS submission_file_name
      FROM assignments a
      LEFT JOIN grades g ON g.assignment_id = a.id
+     LEFT JOIN class_files sf ON sf.id = a.submission_file_id
      WHERE a.id = $1`,
     [assignmentId],
   );
@@ -147,12 +160,51 @@ export async function listAssignments(userId, classId) {
   const { rows } = await query(
     `SELECT a.*,
             g.id AS grade_id, g.points_earned, g.points_possible,
-            g.feedback, g.graded_at
+            g.feedback, g.graded_at,
+            sf.filename AS submission_file_name
      FROM assignments a
      LEFT JOIN grades g ON g.assignment_id = a.id
+     LEFT JOIN class_files sf ON sf.id = a.submission_file_id
      WHERE a.class_id = $1
      ORDER BY a.due_date NULLS LAST, a.created_at`,
     [classId],
   );
   return rows.map(toPublicAssignment);
+}
+
+/**
+ * Submit (or update a submission for) an assignment: optional text + an optional
+ * file (stored in class_files under the assignment's class). Stamps submitted_at
+ * and marks the assignment 'submitted'. Passing a new file replaces the old one.
+ */
+export async function submitAssignment(userId, assignmentId, { text, file } = {}) {
+  const a = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  let fileId = a.submission_file_id;
+  if (file) {
+    const stored = await createFile(userId, a.class_id, file, 'submission');
+    if (a.submission_file_id) await deleteFile(userId, a.submission_file_id).catch(() => {});
+    fileId = stored.id;
+  }
+  await query(
+    `UPDATE assignments
+        SET submission_text = $1, submission_file_id = $2, submitted_at = now(),
+            status = 'submitted'
+      WHERE id = $3`,
+    [text ?? null, fileId, assignmentId],
+  );
+  return fetchPublicAssignment(assignmentId);
+}
+
+/** Withdraw a submission: clear text/file/timestamp and reopen (in progress). */
+export async function clearSubmission(userId, assignmentId) {
+  const a = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  if (a.submission_file_id) await deleteFile(userId, a.submission_file_id).catch(() => {});
+  await query(
+    `UPDATE assignments
+        SET submission_text = NULL, submission_file_id = NULL, submitted_at = NULL,
+            status = 'in_progress'
+      WHERE id = $1`,
+    [assignmentId],
+  );
+  return fetchPublicAssignment(assignmentId);
 }
