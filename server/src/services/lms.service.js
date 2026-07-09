@@ -24,6 +24,7 @@ import { encrypt, decrypt, isEncryptionConfigured } from '../utils/crypto.js';
 import { getProvider, DEFAULT_PROVIDER, PROVIDER_KEYS } from './lms/index.js';
 import { getProviderMeta } from './lms/providers.js';
 import { env } from '../config/env.js';
+import { estimateMinutes } from './estimate.service.js';
 
 /** How often the background cron re-syncs connected accounts (drives next-sync ETA). */
 export const SYNC_INTERVAL_HOURS = 4;
@@ -352,7 +353,7 @@ async function matchOrCreateClass(client, userId, source, course, tally) {
   return created.rows[0];
 }
 
-async function upsertAssignment(client, classId, source, a, tally) {
+async function upsertAssignment(client, classId, source, a, tally, newlyImported) {
   const { rows } = await client.query(
     `SELECT id FROM assignments WHERE class_id = $1 AND external_source = $2 AND external_id = $3`,
     [classId, source, a.externalId],
@@ -379,6 +380,11 @@ async function upsertAssignment(client, classId, source, a, tally) {
     );
     assignmentId = ins.rows[0].id;
     tally.imported++;
+    // Queue a background AI time estimate for freshly-imported work that came
+    // with a description (see estimateNewImports, run after the transaction).
+    if (newlyImported && a.description && a.description.trim().length >= 10) {
+      newlyImported.push({ id: assignmentId, title: a.title, description: a.description });
+    }
   }
 
   // Optionally fill the grade from the LMS submission.
@@ -396,6 +402,30 @@ async function upsertAssignment(client, classId, source, a, tally) {
     tally.grades++;
   }
   return assignmentId;
+}
+
+/**
+ * Background pass: AI-estimate the duration of freshly-imported assignments so
+ * their cards show a time without the student pasting anything. Runs AFTER the
+ * sync transaction (fire-and-forget), sequentially to be gentle on the API, and
+ * never throws — a failed estimate just leaves that assignment un-estimated. The
+ * `estimated_hours IS NULL` guard avoids clobbering a value the user set in the
+ * gap between import and estimation. No-ops when Claude isn't configured.
+ */
+async function estimateNewImports(items) {
+  if (!env.anthropicApiKey || !items?.length) return;
+  for (const it of items) {
+    try {
+      const { minutes } = await estimateMinutes({ title: it.title, instructions: it.description });
+      const hours = Math.round((minutes / 60) * 100) / 100;
+      await query(
+        'UPDATE assignments SET estimated_hours = $1 WHERE id = $2 AND estimated_hours IS NULL',
+        [hours, it.id],
+      );
+    } catch (err) {
+      console.error(`[lms] auto-estimate failed for assignment ${it.id}:`, err?.message);
+    }
+  }
 }
 
 /* ---- Public sync operations --------------------------------------------- */
@@ -445,10 +475,11 @@ export async function syncAll(userId, provider = DEFAULT_PROVIDER, { trigger = '
 
     // 2. Persist atomically.
     const tally = { provider, courses: fetched.length, classesCreated: 0, classesMatched: 0, imported: 0, updated: 0, grades: 0 };
+    const newlyImported = [];
     await withTransaction(async (client) => {
       for (const { course, assignments } of fetched) {
         const cls = await matchOrCreateClass(client, userId, source, course, tally);
-        for (const a of assignments) await upsertAssignment(client, cls.id, source, a, tally);
+        for (const a of assignments) await upsertAssignment(client, cls.id, source, a, tally, newlyImported);
       }
     });
 
@@ -457,6 +488,9 @@ export async function syncAll(userId, provider = DEFAULT_PROVIDER, { trigger = '
       [userId, provider],
     );
     await writeSyncLog(userId, provider, trigger, startedAt, { status: 'ok', tally });
+
+    // Kick off AI estimates in the background — don't make the student wait on it.
+    estimateNewImports(newlyImported).catch(() => {});
     return tally;
   } catch (error) {
     await writeSyncLog(userId, provider, trigger, startedAt, { status: 'error', error });
@@ -557,8 +591,11 @@ export async function importAssignments(userId, provider, cls, externalIds) {
   const selected = all.filter((a) => wanted.has(String(a.externalId)));
 
   const tally = { provider, imported: 0, updated: 0, grades: 0 };
+  const newlyImported = [];
   await withTransaction(async (client) => {
-    for (const a of selected) await upsertAssignment(client, cls.id, source, a, tally);
+    for (const a of selected) await upsertAssignment(client, cls.id, source, a, tally, newlyImported);
   });
+  // Background AI estimates for the newly-imported assignments (fire-and-forget).
+  estimateNewImports(newlyImported).catch(() => {});
   return tally;
 }
