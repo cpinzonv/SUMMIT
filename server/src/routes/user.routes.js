@@ -29,6 +29,11 @@ router.post('/2fa/setup', asyncHandler(user.twofaSetup));
 router.post('/2fa/confirm', sensitiveLimiter, validate(user.twofaConfirmSchema), asyncHandler(user.twofaConfirm));
 router.post('/2fa/disable', sensitiveLimiter, validate(user.twofaDisableSchema), asyncHandler(user.twofaDisable));
 
+// Trusted devices ("remember this device" for 2FA) — list + revoke.
+router.get('/trusted-devices', asyncHandler(user.listDevices));
+router.delete('/trusted-devices', asyncHandler(user.revokeAllDevices));
+router.delete('/trusted-devices/:deviceId', validate(user.deviceIdParam, 'params'), asyncHandler(user.revokeDevice));
+
 // Account security & recovery — phone (SMS), backup email, change primary email.
 router.post('/phone', validate(user.phoneSchema), asyncHandler(user.addPhone));
 router.post('/phone/verify', validate(user.phoneVerifySchema), asyncHandler(user.verifyPhone));

@@ -36,11 +36,16 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(1, 'Password is required'),
+  // A remembered-device token (from a prior "trust this device") that lets a
+  // 2FA account skip the second step from this browser.
+  deviceToken: z.string().max(256).optional(),
 });
 
 export const login2faSchema = z.object({
   challengeToken: z.string().min(1, 'challengeToken is required'),
   code: z.string().min(1, 'Enter your authentication code'),
+  // "Trust this device for 30 days" — skip 2FA on this browser next time.
+  trustDevice: z.boolean().optional(),
 });
 
 export const refreshSchema = z.object({
@@ -101,7 +106,7 @@ export async function resetPassword(req, res) {
 export async function login(req, res) {
   let result;
   try {
-    result = await authService.login(req.body);
+    result = await authService.login({ ...req.body, userAgent: req.get('user-agent'), ip: req.ip });
   } catch (err) {
     // Record the failed attempt (bad credentials / locked, etc.) then rethrow.
     await logSecurityEvent({ action: 'login', outcome: 'failure', email: req.body.email, ip: req.ip });
@@ -115,7 +120,7 @@ export async function login(req, res) {
 }
 
 export async function loginTwoFactor(req, res) {
-  const result = await authService.loginTwoFactor(req.body);
+  const result = await authService.loginTwoFactor({ ...req.body, userAgent: req.get('user-agent'), ip: req.ip });
   if (result?.user) {
     await logSecurityEvent({ action: 'login_2fa', outcome: 'success', userId: result.user.id, email: result.user.email, ip: req.ip });
   }

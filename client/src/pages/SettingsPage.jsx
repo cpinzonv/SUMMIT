@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
-import { ErrorBanner, Toast, Toggle, Modal, Spinner, classGradient, gradeColor } from '../components/ui';
+import { ErrorBanner, Toast, Toggle, Modal, Spinner, ConfirmModal, classGradient, gradeColor } from '../components/ui';
 import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
 import { gcalApi, summarizeGcalSync } from '../lib/gcal';
 import SettingsGraduationSection from '../components/SettingsGraduationSection';
@@ -104,12 +104,78 @@ function AccountTab({ user }) {
 
       <TwoFactorSection user={user} />
 
+      {user?.twoFactorEnabled && <TrustedDevicesSection />}
+
       <Section title="Session" description="Sign out of Summit on this device.">
         <button onClick={handleLogout} className="btn btn-soft">
           Log out
         </button>
       </Section>
     </>
+  );
+}
+
+/* ---- Trusted devices (remember-this-device for 2FA) -------------------- */
+function TrustedDevicesSection() {
+  const [devices, setDevices] = useState(null);
+  const [error, setError] = useState('');
+  const [confirm, setConfirm] = useState(null); // device pending revoke
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/user/trusted-devices');
+      setDevices(data.devices);
+    } catch (err) { setError(errorMessage(err)); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const revoke = async (id) => {
+    setError('');
+    try {
+      await api.delete(`/api/user/trusted-devices/${id}`);
+      setConfirm(null);
+      await load();
+    } catch (err) { setError(errorMessage(err)); }
+  };
+
+  const fmt = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+
+  return (
+    <Section
+      title="Trusted devices"
+      description="Browsers you told to skip 2FA. Trust lasts 30 days; revoke any device to require 2FA there again."
+    >
+      {error && <p className="mb-2 text-sm font-semibold text-rose-600">{error}</p>}
+      {devices == null ? (
+        <p className="text-sm text-muted">Loading…</p>
+      ) : devices.length === 0 ? (
+        <p className="rounded-xl bg-white/40 px-4 py-5 text-center text-sm text-muted">No trusted devices. You'll be asked for 2FA every time.</p>
+      ) : (
+        <ul className="space-y-2">
+          {devices.map((d) => (
+            <li key={d.id} className="flex items-center gap-3 rounded-xl border border-white/60 bg-white/55 px-3 py-2.5">
+              <span className="text-lg">💻</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-ink">{d.label}</div>
+                <div className="text-xs text-muted">
+                  {d.ip ? `${d.ip} · ` : ''}last used {fmt(d.lastUsedAt)} · expires {fmt(d.expiresAt)}
+                </div>
+              </div>
+              <button onClick={() => setConfirm(d)} className="text-xs font-semibold text-rose-500 hover:text-rose-700">Revoke</button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {confirm && (
+        <ConfirmModal
+          title="Revoke trusted device?"
+          message={`"${confirm.label}" will need to pass 2FA again on its next sign-in.`}
+          confirmLabel="Revoke"
+          onConfirm={() => revoke(confirm.id)}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+    </Section>
   );
 }
 

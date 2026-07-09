@@ -2,6 +2,7 @@ import { z } from 'zod';
 import * as userService from '../services/user.service.js';
 import * as twofa from '../services/twofa.service.js';
 import { logSecurityEvent } from '../services/audit.service.js';
+import * as trustedDevices from '../services/trustedDevice.service.js';
 import * as account from '../services/account.service.js';
 
 export const preferencesSchema = z
@@ -74,8 +75,27 @@ export async function twofaDisable(req, res) {
     await logSecurityEvent({ action: '2fa_disable', outcome: 'failure', userId: req.user.id, ip: req.ip });
     throw err;
   }
+  // Turning off 2FA makes device trust meaningless — clear all trusted devices.
+  await trustedDevices.revokeAllTrustedDevices(req.user.id);
   await logSecurityEvent({ action: '2fa_disable', outcome: 'success', userId: req.user.id, ip: req.ip });
   res.json({ ok: true });
+}
+
+/* ---- Trusted devices (remember-this-device for 2FA) -------------------- */
+export const deviceIdParam = z.object({ deviceId: z.string().uuid('Invalid device id') });
+
+export async function listDevices(req, res) {
+  res.json({ devices: await trustedDevices.listTrustedDevices(req.user.id) });
+}
+export async function revokeDevice(req, res) {
+  await trustedDevices.revokeTrustedDevice(req.user.id, req.params.deviceId);
+  await logSecurityEvent({ action: 'trusted_device_revoke', outcome: 'success', userId: req.user.id, ip: req.ip });
+  res.status(204).end();
+}
+export async function revokeAllDevices(req, res) {
+  await trustedDevices.revokeAllTrustedDevices(req.user.id);
+  await logSecurityEvent({ action: 'trusted_device_revoke_all', outcome: 'success', userId: req.user.id, ip: req.ip });
+  res.status(204).end();
 }
 
 /* ---- Account security & recovery (phone, backup email, change email) --- */

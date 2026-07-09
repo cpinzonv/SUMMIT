@@ -24,6 +24,7 @@ export default function LoginPage() {
   const [error, setError] = useState(location.state?.oauthError || '');
   const [submitting, setSubmitting] = useState(false);
   const [twoFactor, setTwoFactor] = useState(null); // { challengeToken } when 2FA prompt is shown
+  const [trustDevice, setTrustDevice] = useState(false); // "trust this device for 30 days"
   const [verify, setVerify] = useState(null); // { email, devCode } when email-confirmation step is shown
   const [resent, setResent] = useState('');
   const [code, setCode] = useState('');
@@ -108,7 +109,7 @@ export default function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      await completeTwoFactor(twoFactor.challengeToken, code.trim());
+      await completeTwoFactor(twoFactor.challengeToken, code.trim(), trustDevice);
       navigate(from, { replace: true });
     } catch (err) {
       setError(errorMessage(err, 'Verification failed'));
@@ -215,12 +216,21 @@ export default function LoginPage() {
               inputMode="text"
               required
             />
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={trustDevice}
+                onChange={(e) => setTrustDevice(e.target.checked)}
+                className="h-4 w-4 rounded border-white/60 accent-brand-600"
+              />
+              Trust this device for 30 days
+            </label>
             <button type="submit" disabled={submitting || !code.trim()} className="btn btn-primary w-full">
               {submitting ? 'Verifying…' : 'Verify'}
             </button>
             <button
               type="button"
-              onClick={() => { setTwoFactor(null); setCode(''); setError(''); }}
+              onClick={() => { setTwoFactor(null); setCode(''); setError(''); setTrustDevice(false); }}
               className="w-full text-center text-sm font-semibold text-muted hover:text-ink"
             >
               ← Back to sign in
