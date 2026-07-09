@@ -231,7 +231,7 @@ export default function DashboardPage() {
             <Stat label="Graded classes" value={graded.length} glow={classGradient(null, 3)} />
           </div>
 
-          {workload && (workload.thisWeek.totalHours > 0 || workload.nextWeek.totalHours > 0) && (
+          {workload?.weeks?.some((w) => w.totalHours > 0) && (
             <WorkloadWidget workload={workload} onOpen={setOpenAssignment} />
           )}
 
@@ -289,40 +289,103 @@ const DOW_LABEL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 // "Can I finish this week?" verdict styling.
 const FEASIBILITY = {
-  on_track: { label: 'On track', cls: 'bg-emerald-100 text-emerald-700' },
-  tight: { label: 'Tight week', cls: 'bg-amber-100 text-amber-700' },
-  overloaded: { label: 'Overloaded', cls: 'bg-rose-100 text-rose-700' },
+  on_track: { label: 'On track', cls: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
+  tight: { label: 'Tight week', cls: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+  overloaded: { label: 'Overloaded', cls: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500' },
 };
 
+// "Jul 6 – 12" (or "Jun 29 – Jul 5" across a month) from a Monday week-start.
+function weekRangeLabel(weekStart) {
+  const mon = new Date(`${weekStart}T00:00:00`);
+  const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+  const m = (d) => d.toLocaleDateString(undefined, { month: 'short' });
+  const sameMonth = mon.getMonth() === sun.getMonth();
+  return sameMonth
+    ? `${m(mon)} ${mon.getDate()} – ${sun.getDate()}`
+    : `${m(mon)} ${mon.getDate()} – ${m(sun)} ${sun.getDate()}`;
+}
+
 function WorkloadWidget({ workload, onOpen }) {
-  const days = workload.thisWeek.byDay;
-  const items = workload.thisWeek.items || [];
-  const feas = workload.thisWeek.feasibility;
+  const weeks = workload.weeks || [];
+  const [idx, setIdx] = useState(workload.currentIndex || 0);
+  const pillsRef = useRef(null);
+
+  // Reset to the current week if the data reloads with a different shape.
+  useEffect(() => { setIdx(Math.min(workload.currentIndex || 0, (workload.weeks?.length || 1) - 1)); }, [workload]);
+  // Keep the selected week pill scrolled into view.
+  useEffect(() => {
+    pillsRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  }, [idx]);
+
+  const week = weeks[idx];
+  if (!week) return null;
+  const days = week.byDay;
+  const items = week.items || [];
+  const feas = week.feasibility;
   const max = Math.max(1, ...days.map((d) => d.hours));
-  const verdict = feas ? FEASIBILITY[feas.verdict] : null;
+  const verdict = FEASIBILITY[feas.verdict];
+
+  const feasText = week.isPast
+    ? `~${feas.overBy || week.totalHours}h of unfinished work now overdue`
+    : feas.verdict === 'overloaded'
+      ? `~${feas.overBy}h over the ~${feas.availableHours}h free ${week.isCurrent ? 'before Sunday' : 'that week'} (≈${feas.dailyHours}h/day)`
+      : `${week.totalHours}h of work vs. ~${feas.availableHours}h free ${week.isCurrent ? 'before Sunday' : 'that week'} (≈${feas.dailyHours}h/day)`;
 
   return (
     <div className="glass-card mb-8 p-5">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-display text-lg font-bold text-ink">Weekly workload</h2>
-        <div className="text-sm text-muted">
-          <span className="font-semibold text-ink">This week: {workload.thisWeek.totalHours}h</span>
-          <span className="mx-2">·</span>
-          Next week: {workload.nextWeek.totalHours}h
+        <div className="flex items-center gap-2 text-sm">
+          <button
+            type="button"
+            onClick={() => setIdx((i) => Math.max(0, i - 1))}
+            disabled={idx === 0}
+            className="grid h-7 w-7 place-items-center rounded-full text-muted transition hover:bg-black/5 hover:text-ink disabled:opacity-30"
+            aria-label="Previous week"
+          >‹</button>
+          <span className="min-w-[7.5rem] text-center font-semibold text-ink">
+            {week.isCurrent ? 'This week' : weekRangeLabel(week.weekStart)}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIdx((i) => Math.min(weeks.length - 1, i + 1))}
+            disabled={idx === weeks.length - 1}
+            className="grid h-7 w-7 place-items-center rounded-full text-muted transition hover:bg-black/5 hover:text-ink disabled:opacity-30"
+            aria-label="Next week"
+          >›</button>
         </div>
       </div>
 
-      {/* Can-I-finish feasibility read */}
-      {verdict && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
-          <span className={`rounded-full px-2.5 py-0.5 font-bold ${verdict.cls}`}>{verdict.label}</span>
-          <span className="text-muted">
-            {feas.verdict === 'overloaded'
-              ? `~${feas.overBy}h over the ~${feas.availableHours}h free before Sunday (≈${feas.dailyHours}h/day)`
-              : `${workload.thisWeek.totalHours}h of work vs. ~${feas.availableHours}h free before Sunday (≈${feas.dailyHours}h/day)`}
-          </span>
-        </div>
-      )}
+      {/* Scrollable strip of week pills — scroll/click to jump across weeks. */}
+      <div ref={pillsRef} className="no-scrollbar mb-3 flex gap-1.5 overflow-x-auto pb-1">
+        {weeks.map((w, i) => {
+          const v = FEASIBILITY[w.feasibility.verdict];
+          const activeWk = i === idx;
+          return (
+            <button
+              key={w.weekStart}
+              type="button"
+              data-active={activeWk}
+              onClick={() => setIdx(i)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                activeWk ? 'bg-brand-600 text-white shadow-sm' : 'bg-white/60 text-muted hover:bg-white/85'
+              }`}
+              title={`${w.totalHours}h`}
+            >
+              {w.isCurrent ? 'This week' : weekRangeLabel(w.weekStart)}
+              {w.totalHours > 0 && (
+                <span className={`h-1.5 w-1.5 rounded-full ${activeWk ? 'bg-white/80' : v.dot}`} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Can-I-finish feasibility read for the selected week */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+        <span className={`rounded-full px-2.5 py-0.5 font-bold ${verdict.cls}`}>{verdict.label}</span>
+        <span className="text-muted">{feasText}</span>
+      </div>
 
       <div className="flex items-end gap-2" style={{ height: 96 }}>
         {days.map((d, i) => (
@@ -342,21 +405,24 @@ function WorkloadWidget({ workload, onOpen }) {
         ))}
       </div>
 
-      {/* This week's assignments, each with its estimated time. */}
-      {items.length > 0 && (
+      {/* The selected week's assignments, each with its estimated time. */}
+      {items.length > 0 ? (
         <ul className="mt-4 space-y-1.5 border-t border-white/50 pt-3">
           {items.map((it) => {
-            const st = dueStatus(it.dueDate);
+            // Countdown reflects the real due date; the week bucket used the
+            // planned date. A blank due date falls back to the scheduling date.
+            const st = dueStatus(it.dueDate || it.deadline);
             return (
               <li key={it.id} className="flex items-center gap-2 text-sm">
                 <button
                   type="button"
-                  onClick={() => onOpen?.({ id: it.id, title: it.title, dueDate: it.dueDate, estimatedHours: it.aiEstimated ? it.hours : null })}
+                  onClick={() => onOpen?.({ id: it.id, title: it.title, dueDate: it.dueDate || it.deadline, estimatedHours: it.aiEstimated ? it.hours : null })}
                   className="min-w-0 flex-1 truncate text-left hover:opacity-80"
                   title="Open assignment"
                 >
                   <span className="font-semibold text-ink">{it.title}</span>
                   <span className="text-muted"> · {it.className}</span>
+                  {it.planned && <span className="ml-1 text-[10px] font-semibold text-brand-600">· planned</span>}
                 </button>
                 <span className={`shrink-0 text-xs font-semibold ${countdownTone(st)}`}>{st.countdownLabel}</span>
                 <span
@@ -369,6 +435,8 @@ function WorkloadWidget({ workload, onOpen }) {
             );
           })}
         </ul>
+      ) : (
+        <p className="mt-4 border-t border-white/50 pt-3 text-center text-sm text-muted">No work scheduled this week.</p>
       )}
     </div>
   );
