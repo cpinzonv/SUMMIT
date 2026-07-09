@@ -368,6 +368,8 @@ BEGIN
 END$$;
 ALTER TABLE assignments ADD COLUMN IF NOT EXISTS stage assignment_stage NOT NULL DEFAULT 'planning';
 ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_text TEXT;
+-- When the card was moved to Done (for the "completed N days after due" note).
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
 -- A class_file tagged with an assignment_id is a submission attachment.
 ALTER TABLE class_files ADD COLUMN IF NOT EXISTS assignment_id UUID;
 CREATE INDEX IF NOT EXISTS idx_class_files_assignment_id ON class_files(assignment_id);

@@ -15,6 +15,7 @@ function toPublicAssignment(row) {
     estimatedHours: row.estimated_hours == null ? null : Number(row.estimated_hours),
     status: row.status,
     stage: row.stage ?? 'planning', // Kanban column (independent of academic status)
+    completedAt: row.completed_at ?? null,
     submissionText: row.submission_text ?? null,
     priority: row.priority ?? 'none',
     externalSource: row.external_source ?? null, // 'canvas' if synced from an LMS
@@ -187,7 +188,11 @@ export async function setAssignmentStage(userId, assignmentId, stage) {
       });
     }
   }
-  await query(`UPDATE assignments SET stage = $1::assignment_stage WHERE id = $2`, [stage, assignmentId]);
+  // Stamp completion time on the first move to Done; clear it when reopened.
+  const completedClause = stage === 'done'
+    ? ', completed_at = COALESCE(completed_at, now())'
+    : ', completed_at = NULL';
+  await query(`UPDATE assignments SET stage = $1::assignment_stage${completedClause} WHERE id = $2`, [stage, assignmentId]);
   return fetchPublicAssignment(assignmentId);
 }
 

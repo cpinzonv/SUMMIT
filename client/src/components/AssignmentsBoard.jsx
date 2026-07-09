@@ -118,11 +118,16 @@ export default function AssignmentsBoard({ classId, assignments, onChanged }) {
 
 /* ---- Card -------------------------------------------------------------- */
 const fmtDue = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const dayStart = (d) => { const x = new Date(d); return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(); };
+/** Whole days a completion landed after the due date (>0 = late), else 0. */
+const daysLate = (dueDate, completedAt) =>
+  dueDate && completedAt ? Math.max(0, Math.round((dayStart(completedAt) - dayStart(dueDate)) / 86400000)) : 0;
 
 function Card({ a, dragging, onOpen, onDragStart, onDragEnd }) {
   const done = a.stage === 'done';
   const ds = dueStatus(a.dueDate);
   const overdue = ds.isPastDue && !done;
+  const lateBy = done ? daysLate(a.dueDate, a.completedAt) : 0;
   return (
     <div
       draggable
@@ -136,8 +141,10 @@ function Card({ a, dragging, onOpen, onDragStart, onDragEnd }) {
         {!a.dueDate ? (
           <span className="text-[11px] text-muted">No due date</span>
         ) : done ? (
-          // Done: show the plain due date, never an overdue warning.
-          <span className="text-[11px] text-muted">Due {fmtDue(a.dueDate)}</span>
+          // Done: a calm gray note — flags a late finish without the red stress.
+          <span className="text-[11px] text-muted">
+            {lateBy > 0 ? `Completed ${lateBy} day${lateBy === 1 ? '' : 's'} after due date` : `Due ${fmtDue(a.dueDate)}`}
+          </span>
         ) : overdue ? (
           <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">{ds.lateLabel}</span>
         ) : (
