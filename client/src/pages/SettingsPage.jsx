@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
@@ -138,19 +138,28 @@ function TwoFactorSection({ user }) {
 }
 
 function Enable2FAModal({ onClose, onDone }) {
-  const [step, setStep] = useState('loading'); // loading | scan | backup
+  const [step, setStep] = useState('loading'); // loading | scan | backup | error
   const [data, setData] = useState(null);
   const [code, setCode] = useState('');
   const [backupCodes, setBackupCodes] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  // Load a pending secret + QR. On failure — including a hung/slow request (15s
+  // timeout) — surface the error and stop spinning instead of "Preparing…" forever.
+  const load = useCallback(() => {
+    setStep('loading');
+    setError('');
     api
-      .post('/api/user/2fa/setup')
+      .post('/api/user/2fa/setup', null, { timeout: 15000 })
       .then((r) => { setData(r.data); setStep('scan'); })
-      .catch((err) => setError(errorMessage(err, 'Could not start 2FA setup.')));
+      .catch((err) => {
+        setError(errorMessage(err, 'Could not start 2FA setup. Please try again.'));
+        setStep('error');
+      });
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const confirm = async (e) => {
     e.preventDefault();
@@ -169,6 +178,15 @@ function Enable2FAModal({ onClose, onDone }) {
   return (
     <Modal title="Enable two-factor authentication" onClose={onClose}>
       {step === 'loading' && <Spinner label="Preparing…" />}
+      {step === 'error' && (
+        <div className="space-y-4">
+          <ErrorBanner message={error || 'Could not start 2FA setup.'} />
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="btn btn-soft">Close</button>
+            <button type="button" onClick={load} className="btn btn-primary">Try again</button>
+          </div>
+        </div>
+      )}
       {step === 'scan' && data && (
         <form onSubmit={confirm} className="space-y-3">
           <p className="text-sm text-muted">
@@ -187,7 +205,6 @@ function Enable2FAModal({ onClose, onDone }) {
           </div>
         </form>
       )}
-      {step === 'scan' && !data && <ErrorBanner message={error} />}
       {step === 'backup' && (
         <div className="space-y-3">
           <p className="text-sm font-semibold text-ink">Save your backup codes</p>
