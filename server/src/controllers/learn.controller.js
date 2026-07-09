@@ -59,7 +59,10 @@ export const generateSchema = z.object({
   // Accepted (and currently ignored server-side) so the client can send the
   // user's generation options; defaults are used until wired up.
   style: z.enum(['default', 'occlusion', 'cloze', 'qa']).optional(),
-  notes: z.array(z.string()).optional(),
+  // Source picker: which class materials to generate from.
+  notes: z.array(z.string().uuid()).optional(),
+  transcripts: z.array(z.string().uuid()).optional(),
+  files: z.array(z.string().uuid()).optional(),
 });
 
 

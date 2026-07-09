@@ -270,50 +270,42 @@ const CARD_STYLES = [
 ];
 
 function GenerateModal({ classId, onClose, onGenerated }) {
-  const [notes, setNotes] = useState(null); // null = loading
-  const [selected, setSelected] = useState(() => new Set());
+  const [sources, setSources] = useState(null); // { notes, transcripts, files } | null=loading
+  const [selNotes, setSelNotes] = useState(() => new Set());
+  const [selTx, setSelTx] = useState(() => new Set());
+  const [selFiles, setSelFiles] = useState(() => new Set());
   const [style, setStyle] = useState('default');
   const [quantity, setQuantity] = useState(20);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  // Load this class's notes so the user can pick which to generate from.
+  // Load every source this class can generate from: notes, transcripts, files.
   useEffect(() => {
     let active = true;
-    api
-      .get(`/api/classes/${classId}/notes`)
-      .then(({ data }) => {
-        if (!active) return;
-        setNotes(data.notes);
-        setSelected(new Set(data.notes.map((n) => n.id))); // all on by default
-      })
-      .catch(() => active && setNotes([]));
-    return () => {
-      active = false;
-    };
+    Promise.all([
+      api.get(`/api/classes/${classId}/notes`).then((r) => r.data.notes).catch(() => []),
+      api.get(`/api/classes/${classId}/transcripts`).then((r) => r.data.transcripts).catch(() => []),
+      api.get(`/api/classes/${classId}/files`).then((r) => r.data.files).catch(() => []),
+    ]).then(([notes, transcripts, files]) => {
+      if (!active) return;
+      setSources({ notes, transcripts, files });
+      setSelNotes(new Set(notes.map((n) => n.id))); // notes on by default
+    });
+    return () => { active = false; };
   }, [classId]);
 
-  const toggle = (id) =>
-    setSelected((s) => {
-      const next = new Set(s);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  const allSelected = notes && notes.length > 0 && selected.size === notes.length;
-  const toggleAll = () =>
-    setSelected(allSelected ? new Set() : new Set(notes.map((n) => n.id)));
+  const totalSelected = selNotes.size + selTx.size + selFiles.size;
 
   const go = async () => {
     setBusy(true);
     setErr('');
     try {
       const { data } = await api.post(`/api/learn/classes/${classId}/generate`, {
-        // count drives generation today; style + notes are passed for the
-        // backend to honor later (currently ignored server-side).
         count: Number(quantity),
-        quantity: Number(quantity),
         style,
-        notes: [...selected],
+        notes: [...selNotes],
+        transcripts: [...selTx],
+        files: [...selFiles],
       });
       onGenerated(data.cards.length);
     } catch (e) {
@@ -326,35 +318,17 @@ function GenerateModal({ classId, onClose, onGenerated }) {
     <Modal title="Generate flashcards with AI" onClose={onClose}>
       <div className="space-y-4">
         {err && <ErrorBanner message={err} />}
-        <p className="text-sm text-muted">Choose what to study from and how the cards should look.</p>
+        <p className="text-sm text-muted">Pick the sources to generate from — notes, transcripts, and files.</p>
 
-        {/* Which notes */}
-        <div>
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-sm font-semibold text-ink">Notes to include</span>
-            {notes?.length > 0 && (
-              <button type="button" onClick={toggleAll} className="text-xs font-semibold text-brand-600 hover:underline">
-                {allSelected ? 'Clear all' : 'Select all'}
-              </button>
-            )}
+        {sources === null ? (
+          <p className="text-sm text-muted">Loading sources…</p>
+        ) : (
+          <div className="space-y-3">
+            <SourceGroup label="Notes" items={sources.notes} nameKey="title" selected={selNotes} setSelected={setSelNotes} />
+            <SourceGroup label="Transcripts" items={sources.transcripts} nameKey="title" selected={selTx} setSelected={setSelTx} />
+            <SourceGroup label="Files" items={sources.files} nameKey="filename" selected={selFiles} setSelected={setSelFiles} />
           </div>
-          {notes === null ? (
-            <p className="text-sm text-muted">Loading notes…</p>
-          ) : notes.length === 0 ? (
-            <p className="rounded-xl border border-white/60 bg-white/40 px-3 py-2 text-sm text-muted">
-              No notes yet — Claude will use this class's transcripts.
-            </p>
-          ) : (
-            <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-xl border border-white/60 bg-white/40 p-1.5">
-              {notes.map((n) => (
-                <label key={n.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-white/60">
-                  <input type="checkbox" checked={selected.has(n.id)} onChange={() => toggle(n.id)} className="h-4 w-4 accent-brand-500" />
-                  <span className="truncate text-ink">{n.title?.trim() || 'Untitled note'}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Card style */}
         <Labeled label="Card style">
@@ -389,10 +363,62 @@ function GenerateModal({ classId, onClose, onGenerated }) {
 
         <div className="flex justify-end gap-2 pt-1">
           <button className="btn btn-soft" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={busy} onClick={go}>{busy ? 'Generating…' : 'Generate'}</button>
+          <button
+            className="btn btn-primary"
+            disabled={busy || totalSelected === 0}
+            title={totalSelected === 0 ? 'Pick at least one source' : undefined}
+            onClick={go}
+          >
+            {busy ? 'Generating…' : 'Generate'}
+          </button>
         </div>
       </div>
     </Modal>
+  );
+}
+
+/** One collapsible source group (Notes / Transcripts / Files) with select-all. */
+function SourceGroup({ label, items, nameKey, selected, setSelected }) {
+  const allOn = items.length > 0 && items.every((i) => selected.has(i.id));
+  const toggle = (id) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (allOn) items.forEach((i) => next.delete(i.id));
+      else items.forEach((i) => next.add(i.id));
+      return next;
+    });
+
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between">
+        <span className="text-sm font-semibold text-ink">
+          {label} <span className="text-xs font-medium text-muted">({items.length})</span>
+        </span>
+        {items.length > 0 && (
+          <button type="button" onClick={toggleAll} className="text-xs font-semibold text-brand-600 hover:underline">
+            {allOn ? 'Clear' : 'Select all'}
+          </button>
+        )}
+      </div>
+      {items.length === 0 ? (
+        <p className="rounded-xl border border-white/60 bg-white/40 px-3 py-2 text-xs text-muted">No {label.toLowerCase()} yet.</p>
+      ) : (
+        <div className="max-h-32 space-y-0.5 overflow-y-auto rounded-xl border border-white/60 bg-white/40 p-1.5">
+          {items.map((i) => (
+            <label key={i.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition hover:bg-white/60">
+              <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggle(i.id)} className="h-4 w-4 accent-brand-500" />
+              <span className="truncate text-ink">{i[nameKey]?.trim() || `Untitled ${label.toLowerCase()}`}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

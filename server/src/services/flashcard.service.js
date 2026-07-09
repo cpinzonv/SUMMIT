@@ -12,6 +12,8 @@ import { query } from '../config/db.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
+import { fileContentBlocks } from './syllabus.service.js';
+import { getFileForDownload } from './file.service.js';
 
 let client;
 function getClient() {
@@ -389,7 +391,7 @@ async function gatherContext(userId, classId, sourceType) {
  * Call Claude for one context block and insert the resulting cards, optionally
  * filed under a deck and attributed to a source note. Returns the created cards.
  */
-async function generateIntoDeck(userId, classId, cls, context, count, { deckId = null, sourceId = null, sourceType = null } = {}) {
+async function generateIntoDeck(userId, classId, cls, context, count, { deckId = null, sourceId = null, sourceType = null, fileBlocks = [] } = {}) {
   const n = Math.min(Math.max(count, 1), 100);
   const system =
     `You are an expert flashcard author for a student's "${cls.name}" class. Using ONLY the ` +
@@ -408,7 +410,16 @@ async function generateIntoDeck(userId, classId, cls, context, count, { deckId =
       max_tokens: 4096,
       output_config: { format: { type: 'json_schema', schema: cardsSchema } },
       system,
-      messages: [{ role: 'user', content: `Generate the cards now (max ${n}), mixing formats appropriately.` }],
+      // Attach any file blocks (PDF/image/DOCX-text) so Claude reads the files
+      // directly alongside the text material.
+      messages: [
+        {
+          role: 'user',
+          content: fileBlocks.length
+            ? [...fileBlocks, { type: 'text', text: `Generate the cards now (max ${n}), mixing formats appropriately.` }]
+            : `Generate the cards now (max ${n}), mixing formats appropriately.`,
+        },
+      ],
     });
   } catch (err) {
     if (err instanceof AppError) throw err;
@@ -458,14 +469,86 @@ async function generateIntoDeck(userId, classId, cls, context, count, { deckId =
   return created;
 }
 
+/** Find (or create) a plain deck by name for combined multi-source generation. */
+async function getOrCreateNamedDeck(userId, classId, name) {
+  const found = await query(
+    'SELECT id FROM decks WHERE class_id = $1 AND user_id = $2 AND name = $3 AND source_note_id IS NULL LIMIT 1',
+    [classId, userId, name],
+  );
+  if (found.rows[0]) return found.rows[0].id;
+  const { rows } = await query('INSERT INTO decks (class_id, user_id, name) VALUES ($1, $2, $3) RETURNING id', [classId, userId, name]);
+  return rows[0].id;
+}
+
+/** Concatenate selected transcripts' text into a context string. */
+async function gatherTranscriptText(classId, ids) {
+  if (!ids.length) return '';
+  const { rows } = await query('SELECT title, content FROM transcripts WHERE class_id = $1 AND id = ANY($2::uuid[])', [classId, ids]);
+  return rows.filter((t) => t.content?.trim()).map((t) => `## Transcript: ${t.title}\n${t.content.trim()}`).join('\n\n');
+}
+
+/** Build Claude content blocks for selected class files (owner-scoped). */
+async function gatherFileBlocks(userId, ids) {
+  const blocks = [];
+  for (const id of ids) {
+    try {
+      const f = await getFileForDownload(userId, id); // { filename, mimeType, buffer }
+      const b = await fileContentBlocks({ buffer: f.buffer, mimetype: f.mimeType }, { label: f.filename });
+      blocks.push(...b);
+    } catch {
+      /* unreadable/foreign file → skip */
+    }
+  }
+  return blocks;
+}
+
 /**
- * Generate flashcards for a class. When `notes` (note IDs) are provided, cards
- * are generated per note and filed under a deck named after each note;
- * otherwise a single combined generation runs (no deck).
+ * Generate flashcards for a class from selected sources.
+ *   - `notes` only (no transcripts/files): per-note decks (a deck per note).
+ *   - any `transcripts`/`files` selected: one combined generation (notes text +
+ *     transcript text + the files read directly by Claude) into a single deck.
+ *   - nothing selected: fall back to all of the class's notes + transcripts.
  */
-export async function generateCards(userId, classId, { count = 15, sourceType = null, notes = null } = {}) {
+export async function generateCards(
+  userId,
+  classId,
+  { count = 15, sourceType = null, notes = null, transcripts = null, files = null } = {},
+) {
   const cls = await getOwnedClass(userId, classId);
   const noteIds = Array.isArray(notes) ? notes.filter(Boolean) : [];
+  const transcriptIds = Array.isArray(transcripts) ? transcripts.filter(Boolean) : [];
+  const fileIds = Array.isArray(files) ? files.filter(Boolean) : [];
+
+  // Combined path: transcripts and/or files are in play (optionally with notes).
+  if (transcriptIds.length || fileIds.length) {
+    let context = '';
+    if (noteIds.length) {
+      const { rows } = await query(
+        'SELECT title, content FROM notes WHERE class_id = $1 AND id = ANY($2::uuid[]) AND archived_at IS NULL',
+        [classId, noteIds],
+      );
+      for (const n of rows) {
+        const text = htmlToText(n.content);
+        if (text) context += `\n\n## Note: ${n.title}\n${text}`;
+      }
+    }
+    const tText = await gatherTranscriptText(classId, transcriptIds);
+    if (tText) context += `\n\n${tText}`;
+    const fileBlocks = await gatherFileBlocks(userId, fileIds);
+    if (!context.trim() && !fileBlocks.length) {
+      throw new AppError(400, 'The selected sources have no readable content to generate from.', { code: 'no_material' });
+    }
+    const deckId = await getOrCreateNamedDeck(userId, classId, 'Generated cards');
+    const dominant = fileBlocks.length ? 'file' : transcriptIds.length ? 'transcript' : 'note';
+    return generateIntoDeck(
+      userId,
+      classId,
+      cls,
+      (context.trim() || '(The study material is in the attached file(s).)').slice(0, MAX_CONTEXT_CHARS),
+      count,
+      { deckId, sourceType: dominant, fileBlocks },
+    );
+  }
 
   if (noteIds.length) {
     const { rows: noteRows } = await query(
