@@ -272,8 +272,20 @@ export default function ClassDetailPage() {
                 ))}
               </div>
             )}
-            <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
+            {/* Desktop: full label. Mobile: a compact circular gradient "+". */}
+            <button
+              onClick={() => setModal({ type: 'assignment' })}
+              className="btn btn-primary hidden sm:inline-flex"
+            >
               + Add assignment
+            </button>
+            <button
+              onClick={() => setModal({ type: 'assignment' })}
+              aria-label="Add assignment"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-2xl leading-none text-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg sm:hidden"
+              style={{ backgroundImage: 'var(--grad-teal-purple)' }}
+            >
+              +
             </button>
           </div>
         </div>
