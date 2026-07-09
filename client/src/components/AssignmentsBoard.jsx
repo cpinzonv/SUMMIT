@@ -141,9 +141,10 @@ function Card({ a, dragging, onOpen, onDragStart, onDragEnd }) {
         {!a.dueDate ? (
           <span className="text-[11px] text-muted">No due date</span>
         ) : done ? (
-          // Done: a calm gray note — flags a late finish without the red stress.
-          <span className="text-[11px] text-muted">
-            {lateBy > 0 ? `Completed ${lateBy} day${lateBy === 1 ? '' : 's'} after due date` : `Due ${fmtDue(a.dueDate)}`}
+          // Done: no countdown/overdue — just "✓ Done", plus a calm gray late note.
+          <span className="text-[11px]">
+            <span className="font-semibold text-emerald-600">✓ Done</span>
+            {lateBy > 0 && <span className="text-muted"> · completed {lateBy} day{lateBy === 1 ? '' : 's'} late</span>}
           </span>
         ) : overdue ? (
           <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">{ds.lateLabel}</span>

@@ -323,9 +323,11 @@ export default function ClassDetailPage() {
                     </td>
                     <td className="px-5 py-3 text-slate-600">
                       {fmtDate(a.dueDate)}
-                      {st.hasDue && !isDone(a) && !overdue && (
+                      {isDone(a) ? (
+                        <div className="text-[11px] font-semibold text-emerald-600">✓ Done</div>
+                      ) : st.hasDue && !overdue ? (
                         <div className={`text-[11px] font-semibold ${countdownTone(st)}`}>{st.countdownLabel}</div>
-                      )}
+                      ) : null}
                     </td>
                     <td className="px-5 py-3 text-muted">{fmtDate(a.plannedDate)}</td>
                     <td className="px-5 py-3 text-muted">{a.pointValue ?? '—'}</td>

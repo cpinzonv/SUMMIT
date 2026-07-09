@@ -38,6 +38,7 @@ export function dueStatus(dueDate, now = new Date()) {
  *  graded, or it already has a grade. Used by past-due + planned-date features. */
 export function isDone(assignment) {
   return (
+    assignment?.stage === 'done' || // Kanban board "Done" column
     assignment?.status === 'submitted' ||
     assignment?.status === 'graded' ||
     assignment?.status === 'completed' ||

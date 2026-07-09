@@ -629,8 +629,12 @@ function MonthChip({ ev, act, dnd }) {
           : { backgroundImage: ev.gradient, opacity: isDragging ? 0.4 : isDue ? 1 : 0.42 }
       }
     >
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ev.glass ? '' : 'ring-1 ring-white/70'} ${eventDot(ev)}`} />
-      <span className="truncate">{ev.a.title}</span>
+      {isDone(ev.a) ? (
+        <span className="shrink-0 font-bold" title="Done">✓</span>
+      ) : (
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ev.glass ? '' : 'ring-1 ring-white/70'} ${eventDot(ev)}`} />
+      )}
+      <span className={`truncate ${isDone(ev.a) ? 'line-through opacity-75' : ''}`}>{ev.a.title}</span>
     </button>
   );
 }
@@ -706,13 +710,17 @@ function EventRow({ ev, act, dnd }) {
       title={`${ev.a.title} — ${ev.cls.name} (${isDue ? 'due' : 'planned'}${hoursHint})`}
       className={`flex w-full items-center gap-2 rounded-lg border border-white/50 bg-white/45 px-2 py-1.5 text-left transition hover:bg-white/75 ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${isDragging ? 'opacity-40 shadow-lg ring-2 ring-brand-400/50' : ''}`}
     >
-      <span className={`h-2 w-2 shrink-0 rounded-full ${eventDot(ev)}`} />
+      {isDone(ev.a) ? (
+        <span className="shrink-0 text-sm font-bold text-emerald-600" title="Done">✓</span>
+      ) : (
+        <span className={`h-2 w-2 shrink-0 rounded-full ${eventDot(ev)}`} />
+      )}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-semibold text-ink">{ev.a.title}</span>
+        <span className={`block truncate text-xs font-semibold ${isDone(ev.a) ? 'text-muted line-through' : 'text-ink'}`}>{ev.a.title}</span>
         <span className="block truncate text-[10px] text-muted">{ev.cls.code || ev.cls.name}</span>
       </span>
-      <span className={`shrink-0 text-[9px] font-semibold uppercase ${isDue ? 'text-brand-600' : 'text-muted'}`}>
-        {isDue ? 'due' : 'plan'}
+      <span className={`shrink-0 text-[9px] font-semibold uppercase ${isDone(ev.a) ? 'text-emerald-600' : isDue ? 'text-brand-600' : 'text-muted'}`}>
+        {isDone(ev.a) ? 'done' : isDue ? 'due' : 'plan'}
       </span>
     </button>
   );
@@ -752,11 +760,15 @@ function DayRow({ ev, act }) {
       onDoubleClick={() => act.edit(ev)}
       className="flex w-full items-center gap-3 rounded-xl border border-white/50 bg-white/45 px-4 py-3 text-left transition hover:bg-white/75"
     >
-      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_DOT[p]}`} />
+      {isDone(ev.a) ? (
+        <span className="shrink-0 text-base font-bold text-emerald-600" title="Done">✓</span>
+      ) : (
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_DOT[p]}`} />
+      )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate font-semibold text-ink">{ev.a.title}</span>
-          {p !== 'none' && (
+          <span className={`truncate font-semibold ${isDone(ev.a) ? 'text-muted line-through' : 'text-ink'}`}>{ev.a.title}</span>
+          {!isDone(ev.a) && p !== 'none' && (
             <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold uppercase text-muted">
               {PRIORITY_LABEL[p]}
             </span>
@@ -767,8 +779,8 @@ function DayRow({ ev, act }) {
           {ev.cls.code ? ` · ${ev.cls.code}` : ''}
         </div>
       </div>
-      <span className={`shrink-0 text-xs font-semibold ${isDue ? 'text-brand-600' : 'text-muted'}`}>
-        {isDue ? 'Due' : 'Planned'}
+      <span className={`shrink-0 text-xs font-semibold ${isDone(ev.a) ? 'text-emerald-600' : isDue ? 'text-brand-600' : 'text-muted'}`}>
+        {isDone(ev.a) ? 'Done' : isDue ? 'Due' : 'Planned'}
       </span>
     </button>
   );
@@ -816,7 +828,8 @@ function EventModal({ ev, onClose }) {
               {fmtDateTime(a.dueDate)}
               {(() => {
                 const st = dueStatus(a.dueDate);
-                if (!st.hasDue || isDone(a)) return null;
+                if (isDone(a)) return <span className="text-xs font-bold text-emerald-600">✓ Done</span>;
+                if (!st.hasDue) return null;
                 return (
                   <span className={`text-xs font-bold ${st.isPastDue ? 'text-rose-600' : 'text-muted'}`}>
                     ({st.isPastDue ? st.lateLabel : st.countdownLabel})
