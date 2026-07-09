@@ -10,7 +10,6 @@ import SettingsGraduationSection from '../components/SettingsGraduationSection';
 const TABS = [
   { key: 'account', label: 'Account' },
   { key: 'preferences', label: 'Preferences' },
-  { key: 'appearance', label: 'Appearance' },
   { key: 'display', label: 'Display' },
 ];
 
@@ -45,7 +44,6 @@ export default function SettingsPage() {
 
       {tab === 'account' && <AccountTab user={user} />}
       {tab === 'preferences' && <PreferencesTab prefs={preferences} set={set} />}
-      {tab === 'appearance' && <AppearanceTab prefs={preferences} set={set} />}
       {tab === 'display' && <DisplayTab prefs={preferences} set={set} />}
     </div>
   );
@@ -1211,19 +1209,20 @@ function CanvasAdminConfig() {
   );
 }
 
-/* ---- Appearance (color themes) ----------------------------------------- */
+/* ---- Color theme picker (lives in the Display tab) --------------------- */
 const THEMES = [
-  { value: 'default', label: 'Default', sub: 'Coral / Teal', swatches: ['#ff8a4c', '#ff6f73', '#4f9fd6', '#3fb1b8'], grad: 'linear-gradient(135deg, #ff8a4c 0%, #ff6f73 45%, #4f9fd6 100%)' },
-  { value: 'ocean', label: 'Ocean Blue', sub: 'Deep sea', swatches: ['#011C40', '#023859', '#26658C', '#54ACBF', '#A7EBF2'], grad: 'linear-gradient(135deg, #011c40 0%, #26658c 50%, #54acbf 100%)' },
-  { value: 'forest', label: 'Forest Green', sub: 'Woodland', swatches: ['#051F20', '#0B2B26', '#163B32', '#235367', '#8EB69B', '#DAF1DE'], grad: 'linear-gradient(135deg, #051f20 0%, #235367 50%, #8eb69b 100%)' },
-  { value: 'sunset', label: 'Sunset Orange', sub: 'Warm dusk', swatches: ['#951A21', '#BF2C20', '#D55123', '#E47A24', '#7A6B5E'], grad: 'linear-gradient(135deg, #951a21 0%, #d55123 50%, #e47a24 100%)' },
+  { value: 'default', label: 'Default', sub: 'Coral / Teal', grad: 'linear-gradient(135deg, #ff8a4c 0%, #ff6f73 45%, #4f9fd6 100%)' },
+  { value: 'ocean', label: 'Ocean Blue', sub: 'Deep sea', grad: 'linear-gradient(135deg, #011c40 0%, #26658c 50%, #54acbf 100%)' },
+  { value: 'forest', label: 'Forest Green', sub: 'Woodland', grad: 'linear-gradient(135deg, #051f20 0%, #235367 50%, #8eb69b 100%)' },
+  { value: 'sunset', label: 'Sunset Orange', sub: 'Warm dusk', grad: 'linear-gradient(135deg, #951a21 0%, #d55123 50%, #e47a24 100%)' },
 ];
 
-function AppearanceTab({ prefs, set }) {
+function ThemePicker({ prefs, set }) {
   const current = prefs.colorScheme || 'default';
   return (
-    <Section title="Theme" description="Pick a color palette — applied instantly across the app.">
-      <div role="radiogroup" aria-label="Color theme" className="grid gap-3 sm:grid-cols-2">
+    <div className="border-b border-white/40 py-3">
+      <div className="mb-2.5 text-sm font-semibold text-ink">Color theme</div>
+      <div role="radiogroup" aria-label="Color theme" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {THEMES.map((t) => {
           const active = current === t.value;
           return (
@@ -1232,29 +1231,24 @@ function AppearanceTab({ prefs, set }) {
               type="button"
               role="radio"
               aria-checked={active}
+              title={t.sub}
               onClick={() => set('colorScheme')(t.value)}
-              className={`flex items-center gap-3 rounded-2xl border p-3 text-left transition ${
-                active ? 'border-brand-400 bg-white/70 ring-2 ring-brand-400' : 'border-white/50 bg-white/40 hover:bg-white/60'
+              className={`relative flex flex-col items-center gap-1.5 rounded-2xl border p-2.5 transition ${
+                active ? 'border-brand-400 bg-white/70 ring-2 ring-brand-400' : 'border-white/50 bg-white/40 hover:-translate-y-0.5 hover:bg-white/70'
               }`}
             >
-              <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full border-2" style={{ borderColor: active ? 'var(--color-brand-500)' : '#cbd5e1' }}>
-                {active && <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundImage: t.grad }} />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-bold text-ink">{t.label}</span>
-                <span className="block text-xs text-muted">{t.sub}</span>
-                <span className="mt-1.5 flex gap-1">
-                  {t.swatches.map((c) => (
-                    <span key={c} className="h-4 w-4 rounded-full ring-1 ring-black/10" style={{ backgroundColor: c }} />
-                  ))}
+              <span className="h-10 w-full rounded-lg shadow-sm" style={{ backgroundImage: t.grad }} />
+              <span className="text-[11px] font-semibold text-ink">{t.label}</span>
+              {active && (
+                <span className="absolute right-1.5 top-1.5 grid h-4 w-4 place-items-center rounded-full bg-white text-[10px] font-bold shadow" style={{ color: 'var(--color-brand-600)' }}>
+                  ✓
                 </span>
-              </span>
-              <span className="h-11 w-11 shrink-0 rounded-xl shadow-sm" style={{ backgroundImage: t.grad }} />
+              )}
             </button>
           );
         })}
       </div>
-    </Section>
+    </div>
   );
 }
 
@@ -1270,6 +1264,7 @@ function DisplayTab({ prefs, set }) {
             <option value="auto">Auto (system)</option>
           </select>
         </Row>
+        <ThemePicker prefs={prefs} set={set} />
         <Row label="Font size">
           <RadioGroup
             name="fontsize"
