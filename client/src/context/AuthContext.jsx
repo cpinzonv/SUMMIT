@@ -28,6 +28,7 @@ const DEFAULT_PREFS = {
   notificationsEnabled: false,
   showArchived: false,
   boardExtraColumns: false, // show Backlog + Planning columns on the Kanban boards
+  hidePlanner: false, // hide the Planner tab from the nav
 };
 
 /** Apply visual preferences (theme/font/compact) to the document root. */
