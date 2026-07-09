@@ -366,6 +366,16 @@
     color: var(--color-ink);
     line-height: 1.6;
   }
+  /* Handwritten drawings inserted into a note. */
+  .note-prose .note-image,
+  .note-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0.5rem 0;
+    border-radius: 12px;
+    border: 1px solid var(--note-border, rgba(0, 0, 0, 0.08));
+  }
   .note-prose h1,
   .note-prose h2,
   .note-prose h3 {

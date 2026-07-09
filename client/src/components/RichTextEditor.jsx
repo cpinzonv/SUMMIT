@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { renderMarkdown } from '../utils/markdown';
 import { MathInline } from '../lib/mathExtension';
+import { NoteImage } from '../lib/imageExtension';
+import { HandwritingCanvas } from './HandwritingCanvas';
 
 // Legacy notes were stored as Markdown; new ones are HTML. If the content has
 // no HTML tags, treat it as Markdown and convert so it loads formatted.
@@ -21,11 +24,14 @@ export function RichTextEditor({ value, onChange, fullHeight = false }) {
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
       MathInline,
+      NoteImage,
     ],
     content: toHtml(value),
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
     editorProps: { attributes: { class: 'note-prose focus:outline-none' } },
   });
+
+  const [drawing, setDrawing] = useState(false);
 
   if (!editor) return null;
 
@@ -55,10 +61,21 @@ export function RichTextEditor({ value, onChange, fullHeight = false }) {
         >
           ∑ Math
         </ToolBtn>
+        <ToolBtn onClick={() => setDrawing(true)} title="Handwrite / draw">✍️ Draw</ToolBtn>
       </div>
       <div className={`note-editor ${fullHeight ? 'note-editor--full min-h-0 flex-1' : ''}`}>
         <EditorContent editor={editor} className={fullHeight ? 'h-full' : ''} />
       </div>
+
+      {drawing && (
+        <HandwritingCanvas
+          onClose={() => setDrawing(false)}
+          onSave={(dataUrl) => {
+            editor.chain().focus().setImage({ src: dataUrl }).run();
+            setDrawing(false);
+          }}
+        />
+      )}
     </div>
   );
 }
