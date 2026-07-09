@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Spinner, ErrorBanner } from '../ui';
+import { Spinner, ErrorBanner, KebabMenu, ConfirmModal } from '../ui';
 import { EmptyHero, GuideIllustration } from '../EmptyHero';
 import { renderMarkdown } from '../../utils/markdown';
 
@@ -11,6 +11,19 @@ export function GuideTab({ classId, flash }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [activeId, setActiveId] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const del = async () => {
+    const guide = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/api/learn/guides/${guide.id}`);
+      flash('Study guide deleted');
+      load();
+    } catch (e) {
+      flash(errorMessage(e), 'error');
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,15 +73,27 @@ export function GuideTab({ classId, flash }) {
       ) : (
         <div className="space-y-2">
           {guides.map((g) => (
-            <button key={g.id} onClick={() => setActiveId(g.id)} className="glass-panel flex w-full items-center justify-between p-4 text-left transition hover:shadow-md">
-              <div>
-                <p className="font-semibold text-ink">{g.bookmarked ? '★ ' : ''}{g.title}</p>
-                <p className="text-xs text-muted">{g.readAt ? 'Read' : 'Unread'} · {new Date(g.generatedAt).toLocaleDateString()}</p>
-              </div>
-              <span className="text-sm font-semibold text-brand-600">Open →</span>
-            </button>
+            <div key={g.id} className="glass-panel flex w-full items-center gap-2 p-4 transition hover:shadow-md">
+              <button onClick={() => setActiveId(g.id)} className="flex min-w-0 flex-1 items-center justify-between text-left">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink">{g.bookmarked ? '★ ' : ''}{g.title}</p>
+                  <p className="text-xs text-muted">{g.readAt ? 'Read' : 'Unread'} · {new Date(g.generatedAt).toLocaleDateString()}</p>
+                </div>
+                <span className="ml-2 shrink-0 text-sm font-semibold text-brand-600">Open →</span>
+              </button>
+              <KebabMenu onDelete={() => setConfirmDelete(g)} />
+            </div>
           ))}
         </div>
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete study guide?"
+          message="This permanently deletes the guide. This can’t be undone."
+          detail={confirmDelete.title}
+          onConfirm={del}
+          onClose={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   );

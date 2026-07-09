@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Modal, Spinner, ErrorBanner } from '../ui';
+import { Modal, Spinner, ErrorBanner, KebabMenu, ConfirmModal } from '../ui';
 import { EmptyHero, QuizIllustration } from '../EmptyHero';
 import { Labeled } from './common';
 import { printHtml } from '../../lib/learnExport';
@@ -12,6 +12,19 @@ export function QuizTab({ classId, flash }) {
   const [error, setError] = useState('');
   const [generating, setGenerating] = useState(false);
   const [activeQuizId, setActiveQuizId] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const del = async () => {
+    const quiz = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/api/learn/quizzes/${quiz.id}`);
+      flash('Quiz deleted');
+      load();
+    } catch (e) {
+      flash(errorMessage(e), 'error');
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,19 +62,31 @@ export function QuizTab({ classId, flash }) {
       ) : (
         <div className="space-y-2">
           {quizzes.map((q) => (
-            <button key={q.id} onClick={() => setActiveQuizId(q.id)} className="glass-panel flex w-full items-center justify-between p-4 text-left transition hover:shadow-md">
-              <div>
-                <p className="font-semibold text-ink">{q.title}</p>
-                <p className="text-xs text-muted">{q.questionCount} questions{q.attemptedAt ? ` · last score ${q.score}%` : ' · not attempted'}</p>
-              </div>
-              <span className="text-sm font-semibold text-brand-600">{q.attemptedAt ? 'Retake →' : 'Start →'}</span>
-            </button>
+            <div key={q.id} className="glass-panel flex w-full items-center gap-2 p-4 transition hover:shadow-md">
+              <button onClick={() => setActiveQuizId(q.id)} className="flex min-w-0 flex-1 items-center justify-between text-left">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-ink">{q.title}</p>
+                  <p className="text-xs text-muted">{q.questionCount} questions{q.attemptedAt ? ` · last score ${q.score}%` : ' · not attempted'}</p>
+                </div>
+                <span className="ml-2 shrink-0 text-sm font-semibold text-brand-600">{q.attemptedAt ? 'Retake →' : 'Start →'}</span>
+              </button>
+              <KebabMenu onDelete={() => setConfirmDelete(q)} />
+            </div>
           ))}
         </div>
       )}
       {generating && (
         <GenerateQuizModal classId={classId} onClose={() => setGenerating(false)}
           onGenerated={(id) => { setGenerating(false); flash('Quiz generated'); setActiveQuizId(id); }} />
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete quiz?"
+          message="This permanently deletes the quiz and its attempts. This can’t be undone."
+          detail={confirmDelete.title}
+          onConfirm={del}
+          onClose={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   );

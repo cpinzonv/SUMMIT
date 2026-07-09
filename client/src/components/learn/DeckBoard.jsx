@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Modal } from '../ui';
+import { KebabMenu, ConfirmModal } from '../ui';
 
 /**
  * GoodNotes-style hierarchical decks. A clean grid of deck cards (name + count +
@@ -13,6 +13,7 @@ export function DeckBoard({ decks, cards, onStudy, onEditCard, onChanged, onRena
   const [dragCardId, setDragCardId] = useState(null);
   const [overDeck, setOverDeck] = useState(null);
   const [confirmCard, setConfirmCard] = useState(null); // card pending delete-confirm
+  const [confirmDeck, setConfirmDeck] = useState(null); // deck pending delete-confirm
 
   // A virtual "Unsorted" deck for cards with no deck, so they're still reachable.
   const unsorted = cards.filter((c) => !c.deckId);
@@ -45,6 +46,17 @@ export function DeckBoard({ decks, cards, onStudy, onEditCard, onChanged, onRena
     } catch (e) { flash(errorMessage(e), 'error'); }
   };
 
+  const doDeleteDeck = async () => {
+    const deck = confirmDeck;
+    setConfirmDeck(null);
+    try {
+      await api.delete(`/api/learn/decks/${deck.id}`);
+      flash('Deck deleted');
+      if (expanded === deck.id) setExpanded(null);
+      onChanged();
+    } catch (e) { flash(errorMessage(e), 'error'); }
+  };
+
   return (
     <div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -56,6 +68,7 @@ export function DeckBoard({ decks, cards, onStudy, onEditCard, onChanged, onRena
             dropActive={overDeck === d.id && dragCardId != null}
             onOpen={() => setExpanded((e) => (e === d.id ? null : d.id))}
             onRename={d.virtual ? null : onRenameDeck}
+            onDelete={d.virtual ? null : () => setConfirmDeck(d)}
             onDragOver={(e) => { if (dragCardId) { e.preventDefault(); if (overDeck !== d.id) setOverDeck(d.id); } }}
             onDragLeave={() => setOverDeck((o) => (o === d.id ? null : o))}
             onDrop={(e) => { e.preventDefault(); const id = dragCardId || e.dataTransfer.getData('card'); setOverDeck(null); move(id, d.id); }}
@@ -94,14 +107,22 @@ export function DeckBoard({ decks, cards, onStudy, onEditCard, onChanged, onRena
       )}
 
       {confirmCard && (
-        <Modal title="Delete card?" onClose={() => setConfirmCard(null)}>
-          <p className="text-sm text-muted">This permanently deletes the card and its review history. This can’t be undone.</p>
-          <p className="mt-2 rounded-lg bg-white/50 p-3 text-sm font-medium text-ink">{confirmCard.question}</p>
-          <div className="mt-4 flex justify-end gap-2">
-            <button className="btn btn-soft" onClick={() => setConfirmCard(null)}>Cancel</button>
-            <button className="btn btn-danger" onClick={doDelete}>Delete</button>
-          </div>
-        </Modal>
+        <ConfirmModal
+          title="Delete card?"
+          message="This permanently deletes the card and its review history. This can’t be undone."
+          detail={confirmCard.question}
+          onConfirm={doDelete}
+          onClose={() => setConfirmCard(null)}
+        />
+      )}
+      {confirmDeck && (
+        <ConfirmModal
+          title="Delete deck?"
+          message={`This removes the deck and its ${confirmDeck.cardCount} card${confirmDeck.cardCount === 1 ? '' : 's'}. This can’t be undone.`}
+          detail={confirmDeck.name}
+          onConfirm={doDeleteDeck}
+          onClose={() => setConfirmDeck(null)}
+        />
       )}
     </div>
   );
@@ -115,7 +136,7 @@ function aggregate(cards) {
 }
 
 /* ---- Deck card (grid item, drop target) -------------------------------- */
-function DeckCard({ deck, expanded, dropActive, onOpen, onRename, onDragOver, onDragLeave, onDrop }) {
+function DeckCard({ deck, expanded, dropActive, onOpen, onRename, onDelete, onDragOver, onDragLeave, onDrop }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(deck.name);
   const inputRef = useRef(null);
@@ -128,16 +149,28 @@ function DeckCard({ deck, expanded, dropActive, onOpen, onRename, onDragOver, on
   };
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={() => !editing && onOpen()}
+      onKeyDown={(e) => { if (!editing && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(); } }}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className={`glass-card flex flex-col p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
+      className={`glass-card relative flex cursor-pointer flex-col p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${
         expanded ? 'ring-2 ring-brand-400' : ''
       } ${dropActive ? 'ring-2 ring-brand-500 bg-white/70' : ''}`}
     >
+      {/* ⋮ menu (real decks only) — Edit renames inline, Delete removes deck + cards. */}
+      {onDelete && (
+        <div className="absolute right-1.5 top-1.5">
+          <KebabMenu
+            onEdit={onRename ? () => { setDraft(deck.name); setEditing(true); } : undefined}
+            onDelete={onDelete}
+          />
+        </div>
+      )}
+
       {editing ? (
         <input
           ref={inputRef}
@@ -150,13 +183,7 @@ function DeckCard({ deck, expanded, dropActive, onOpen, onRename, onDragOver, on
           className="w-full rounded-lg border border-brand-300 bg-white/90 px-2 py-1 text-sm font-semibold text-ink outline-none"
         />
       ) : (
-        <span
-          className="line-clamp-2 font-display text-sm font-bold text-ink"
-          onDoubleClick={onRename ? (e) => { e.stopPropagation(); setDraft(deck.name); setEditing(true); } : undefined}
-          title={onRename ? 'Double-click to rename' : undefined}
-        >
-          {deck.name}
-        </span>
+        <span className="line-clamp-2 pr-7 font-display text-sm font-bold text-ink">{deck.name}</span>
       )}
       <span className="mt-0.5 text-xs font-medium text-muted">{deck.cardCount} card{deck.cardCount === 1 ? '' : 's'}</span>
 
@@ -165,7 +192,7 @@ function DeckCard({ deck, expanded, dropActive, onOpen, onRename, onDragOver, on
         <ProgressBar percent={deck.avgMastery ?? 0} />
         <div className="mt-1 text-[11px] text-muted">{deck.studiedCount ?? 0} of {deck.cardCount} studied</div>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -187,7 +214,7 @@ function CardRow({ card, dragging, onDragStart, onDragEnd, onEdit, onDelete }) {
           <span className="w-9 shrink-0 text-right text-[11px] font-semibold text-muted">{pct}%</span>
         </div>
       </div>
-      <CardMenu onEdit={onEdit} onDelete={onDelete} />
+      <KebabMenu onEdit={onEdit} onDelete={onDelete} />
     </div>
   );
 }
@@ -196,39 +223,6 @@ function ProgressBar({ percent, className = '' }) {
   return (
     <div className={`h-1.5 overflow-hidden rounded-full bg-white/55 ${className}`}>
       <div className="h-full rounded-full transition-all" style={{ width: `${Math.max(0, Math.min(100, percent))}%`, backgroundImage: 'var(--grad-teal-purple)' }} />
-    </div>
-  );
-}
-
-/* ---- ⋮ menu (Edit · Delete) -------------------------------------------- */
-function CardMenu({ onEdit, onDelete }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
-    const onKey = (e) => e.key === 'Escape' && setOpen(false);
-    window.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
-  }, [open]);
-  const pick = (fn) => () => { setOpen(false); fn(); };
-  return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-label="Card options"
-        className="grid h-8 w-8 place-items-center rounded-full text-lg leading-none text-muted transition hover:bg-white/70 hover:text-ink"
-      >
-        ⋮
-      </button>
-      {open && (
-        <div role="menu" className="glass-panel absolute right-0 z-20 mt-1 w-32 p-1.5 text-sm shadow-xl">
-          <button type="button" role="menuitem" onClick={pick(onEdit)} className="menu-item"><span>✎</span> Edit</button>
-          <button type="button" role="menuitem" onClick={pick(onDelete)} className="menu-item text-rose-600"><span>🗑</span> Delete</button>
-        </div>
-      )}
     </div>
   );
 }

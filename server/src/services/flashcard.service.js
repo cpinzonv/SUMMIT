@@ -8,7 +8,7 @@
  * Learn formats (quizzes/guides/maps/podcasts) are deferred.
  */
 import Anthropic from '@anthropic-ai/sdk';
-import { query } from '../config/db.js';
+import { query, withTransaction } from '../config/db.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
@@ -287,6 +287,20 @@ export async function updateDeck(userId, deckId, { name }) {
   );
   if (!rows[0]) throw AppError.notFound('Deck not found');
   return { id: rows[0].id, name: rows[0].name };
+}
+
+/**
+ * Delete a deck AND its cards (owner-scoped). The flashcards→decks FK is
+ * ON DELETE SET NULL, so we remove the cards explicitly; deck_settings and
+ * deck_study_stats cascade with the deck.
+ */
+export async function deleteDeck(userId, deckId) {
+  await withTransaction(async (client) => {
+    const { rows } = await client.query('SELECT id FROM decks WHERE id = $1 AND user_id = $2', [deckId, userId]);
+    if (!rows[0]) throw AppError.notFound('Deck not found');
+    await client.query('DELETE FROM flashcards WHERE deck_id = $1 AND user_id = $2', [deckId, userId]);
+    await client.query('DELETE FROM decks WHERE id = $1 AND user_id = $2', [deckId, userId]);
+  });
 }
 
 /** Bury a card: hide it from study until `bury_until` (default: +1 day). */

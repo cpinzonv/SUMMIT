@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import { Spinner, ErrorBanner, Toast } from '../components/ui';
+import { Spinner, ErrorBanner, Toast, ConfirmModal } from '../components/ui';
 import { EmptyHero, AssignmentsIllustration } from '../components/EmptyHero';
 import { activitiesApi, ACTIVITY_KINDS, STAGE_LABELS, STAGES, activityProjectProgress } from '../lib/activities';
 import { dueStatus } from '../lib/dueDate';
@@ -45,6 +45,7 @@ export default function ActivityDetailPage() {
   const [toast, setToast] = useState(null);
   const [addingProject, setAddingProject] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const load = () => api.get(`/api/activities/${id}`).then((r) => setA(r.data.activity)).catch((e) => setError(errorMessage(e)));
   useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -57,8 +58,8 @@ export default function ActivityDetailPage() {
   const flash = (msg, type = 'success') => setToast({ type, msg });
   const guard = async (fn) => { try { setA(await fn()); } catch (e) { flash(errorMessage(e), 'error'); } };
 
-  const del = async () => {
-    if (!confirm(`Delete "${a.name}" and everything in it?`)) return;
+  const doDel = async () => {
+    setConfirmDel(false);
     try { await activitiesApi.remove(id); navigate('/'); } catch (e) { flash(errorMessage(e), 'error'); }
   };
 
@@ -90,7 +91,7 @@ export default function ActivityDetailPage() {
               <h1 className="font-display text-2xl font-bold text-ink">{a.name}</h1>
               <p className="text-sm text-muted">{kindLabel(a.kind)} · {a.projectCount} project{a.projectCount === 1 ? '' : 's'}</p>
             </div>
-            <ActivityMenu onEdit={() => setEditing(true)} onDelete={del} />
+            <ActivityMenu onEdit={() => setEditing(true)} onDelete={() => setConfirmDel(true)} />
           </div>
         )}
         <div className="mt-4"><ProgressBar {...activityProjectProgress(a)} unit="project" /></div>
@@ -144,6 +145,16 @@ export default function ActivityDetailPage() {
             />
           ))}
         </div>
+      )}
+
+      {confirmDel && (
+        <ConfirmModal
+          title="Delete activity?"
+          message="This permanently deletes the activity and all its projects and tasks. This can’t be undone."
+          detail={a.name}
+          onConfirm={doDel}
+          onClose={() => setConfirmDel(false)}
+        />
       )}
 
       <Toast toast={toast} />

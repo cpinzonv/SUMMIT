@@ -130,6 +130,12 @@ export async function listClassQuizzes(userId, classId) {
   }));
 }
 
+/** Delete a quiz the user owns. */
+export async function deleteQuiz(userId, quizId) {
+  const { rowCount } = await query('DELETE FROM quizzes WHERE id = $1 AND user_id = $2', [quizId, userId]);
+  if (!rowCount) throw AppError.notFound('Quiz not found');
+}
+
 /** Grade a submission; persist the attempt; return score + per-question feedback. */
 export async function submitQuiz(userId, quizId, { answers = {}, timeSpentSeconds }) {
   const quiz = await getOwnedQuiz(userId, quizId);

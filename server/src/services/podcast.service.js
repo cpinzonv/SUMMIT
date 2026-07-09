@@ -272,6 +272,12 @@ export async function listClassPodcasts(userId, classId) {
   return rows.map(toPublicPodcast);
 }
 
+/** Delete a podcast the user owns. */
+export async function deletePodcast(userId, podcastId) {
+  const { rowCount } = await query('DELETE FROM podcasts WHERE id = $1 AND user_id = $2', [podcastId, userId]);
+  if (!rowCount) throw AppError.notFound('Podcast not found');
+}
+
 export async function recordListen(userId, podcastId, completionPercent) {
   const pct = Math.max(0, Math.min(100, Math.round(completionPercent)));
   const { rows } = await query(
