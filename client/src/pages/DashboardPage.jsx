@@ -15,6 +15,7 @@ import {
 import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
+import { estimateLabel } from '../components/AssignmentDetailModal';
 import { activitiesApi, ACTIVITY_KINDS, activityOverdue, activityProjectProgress } from '../lib/activities';
 import { CreateActivityModal } from '../components/CreateActivityModal';
 
@@ -273,9 +274,20 @@ export default function DashboardPage() {
 
 const DOW_LABEL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+// "Can I finish this week?" verdict styling.
+const FEASIBILITY = {
+  on_track: { label: 'On track', cls: 'bg-emerald-100 text-emerald-700' },
+  tight: { label: 'Tight week', cls: 'bg-amber-100 text-amber-700' },
+  overloaded: { label: 'Overloaded', cls: 'bg-rose-100 text-rose-700' },
+};
+
 function WorkloadWidget({ workload }) {
   const days = workload.thisWeek.byDay;
+  const items = workload.thisWeek.items || [];
+  const feas = workload.thisWeek.feasibility;
   const max = Math.max(1, ...days.map((d) => d.hours));
+  const verdict = feas ? FEASIBILITY[feas.verdict] : null;
+
   return (
     <div className="glass-card mb-8 p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
@@ -286,6 +298,19 @@ function WorkloadWidget({ workload }) {
           Next week: {workload.nextWeek.totalHours}h
         </div>
       </div>
+
+      {/* Can-I-finish feasibility read */}
+      {verdict && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className={`rounded-full px-2.5 py-0.5 font-bold ${verdict.cls}`}>{verdict.label}</span>
+          <span className="text-muted">
+            {feas.verdict === 'overloaded'
+              ? `~${feas.overBy}h over the ~${feas.availableHours}h free before Sunday (≈${feas.dailyHours}h/day)`
+              : `${workload.thisWeek.totalHours}h of work vs. ~${feas.availableHours}h free before Sunday (≈${feas.dailyHours}h/day)`}
+          </span>
+        </div>
+      )}
+
       <div className="flex items-end gap-2" style={{ height: 96 }}>
         {days.map((d, i) => (
           <div key={d.date} className="flex flex-1 flex-col items-center justify-end gap-1">
@@ -303,6 +328,30 @@ function WorkloadWidget({ workload }) {
           </div>
         ))}
       </div>
+
+      {/* This week's assignments, each with its estimated time. */}
+      {items.length > 0 && (
+        <ul className="mt-4 space-y-1.5 border-t border-white/50 pt-3">
+          {items.map((it) => {
+            const st = dueStatus(it.dueDate);
+            return (
+              <li key={it.id} className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-semibold text-ink">{it.title}</span>
+                  <span className="text-muted"> · {it.className}</span>
+                </span>
+                <span className={`shrink-0 text-xs font-semibold ${countdownTone(st)}`}>{st.countdownLabel}</span>
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-700"
+                  title={it.aiEstimated ? 'Your saved estimate' : 'Estimated from type — add an AI estimate to refine'}
+                >
+                  ⏱ {estimateLabel(it.hours) || `${it.hours}h`}{!it.aiEstimated && ' ~'}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
