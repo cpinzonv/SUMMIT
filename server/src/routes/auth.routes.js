@@ -19,6 +19,17 @@ router.post(
   asyncHandler(authController.login),
 );
 
+router.post(
+  '/verify-email',
+  validate(authController.verifyEmailSchema),
+  asyncHandler(authController.verifyEmail),
+);
+router.post(
+  '/resend-verification',
+  validate(authController.resendVerificationSchema),
+  asyncHandler(authController.resendVerification),
+);
+
 // Second step when the account has 2FA enabled.
 router.post(
   '/login/2fa',

@@ -75,8 +75,8 @@ export async function findOrCreateOAuthUser({ provider, providerId, email, fullN
     }
 
     const { rows } = await client.query(
-      `INSERT INTO users (email, full_name, auth_method, ${cfg.idCol}, ${cfg.handleCol})
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO users (email, full_name, auth_method, ${cfg.idCol}, ${cfg.handleCol}, email_verified)
+       VALUES ($1, $2, $3, $4, $5, true)
        RETURNING *`,
       [normalizedEmail, fullName || normalizedEmail.split('@')[0], provider, providerId, handle ?? normalizedEmail],
     );

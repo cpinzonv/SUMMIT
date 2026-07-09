@@ -11,6 +11,7 @@ import {
 import { verifyLoginCode } from './twofa.service.js';
 import { hasPremiumAccess } from './featureGating.service.js';
 import { assertInstitutionActive } from './institution.service.js';
+import { issueCode, verifyCode } from './verification.service.js';
 
 const SALT_ROUNDS = 12;
 
@@ -35,6 +36,11 @@ function toPublicUser(row) {
     subscriptionTier: row.subscription_tier || 'free',
     subscriptionStatus: row.subscription_status || 'none',
     twoFactorEnabled: Boolean(row.totp_enabled),
+    emailVerified: Boolean(row.email_verified),
+    phone: row.phone ?? null,
+    phoneVerified: Boolean(row.phone_verified),
+    recoveryEmail: row.recovery_email ?? null,
+    recoveryEmailVerified: Boolean(row.recovery_email_verified),
     // How the account was first created, whether it can log in with a password,
     // and which social providers are linked (drives the Settings UI / future
     // account-linking). Provider tokens/ids are never exposed beyond these flags.
@@ -132,8 +138,47 @@ export async function register({
   );
 
   const user = rows[0];
+  // New email signups start unverified — send a code and gate access until they
+  // confirm it. No tokens are issued yet.
+  const { devCode } = await sendSignupCode(user);
+  return { verificationRequired: true, email: user.email, ...(devCode ? { devCode } : {}) };
+}
+
+/** Issue + email a signup verification code for a user. */
+async function sendSignupCode(user) {
+  return issueCode({
+    userId: user.id,
+    purpose: 'signup',
+    channel: 'email',
+    destination: user.email,
+    subject: 'Confirm your Summit account',
+    intro: 'Welcome to Summit! Your account confirmation code is',
+  });
+}
+
+/** Resend the signup code (only for an existing, still-unverified account). */
+export async function resendVerification({ email }) {
+  const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
+  const user = rows[0];
+  // Don't leak whether the email exists; only act if it's a real unverified account.
+  if (!user || user.email_verified) return { sent: true };
+  return sendSignupCode(user);
+}
+
+/** Confirm the signup code, mark the email verified, and log the user in. */
+export async function verifyEmail({ email, code }) {
+  const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
+  const user = rows[0];
+  if (!user) throw AppError.badRequest('That code is not valid.');
+  if (user.email_verified) {
+    const tokens = await issueTokens(user.id);
+    return { user: toPublicUser(user), ...tokens };
+  }
+  await verifyCode({ userId: user.id, purpose: 'signup', code });
+  await query('UPDATE users SET email_verified = true WHERE id = $1', [user.id]);
+  const fresh = (await query('SELECT * FROM users WHERE id = $1', [user.id])).rows[0];
   const tokens = await issueTokens(user.id);
-  return { user: toPublicUser(user), ...tokens };
+  return { user: toPublicUser(fresh), ...tokens };
 }
 
 export async function login({ email, password }) {
@@ -158,6 +203,13 @@ export async function login({ email, password }) {
 
   // Hard block: a revoked institution's users cannot log in.
   await assertInstitutionActive(user);
+
+  // Unverified email accounts must confirm their code first — re-send it and ask
+  // the client to show the verification screen instead of issuing tokens.
+  if (user.email_verified === false) {
+    const { devCode } = await sendSignupCode(user);
+    return { verificationRequired: true, email: user.email, ...(devCode ? { devCode } : {}) };
+  }
 
   // With 2FA on, hold off on tokens — return a short-lived challenge instead.
   if (user.totp_enabled) {
@@ -271,7 +323,8 @@ export async function acceptInvite({ token, password }) {
       throw AppError.badRequest('This invite link is invalid or has expired.');
     }
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, inv.user_id]);
+    // Accepting an institution invite auto-verifies the email (they're vouched for).
+    await client.query('UPDATE users SET password_hash = $1, email_verified = true WHERE id = $2', [passwordHash, inv.user_id]);
     await client.query('UPDATE user_invites SET used_at = now() WHERE id = $1', [inv.id]);
     return { ok: true };
   });

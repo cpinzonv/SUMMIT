@@ -83,6 +83,36 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret  TEXT;     -- encrypted b
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS backup_codes TEXT;     -- encrypted JSON array
 
+-- Account security & recovery.
+--   email_verified  — new email signups must confirm a code; existing accounts,
+--                     OAuth logins, and institution invites are auto-verified.
+--   phone / recovery_email — optional recovery channels (verified before use).
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'email_verified') THEN
+    ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT false;
+    UPDATE users SET email_verified = true; -- grandfather every existing account
+  END IF;
+END $$;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone                  TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified         BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email         CITEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email_verified BOOLEAN NOT NULL DEFAULT false;
+
+-- Short-lived one-time codes for email/phone verification + password reset.
+-- The 6-digit code is stored hashed; a background of attempts limits brute force.
+CREATE TABLE IF NOT EXISTS verification_codes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose     TEXT NOT NULL,        -- signup | password_reset | change_email | recovery_email | phone
+  code_hash   TEXT NOT NULL,
+  destination TEXT,                 -- email/phone the code was sent to
+  expires_at  TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_verification_codes_user ON verification_codes(user_id, purpose);
+
 -- How the user discovered Summit (signup attribution). One of a small enum set;
 -- 'other' may carry a free-text detail in referral_source_detail.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_source TEXT;
