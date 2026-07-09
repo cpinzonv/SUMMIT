@@ -830,3 +830,73 @@ html[data-theme='dark'] nav.bg-white\/80 { background: rgba(24, 21, 30, 0.82); }
 /* Hide the scrollbar on horizontally-scrollable strips (mobile tab rows etc). */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ============================================================================
+   Color themes — override the brand scale, gradients, and ambient background
+   from a fixed palette. Selected via the `colorScheme` preference, applied as
+   html[data-color-scheme='…']. The brand + gradient tokens apply in both light
+   and dark; the ambient body wash is light-mode only (dark keeps its own).
+   ============================================================================ */
+
+/* ---- Ocean Blue ---- */
+html[data-color-scheme='ocean'] {
+  --color-brand-50: #e9f7fb;
+  --color-brand-100: #a7ebf2;
+  --color-brand-400: #54acbf;
+  --color-brand-500: #26658c;
+  --color-brand-600: #26658c;
+  --color-brand-700: #023859;
+  --grad-teal-purple: linear-gradient(135deg, #011c40 0%, #26658c 50%, #54acbf 100%);
+  --grad-pink-lavender: linear-gradient(135deg, #54acbf 0%, #a7ebf2 100%);
+  --note-accent: #26658c;
+}
+html[data-color-scheme='ocean']:not([data-theme='dark']) body {
+  background-color: #eef6fa;
+  background-image:
+    radial-gradient(46rem 46rem at 4% -8%, rgba(38, 101, 140, 0.5), transparent 56%),
+    radial-gradient(48rem 48rem at 96% 4%, rgba(84, 172, 191, 0.42), transparent 58%),
+    radial-gradient(52rem 52rem at 78% 92%, rgba(2, 56, 89, 0.4), transparent 60%),
+    radial-gradient(46rem 46rem at 10% 96%, rgba(167, 235, 242, 0.55), transparent 60%);
+}
+
+/* ---- Forest Green ---- */
+html[data-color-scheme='forest'] {
+  --color-brand-50: #eef8f1;
+  --color-brand-100: #daf1de;
+  --color-brand-400: #8eb69b;
+  --color-brand-500: #235367;
+  --color-brand-600: #163b32;
+  --color-brand-700: #0b2b26;
+  --grad-teal-purple: linear-gradient(135deg, #051f20 0%, #235367 50%, #8eb69b 100%);
+  --grad-pink-lavender: linear-gradient(135deg, #8eb69b 0%, #daf1de 100%);
+  --note-accent: #235367;
+}
+html[data-color-scheme='forest']:not([data-theme='dark']) body {
+  background-color: #eef7f0;
+  background-image:
+    radial-gradient(46rem 46rem at 4% -8%, rgba(22, 59, 50, 0.48), transparent 56%),
+    radial-gradient(48rem 48rem at 96% 4%, rgba(142, 182, 155, 0.5), transparent 58%),
+    radial-gradient(52rem 52rem at 78% 92%, rgba(35, 83, 103, 0.42), transparent 60%),
+    radial-gradient(46rem 46rem at 10% 96%, rgba(218, 241, 222, 0.6), transparent 60%);
+}
+
+/* ---- Sunset Orange ---- */
+html[data-color-scheme='sunset'] {
+  --color-brand-50: #fdefe3;
+  --color-brand-100: #f6d3b6;
+  --color-brand-400: #e47a24;
+  --color-brand-500: #d55123;
+  --color-brand-600: #bf2c20;
+  --color-brand-700: #951a21;
+  --grad-teal-purple: linear-gradient(135deg, #951a21 0%, #d55123 50%, #e47a24 100%);
+  --grad-pink-lavender: linear-gradient(135deg, #e47a24 0%, #f2b183 100%);
+  --note-accent: #d55123;
+}
+html[data-color-scheme='sunset']:not([data-theme='dark']) body {
+  background-color: #fbeee4;
+  background-image:
+    radial-gradient(46rem 46rem at 4% -8%, rgba(213, 81, 35, 0.5), transparent 56%),
+    radial-gradient(48rem 48rem at 96% 4%, rgba(228, 122, 36, 0.46), transparent 58%),
+    radial-gradient(52rem 52rem at 78% 92%, rgba(191, 44, 32, 0.42), transparent 60%),
+    radial-gradient(46rem 46rem at 10% 96%, rgba(122, 107, 94, 0.32), transparent 60%);
+}

@@ -5,7 +5,7 @@ import * as twofa from '../services/twofa.service.js';
 export const preferencesSchema = z
   .object({
     theme: z.enum(['light', 'dark', 'auto']).optional(),
-    colorScheme: z.enum(['default']).optional(), // others are "coming soon"
+    colorScheme: z.enum(['default', 'ocean', 'forest', 'sunset']).optional(),
     fontSize: z.enum(['small', 'normal', 'large']).optional(),
     compactMode: z.boolean().optional(),
     defaultDashboardView: z.enum(['cards', 'list']).optional(),
