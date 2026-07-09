@@ -49,6 +49,7 @@ export const updateCardSchema = z
     explanation: z.string().max(4000).nullable().optional(),
     tags: z.array(z.string().max(40)).max(8).optional(),
     difficulty: difficulty.optional(),
+    deckId: z.string().uuid().nullable().optional(), // move the card to another deck
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 

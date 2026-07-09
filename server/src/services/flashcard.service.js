@@ -93,9 +93,12 @@ export async function listClassDecks(userId, classId) {
   await getOwnedClass(userId, classId);
   const { rows } = await query(
     `SELECT d.id, d.name, d.description, d.source_note_id, d.created_at,
-            count(f.id)::int AS card_count
+            count(f.id)::int AS card_count,
+            count(f.id) FILTER (WHERE ml.total_reviews > 0)::int AS studied_count,
+            COALESCE(round(avg(CASE WHEN f.id IS NOT NULL THEN COALESCE(ml.mastery_percent, 0) END)), 0)::int AS avg_mastery
        FROM decks d
        LEFT JOIN flashcards f ON f.deck_id = d.id
+       LEFT JOIN mastery_levels ml ON ml.card_id = f.id AND ml.user_id = d.user_id
       WHERE d.class_id = $1 AND d.user_id = $2
       GROUP BY d.id
       ORDER BY d.created_at DESC`,
@@ -107,6 +110,8 @@ export async function listClassDecks(userId, classId) {
     description: r.description,
     sourceNoteId: r.source_note_id,
     cardCount: r.card_count,
+    studiedCount: r.studied_count,   // cards reviewed ≥ once
+    avgMastery: r.avg_mastery,       // deck-level "how much you know" (0–100)
     createdAt: r.created_at,
   }));
 }
@@ -239,6 +244,14 @@ export async function updateCard(userId, cardId, input) {
   }
   if (input.explanation !== undefined) set('explanation', input.explanation);
   if (input.tags !== undefined) set('tags', input.tags);
+  if (input.deckId !== undefined) {
+    // Move the card to another deck (must be one the user owns), or detach (null).
+    if (input.deckId) {
+      const { rows: d } = await query('SELECT 1 FROM decks WHERE id = $1 AND user_id = $2', [input.deckId, userId]);
+      if (!d[0]) throw AppError.notFound('Target deck not found');
+    }
+    set('deck_id', input.deckId);
+  }
   if (input.difficulty !== undefined) {
     // Enum column: cast the bound text param to the enum type.
     params.push(input.difficulty);
