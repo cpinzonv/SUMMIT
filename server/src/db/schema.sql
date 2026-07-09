@@ -1164,3 +1164,28 @@ CREATE TABLE IF NOT EXISTS security_events (
 );
 CREATE INDEX IF NOT EXISTS idx_security_events_user ON security_events(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events(action, created_at DESC);
+
+-- ----------------------------------------------------------------------------
+-- trusted_devices — "remember this device" for 2FA. When a user opts in on the
+-- 2FA screen, we mint a random per-device trust token, hand the raw token to the
+-- browser (localStorage), and store only its SHA-256 hash here with a 30-day
+-- expiry. On the next login the browser presents the token; a live, unexpired,
+-- unrevoked match for that user (and same browser) lets them skip the 2FA step.
+-- The token — not the user_agent/ip — is the secret; UA/IP are for display + a
+-- soft binding, so a leaked token can't be used from a wildly different browser.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS trusted_devices (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash   TEXT NOT NULL,          -- sha256(raw device token)
+  ua_hash      TEXT,                    -- sha256(user agent) — soft binding
+  label        TEXT,                    -- "Chrome on macOS" (parsed from UA)
+  user_agent   TEXT,
+  ip           TEXT,                    -- last-seen IP (display only)
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_used_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at   TIMESTAMPTZ NOT NULL,
+  revoked_at   TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_user ON trusted_devices(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_token ON trusted_devices(token_hash);

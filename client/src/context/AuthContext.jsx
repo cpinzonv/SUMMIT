@@ -11,6 +11,11 @@ import {
   clearTokens,
   getAccessToken,
   getRefreshToken,
+  refreshAccessToken,
+  accessTokenExpiring,
+  isAuthError,
+  getDeviceToken,
+  setDeviceToken,
 } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -53,17 +58,32 @@ export function AuthProvider({ children }) {
 
   const preferences = { ...DEFAULT_PREFS, ...(user?.preferences || {}) };
 
-  // On first load, if we have a token, validate it by fetching the profile.
+  // On first load, restore the session. We keep a long-lived refresh token in
+  // localStorage, so a short-lived access token that expired while the app was
+  // closed (or during a deploy) is renewed silently rather than logging out.
   useEffect(() => {
-    if (!getAccessToken()) {
-      setLoading(false);
-      return;
-    }
-    api
-      .get('/api/auth/me')
-      .then((res) => setUser(res.data.user))
-      .catch(() => clearTokens())
-      .finally(() => setLoading(false));
+    (async () => {
+      // No credentials at all → not logged in.
+      if (!getAccessToken() && !getRefreshToken()) {
+        setLoading(false);
+        return;
+      }
+      // Proactively refresh a missing/near-expiry access token before /me.
+      if (getRefreshToken() && accessTokenExpiring()) {
+        try { await refreshAccessToken(); } catch { /* /me will still try, or a real 401 ends it */ }
+      }
+      try {
+        const res = await api.get('/api/auth/me');
+        setUser(res.data.user);
+      } catch (err) {
+        // Only drop the session on a genuine auth failure. A transient outage
+        // (backend restarting during a deploy, offline) MUST keep the tokens so a
+        // later load restores the session instead of forcing a re-login.
+        if (isAuthError(err)) clearTokens();
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   // Apply visual preferences whenever they change. Reset to defaults on logout.
@@ -81,7 +101,8 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   const login = useCallback(async (email, password) => {
-    const { data } = await api.post('/api/auth/login', { email, password });
+    // Present the remembered-device token so a trusted browser can skip 2FA.
+    const { data } = await api.post('/api/auth/login', { email, password, deviceToken: getDeviceToken() || undefined });
     // 2FA accounts get a challenge instead of tokens — caller shows the code step.
     if (data.twoFactorRequired) return { twoFactorRequired: true, challengeToken: data.challengeToken };
     // Unverified accounts must confirm the emailed code first.
@@ -91,9 +112,10 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
-  /** Complete the 2FA login step with a TOTP or backup code. */
-  const completeTwoFactor = useCallback(async (challengeToken, code) => {
-    const { data } = await api.post('/api/auth/login/2fa', { challengeToken, code });
+  /** Complete the 2FA login step with a TOTP or backup code; optionally remember this device. */
+  const completeTwoFactor = useCallback(async (challengeToken, code, trustDevice = false) => {
+    const { data } = await api.post('/api/auth/login/2fa', { challengeToken, code, trustDevice });
+    if (data.deviceToken) setDeviceToken(data.deviceToken); // remember this browser for 30 days
     setTokens(data);
     setUser(data.user);
     return data.user;

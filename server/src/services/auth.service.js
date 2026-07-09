@@ -12,6 +12,7 @@ import { verifyLoginCode } from './twofa.service.js';
 import { hasPremiumAccess } from './featureGating.service.js';
 import { assertInstitutionActive } from './institution.service.js';
 import { issueCode, verifyCode } from './verification.service.js';
+import { isDeviceTrusted, trustDevice } from './trustedDevice.service.js';
 
 const SALT_ROUNDS = 12;
 
@@ -241,7 +242,7 @@ export async function resetPassword({ email, code, newPassword }) {
   return { ok: true };
 }
 
-export async function login({ email, password }) {
+export async function login({ email, password, deviceToken, userAgent, ip }) {
   const { rows } = await query(
     `SELECT u.*, i.name AS institution_name, i.revoked_at AS institution_revoked_at
        FROM users u LEFT JOIN institutions i ON i.id = u.institution_id
@@ -271,17 +272,26 @@ export async function login({ email, password }) {
     return { verificationRequired: true, email: user.email, ...(devCode ? { devCode } : {}) };
   }
 
-  // With 2FA on, hold off on tokens — return a short-lived challenge instead.
+  // With 2FA on, hold off on tokens — return a short-lived challenge instead,
+  // UNLESS this browser is a remembered trusted device (then skip the 2FA step).
   if (user.totp_enabled) {
-    return { twoFactorRequired: true, challengeToken: signTwoFactorChallenge(user.id) };
+    const trusted = await isDeviceTrusted(user.id, deviceToken, { userAgent, ip });
+    if (!trusted) {
+      return { twoFactorRequired: true, challengeToken: signTwoFactorChallenge(user.id) };
+    }
+    // fall through to issue tokens — device is trusted
   }
 
   const tokens = await issueTokens(user.id);
   return { user: toPublicUser(user), ...tokens };
 }
 
-/** Second login step: validate the TOTP/backup code and issue tokens. */
-export async function loginTwoFactor({ challengeToken, code }) {
+/**
+ * Second login step: validate the TOTP/backup code and issue tokens. When
+ * `trustDevice` is set, remember this browser so it can skip 2FA for 30 days;
+ * the returned `deviceToken` is stored by the client.
+ */
+export async function loginTwoFactor({ challengeToken, code, trustDevice: remember, userAgent, ip }) {
   let payload;
   try {
     payload = verifyTwoFactorChallenge(challengeToken);
@@ -301,7 +311,9 @@ export async function loginTwoFactor({ challengeToken, code }) {
   if (!valid) throw AppError.unauthorized('Invalid authentication code.');
 
   const tokens = await issueTokens(user.id);
-  return { user: toPublicUser(user), ...tokens };
+  // Optionally remember this browser so it can skip 2FA next time (30 days).
+  const deviceToken = remember ? await trustDevice(user.id, { userAgent, ip }) : undefined;
+  return { user: toPublicUser(user), ...tokens, ...(deviceToken ? { deviceToken } : {}) };
 }
 
 /** Rotate a refresh token: revoke the presented one and issue a fresh pair. */
