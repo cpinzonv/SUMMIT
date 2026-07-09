@@ -290,15 +290,24 @@ function FilesTab({ a }) {
     setError('');
     try {
       const res = await api.get(`/api/files/${f.id}/download`, { responseType: 'blob' });
-      const url = URL.createObjectURL(res.data);
       const type = (f.mimeType || res.data.type || '').toLowerCase();
+      const isDocx = type.includes('wordprocessingml') || /\.docx$/i.test(f.filename);
+      if (isDocx) {
+        // Convert .docx → HTML in-browser (mammoth, no network) and show inline.
+        const buf = await res.data.arrayBuffer();
+        const { convertToHtml } = await import('mammoth');
+        const { value } = await convertToHtml({ arrayBuffer: buf });
+        setPreview({ html: value || '<p class="text-muted">This document has no readable text.</p>', type: 'docx', name: f.filename });
+        return;
+      }
+      const url = URL.createObjectURL(res.data);
       if (type.includes('pdf') || type.startsWith('image/')) {
         setPreview({ url, type, name: f.filename });
       } else {
-        window.open(url, '_blank', 'noopener'); // download/open others
+        window.open(url, '_blank', 'noopener'); // download/open other types
         setTimeout(() => URL.revokeObjectURL(url), 60000);
       }
-    } catch (err) { setError(errorMessage(err)); }
+    } catch (err) { setError(errorMessage(err, 'Could not open that file.')); }
   };
 
   const rename = async (f, filename) => {
@@ -366,7 +375,12 @@ function FilesTab({ a }) {
             <span className="text-xs font-semibold text-ink">{preview.name}</span>
             <button type="button" onClick={() => setPreview(null)} className="text-xs font-semibold text-muted hover:text-ink">Close preview</button>
           </div>
-          {preview.type.startsWith('image/') ? (
+          {preview.type === 'docx' ? (
+            <div
+              className="note-prose max-h-[55vh] overflow-y-auto rounded-lg bg-white p-4"
+              dangerouslySetInnerHTML={{ __html: preview.html }}
+            />
+          ) : preview.type.startsWith('image/') ? (
             <img src={preview.url} alt={preview.name} className="mx-auto max-h-[50vh] rounded-lg" />
           ) : (
             <iframe title={preview.name} src={preview.url} className="h-[55vh] w-full rounded-lg" />
