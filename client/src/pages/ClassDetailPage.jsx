@@ -44,7 +44,7 @@ export default function ClassDetailPage() {
   // Active modal: { type: 'assignment', assignment? } or { type: 'grade', assignment }
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('assignments');
-  const [asgView, setAsgView] = useState('board'); // 'board' | 'table'
+  const [asgView, setAsgView] = useState('table'); // 'table' | 'board'
   const [toast, setToast] = useState(null);
   // Plays the archive exit animation on the header before navigating away.
   const [archiving, setArchiving] = useState(false);
@@ -259,7 +259,7 @@ export default function ClassDetailPage() {
           <div className="flex items-center gap-2">
             {assignments.length > 0 && (
               <div className="flex rounded-xl bg-white/50 p-0.5 text-xs font-semibold">
-                {['board', 'table'].map((v) => (
+                {['table', 'board'].map((v) => (
                   <button
                     key={v}
                     onClick={() => setAsgView(v)}
