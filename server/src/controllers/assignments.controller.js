@@ -48,6 +48,11 @@ export const assignmentIdParam = z.object({
   assignmentId: z.string().uuid('Invalid assignment id'),
 });
 
+// Submission text arrives as a multipart form field alongside the optional file.
+export const submissionSchema = z.object({
+  text: z.string().max(20000).optional(),
+});
+
 export async function create(req, res) {
   const created = await assignmentService.createAssignment(
     req.user.id,
@@ -77,4 +82,20 @@ export async function update(req, res) {
 export async function remove(req, res) {
   await assignmentService.deleteAssignment(req.user.id, req.params.assignmentId);
   res.status(204).end();
+}
+
+export async function submit(req, res) {
+  const file = req.file
+    ? { buffer: req.file.buffer, originalname: req.file.originalname, mimetype: req.file.mimetype }
+    : null;
+  const assignment = await assignmentService.submitAssignment(req.user.id, req.params.assignmentId, {
+    text: req.body?.text,
+    file,
+  });
+  res.json({ assignment });
+}
+
+export async function unsubmit(req, res) {
+  const assignment = await assignmentService.clearSubmission(req.user.id, req.params.assignmentId);
+  res.json({ assignment });
 }

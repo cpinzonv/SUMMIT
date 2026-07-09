@@ -7,9 +7,9 @@ import { query } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { getOwnedClass } from './class.service.js';
 
-// 'audio' backs lecture recordings (hidden from the document sections); the
-// rest are the document categories shown in the Files tab.
-export const FILE_CATEGORIES = ['pdf', 'slides', 'textbook', 'formula_sheet', 'audio', 'other'];
+// 'audio' backs lecture recordings and 'submission' backs assignment submissions
+// (both hidden from the document sections); the rest are the Files-tab categories.
+export const FILE_CATEGORIES = ['pdf', 'slides', 'textbook', 'formula_sheet', 'audio', 'submission', 'other'];
 
 function toPublicFile(row) {
   return {
@@ -28,7 +28,9 @@ export async function listFiles(userId, classId) {
   await getOwnedClass(userId, classId); // 404s if not owned
   const { rows } = await query(
     `SELECT id, class_id, filename, mime_type, category, size_bytes, uploaded_at
-       FROM class_files WHERE class_id = $1 ORDER BY uploaded_at DESC`,
+       FROM class_files
+      WHERE class_id = $1 AND category <> 'submission'
+      ORDER BY uploaded_at DESC`,
     [classId],
   );
   return rows.map(toPublicFile);

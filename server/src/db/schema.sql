@@ -429,6 +429,13 @@ CREATE TABLE IF NOT EXISTS class_files (
 
 CREATE INDEX IF NOT EXISTS idx_class_files_class_id ON class_files(class_id);
 
+-- Assignment submissions: optional text + an optional attached file (stored in
+-- class_files, category 'submission'), stamped when submitted. Declared here so
+-- the class_files FK target already exists.
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_text    TEXT;
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_file_id UUID REFERENCES class_files(id) ON DELETE SET NULL;
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submitted_at       TIMESTAMPTZ;
+
 -- ----------------------------------------------------------------------------
 -- transcripts — lecture transcripts per class (pasted/uploaded text, or text
 -- attached to an in-app recording). `audio_file_id` optionally links the stored
