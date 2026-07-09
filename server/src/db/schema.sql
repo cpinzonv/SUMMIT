@@ -1028,14 +1028,18 @@ DROP TRIGGER IF EXISTS trg_activity_tasks_updated_at ON activity_tasks;
 CREATE TRIGGER trg_activity_tasks_updated_at BEFORE UPDATE ON activity_tasks FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ============================================================================
--- To-Do board — a unified Kanban stage shared by assignments + activity tasks.
--- Columns: Backlog · Planning · In Progress · Done. board_stage is the board's
--- source of truth; the one-time backfills seed it from existing status so a
--- schema re-apply on restart never clobbers a user's later drags.
+-- To-Do board — a Kanban stage shared by assignments + activity tasks, and by
+-- BOTH the global To-Do board and the per-class assignment boards (single source
+-- of truth: a move on one board is a move on the other).
+--
+-- Default columns: Not Started · In Progress · Done. Backlog + Planning are
+-- optional (a user preference); they sort before Not Started. The one-time
+-- backfills seed board_stage from existing status so a schema re-apply on
+-- restart never clobbers a user's later drags.
 -- ============================================================================
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'board_stage') THEN
-    CREATE TYPE board_stage AS ENUM ('backlog', 'planning', 'in_progress', 'done');
+    CREATE TYPE board_stage AS ENUM ('backlog', 'planning', 'not_started', 'in_progress', 'done');
   END IF;
 END $$;
 
@@ -1045,12 +1049,12 @@ DO $$ BEGIN
     SELECT 1 FROM information_schema.columns
      WHERE table_name = 'assignments' AND column_name = 'board_stage'
   ) THEN
-    ALTER TABLE assignments ADD COLUMN board_stage board_stage NOT NULL DEFAULT 'backlog';
+    ALTER TABLE assignments ADD COLUMN board_stage board_stage NOT NULL DEFAULT 'not_started';
     ALTER TABLE assignments ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;
     UPDATE assignments SET board_stage = CASE
       WHEN status = 'in_progress' THEN 'in_progress'::board_stage
       WHEN status IN ('submitted', 'graded') THEN 'done'::board_stage
-      ELSE 'backlog'::board_stage END;
+      ELSE 'not_started'::board_stage END;
     UPDATE assignments SET completed_at = updated_at
      WHERE status IN ('submitted', 'graded') AND completed_at IS NULL;
   END IF;
@@ -1062,9 +1066,14 @@ DO $$ BEGIN
     SELECT 1 FROM information_schema.columns
      WHERE table_name = 'activity_tasks' AND column_name = 'board_stage'
   ) THEN
-    ALTER TABLE activity_tasks ADD COLUMN board_stage board_stage NOT NULL DEFAULT 'backlog';
+    ALTER TABLE activity_tasks ADD COLUMN board_stage board_stage NOT NULL DEFAULT 'not_started';
     UPDATE activity_tasks SET board_stage = CASE
       WHEN completed_at IS NOT NULL THEN 'done'::board_stage
-      ELSE 'backlog'::board_stage END;
+      ELSE 'not_started'::board_stage END;
   END IF;
 END $$;
+
+-- New rows land in Not Started (idempotent; also corrects any DB whose column
+-- was first created with the earlier 'backlog' default).
+ALTER TABLE assignments ALTER COLUMN board_stage SET DEFAULT 'not_started';
+ALTER TABLE activity_tasks ALTER COLUMN board_stage SET DEFAULT 'not_started';

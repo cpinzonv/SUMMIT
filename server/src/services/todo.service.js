@@ -11,7 +11,7 @@
 import { query } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 
-const STAGES = ['backlog', 'planning', 'in_progress', 'done'];
+const STAGES = ['backlog', 'planning', 'not_started', 'in_progress', 'done'];
 
 function toCard(row) {
   return {

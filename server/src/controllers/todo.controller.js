@@ -6,7 +6,7 @@ export const stageParams = z.object({
   id: z.string().uuid('Invalid id'),
 });
 export const stageBody = z.object({
-  stage: z.enum(['backlog', 'planning', 'in_progress', 'done']),
+  stage: z.enum(['backlog', 'planning', 'not_started', 'in_progress', 'done']),
 });
 
 export async function list(req, res) {

@@ -12,6 +12,9 @@ export const preferencesSchema = z
     defaultCalendarView: z.enum(['month', 'week', 'day']).optional(),
     notificationsEnabled: z.boolean().optional(),
     showArchived: z.boolean().optional(),
+    // Kanban: show the optional Backlog + Planning columns (default off) on both
+    // the To-Do board and the per-class boards.
+    boardExtraColumns: z.boolean().optional(),
     // Podcast host voices (ElevenLabs voice ids); '' clears back to the default.
     podcastVoiceA: z.string().max(64).optional(),
     podcastVoiceB: z.string().max(64).optional(),
