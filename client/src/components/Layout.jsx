@@ -39,7 +39,7 @@ const I = {
 // Settings now lives in the top-right gear menu (see SettingsMenu), not the nav.
 const navItems = [
   { to: '/', label: 'Dashboard', short: 'Home', icon: I.dashboard, end: true },
-  { to: '/calendar', label: 'Calendar', short: 'Calendar', icon: I.calendar },
+  { to: '/calendar', label: 'To-Do', short: 'To-Do', icon: I.calendar },
   { to: '/planner', label: 'Planner', short: 'Planner', icon: I.planner },
   { to: '/learn', label: 'Learn', short: 'Learn', icon: I.learn },
 ];

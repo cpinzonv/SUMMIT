@@ -11,7 +11,8 @@ import {
   Modal,
   gradeColor,
 } from '../components/ui';
-import { dueStatus, isDone } from '../lib/dueDate';
+import { dueStatus } from '../lib/dueDate';
+import { TodoBoard } from '../components/TodoBoard';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const VIEWS = [
@@ -38,7 +39,7 @@ const PRIORITY_LABEL = { high: 'High', medium: 'Medium', low: 'Low', none: 'None
 // Dot color for a calendar event: a past-due (and not-done) DUE deadline turns
 // red to stand out; otherwise the dot follows the assignment's priority.
 function eventDot(ev) {
-  if (ev.type === 'due' && !isDone(ev.a) && dueStatus(ev.a.dueDate).isPastDue) {
+  if (ev.type === 'due' && !ev.a.done && dueStatus(ev.a.dueDate).isPastDue) {
     return 'bg-rose-600 ring-1 ring-rose-300';
   }
   return PRIORITY_DOT[ev.a.priority || 'none'];
@@ -78,6 +79,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [view, setView] = useState(() => preferences.defaultCalendarView || 'month');
+  const [mode, setMode] = useState('calendar'); // 'calendar' | 'board'
   const [selected, setSelected] = useState(null); // details modal (single click)
   const [editing, setEditing] = useState(null); // edit modal (double click)
   const [adding, setAdding] = useState(null); // quick-add modal — holds the day key
@@ -96,27 +98,37 @@ export default function CalendarPage() {
 
   const loadEvents = useCallback(async () => {
     try {
-      const { data } = await api.get('/api/classes');
-      setClasses(data.classes);
-      const lists = await Promise.all(
-        data.classes.map((c) =>
-          api
-            .get(`/api/classes/${c.id}/assignments`)
-            .then((r) => ({ cls: c, assignments: r.data.assignments })),
-        ),
-      );
+      // One unified feed (assignments + activity tasks) powers both views, so the
+      // calendar and the board always agree. Classes are still fetched for the
+      // quick-add picker.
+      const [clsRes, todoRes] = await Promise.all([
+        api.get('/api/classes'),
+        api.get('/api/todo'),
+      ]);
+      setClasses(clsRes.data.classes);
       const evs = [];
-      lists.forEach(({ cls, assignments }, i) => {
+      todoRes.data.cards.forEach((card, i) => {
+        // Synthesize the { a, cls } shape the calendar components expect. `cls`
+        // carries the source's name/color; `a` carries the card fields.
+        const cls = { id: card.contextId, name: card.contextName, color: card.color, archivedAt: null };
         const gradient = classGradient(cls, i);
-        const glass = isGlassColor(cls.color); // "Clear" classes get frosted chips
-        assignments.forEach((a) => {
-          if (a.dueDate)
-            evs.push({ id: `${a.id}:due`, date: new Date(a.dueDate), type: 'due', a, cls, gradient, glass });
-          // Once an assignment is completed/graded the planned-date indicator is
-          // no longer useful — drop it so it disappears from every calendar view.
-          if (a.plannedDate && !isDone(a))
-            evs.push({ id: `${a.id}:planned`, date: new Date(a.plannedDate), type: 'planned', a, cls, gradient, glass });
-        });
+        const glass = isGlassColor(card.color); // "Clear"/null → frosted chip
+        const a = {
+          id: card.id,
+          source: card.source, // 'assignment' | 'task'
+          title: card.title,
+          priority: card.priority,
+          dueDate: card.dueDate,
+          plannedDate: card.plannedDate,
+          done: card.done,
+          boardStage: card.boardStage,
+          contextId: card.contextId,
+        };
+        if (card.dueDate)
+          evs.push({ id: `${card.id}:due`, date: new Date(card.dueDate), type: 'due', a, cls, gradient, glass });
+        // Hide the planned-date indicator once the item is done.
+        if (card.plannedDate && !card.done)
+          evs.push({ id: `${card.id}:planned`, date: new Date(card.plannedDate), type: 'planned', a, cls, gradient, glass });
       });
       setEvents(evs);
     } catch (err) {
@@ -140,6 +152,11 @@ export default function CalendarPage() {
     },
     edit: (ev) => {
       clearTimeout(clickTimer.current);
+      // Activity tasks have no assignment editor — open their details instead.
+      if (ev.a.source === 'task') {
+        setSelected(ev);
+        return;
+      }
       setEditing(ev);
     },
     // Quick-add: open the add modal pre-filled with this day's date.
@@ -195,7 +212,10 @@ export default function CalendarPage() {
     );
 
     try {
-      await api.patch(`/api/assignments/${ev.a.id}`, { [field]: iso });
+      // Reschedule the right source: activity tasks vs class assignments.
+      const endpoint =
+        ev.a.source === 'task' ? `/api/activities/tasks/${ev.a.id}` : `/api/assignments/${ev.a.id}`;
+      await api.patch(endpoint, { [field]: iso });
       setToast({
         type: 'success',
         msg: `Moved “${ev.a.title}” to ${newDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
@@ -261,14 +281,36 @@ export default function CalendarPage() {
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">Calendar</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight">To-Do</h1>
           <p className="mt-1 text-sm text-muted">
-            All assignments across your classes — drag to reschedule
+            {mode === 'board'
+              ? 'Assignments & activity tasks — drag between columns'
+              : 'All assignments across your classes — drag to reschedule'}
           </p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+        {/* Calendar ↔ Board switch — both views over the same to-do items. */}
+        <div className="flex gap-1 rounded-full bg-white/45 p-1 backdrop-blur">
+          {[
+            { key: 'calendar', label: 'Calendar' },
+            { key: 'board', label: 'Board' },
+          ].map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                mode === m.key ? 'bg-white/80 text-brand-700 shadow-sm' : 'text-muted hover:text-ink'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {mode === 'calendar' && (
+        <div className="mb-6 flex w-full flex-wrap items-center gap-3">
           <div className="flex gap-1 rounded-full bg-white/45 p-1 backdrop-blur">
             {VIEWS.map((v) => (
               <button
@@ -288,9 +330,9 @@ export default function CalendarPage() {
             <button onClick={() => shift(1)} className="btn btn-soft !px-3 !py-1.5">→</button>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="mb-4 flex flex-wrap gap-4 text-xs font-medium text-muted">
+      <div className={`mb-4 flex-wrap gap-4 text-xs font-medium text-muted ${mode === 'calendar' ? 'flex' : 'hidden'}`}>
         <span className="flex items-center gap-1.5"><Dot p="high" /> High</span>
         <span className="flex items-center gap-1.5"><Dot p="medium" /> Medium</span>
         <span className="flex items-center gap-1.5"><Dot p="low" /> Low / None</span>
@@ -302,7 +344,9 @@ export default function CalendarPage() {
         </span>
       </div>
 
-      {loading ? (
+      {mode === 'board' ? (
+        <TodoBoard onChange={loadEvents} />
+      ) : loading ? (
         <Spinner label="Loading calendar…" />
       ) : error ? (
         <ErrorBanner message={error} />
@@ -807,8 +851,7 @@ function EventModal({ ev, onClose }) {
             </span>
           }
         />
-        <DetailRow label="Category" value={a.category || '—'} />
-        <DetailRow label="Status" value={a.status?.replace('_', ' ')} />
+        <DetailRow label="Stage" value={(a.boardStage || 'backlog').replace('_', ' ')} />
         <DetailRow
           label="Due date"
           value={
@@ -816,7 +859,7 @@ function EventModal({ ev, onClose }) {
               {fmtDateTime(a.dueDate)}
               {(() => {
                 const st = dueStatus(a.dueDate);
-                if (!st.hasDue || isDone(a)) return null;
+                if (!st.hasDue || a.done) return null;
                 return (
                   <span className={`text-xs font-bold ${st.isPastDue ? 'text-rose-600' : 'text-muted'}`}>
                     ({st.isPastDue ? st.lateLabel : st.countdownLabel})
@@ -841,8 +884,11 @@ function EventModal({ ev, onClose }) {
           }
         />
 
-        <Link to={`/classes/${cls.id}`} className="btn btn-primary mt-2 w-full">
-          Open class
+        <Link
+          to={a.source === 'task' ? `/activities/${cls.id}` : `/classes/${cls.id}`}
+          className="btn btn-primary mt-2 w-full"
+        >
+          {a.source === 'task' ? 'Open activity' : 'Open class'}
         </Link>
       </div>
     </Modal>
