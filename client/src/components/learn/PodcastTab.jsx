@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Spinner, ErrorBanner } from '../ui';
+import { Spinner, ErrorBanner, KebabMenu, ConfirmModal } from '../ui';
 import { EmptyHero, PodcastIllustration } from '../EmptyHero';
 
 /** Podcasts: list, generate (premium), and play with an HTML5 audio player. */
@@ -9,6 +9,19 @@ export function PodcastTab({ classId, flash }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const del = async () => {
+    const podcast = confirmDelete;
+    setConfirmDelete(null);
+    try {
+      await api.delete(`/api/learn/podcasts/${podcast.id}`);
+      flash('Podcast deleted');
+      load();
+    } catch (e) {
+      flash(errorMessage(e), 'error');
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,7 +67,16 @@ export function PodcastTab({ classId, flash }) {
           onCta={generate}
         />
       ) : (
-        <div className="space-y-3">{podcasts.map((p) => <PodcastCard key={p.id} podcast={p} />)}</div>
+        <div className="space-y-3">{podcasts.map((p) => <PodcastCard key={p.id} podcast={p} onDelete={() => setConfirmDelete(p)} />)}</div>
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete podcast?"
+          message="This permanently deletes the podcast and its audio. This can’t be undone."
+          detail={confirmDelete.title}
+          onConfirm={del}
+          onClose={() => setConfirmDelete(null)}
+        />
       )}
     </div>
   );
@@ -67,7 +89,7 @@ function fmt(seconds) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function PodcastCard({ podcast }) {
+function PodcastCard({ podcast, onDelete }) {
   const [showTranscript, setShowTranscript] = useState(false);
   const [rate, setRate] = useState(1);
   const [audioSrc, setAudioSrc] = useState(null);
@@ -108,7 +130,10 @@ function PodcastCard({ podcast }) {
           <p className="font-semibold text-ink">{podcast.title}</p>
           <p className="text-xs text-muted">{fmt(podcast.durationSeconds)} · from {podcast.generatedFrom?.join(' + ') || 'class material'}</p>
         </div>
-        {podcast.completionPercent > 0 && <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] font-bold text-emerald-600">{podcast.completionPercent}% listened</span>}
+        <div className="flex shrink-0 items-center gap-1">
+          {podcast.completionPercent > 0 && <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[11px] font-bold text-emerald-600">{podcast.completionPercent}% listened</span>}
+          <KebabMenu onDelete={onDelete} />
+        </div>
       </div>
 
       {podcast.audioUrl ? (

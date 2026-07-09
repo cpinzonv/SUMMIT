@@ -57,6 +57,7 @@ router.patch(
   validate(learn.updateDeckSchema),
   asyncHandler(learn.updateDeck),
 );
+router.delete('/decks/:deckId', validate(learn.deckIdParam, 'params'), asyncHandler(learn.removeDeck));
 
 router.patch(
   '/cards/:cardId',
@@ -110,6 +111,7 @@ router.post(
 );
 router.get('/classes/:classId/quizzes', validate(learn.classIdParam, 'params'), asyncHandler(learn.listQuizzes));
 router.get('/quizzes/:quizId', validate(learn.quizIdParam, 'params'), asyncHandler(learn.getQuiz));
+router.delete('/quizzes/:quizId', validate(learn.quizIdParam, 'params'), asyncHandler(learn.removeQuiz));
 router.post(
   '/quizzes/:quizId/submit',
   validate(learn.quizIdParam, 'params'),
@@ -127,6 +129,7 @@ router.post(
 );
 router.get('/classes/:classId/guides', validate(learn.classIdParam, 'params'), asyncHandler(learn.listGuides));
 router.get('/guides/:guideId', validate(learn.guideIdParam, 'params'), asyncHandler(learn.getGuide));
+router.delete('/guides/:guideId', validate(learn.guideIdParam, 'params'), asyncHandler(learn.removeGuide));
 router.post(
   '/guides/:guideId/read',
   validate(learn.guideIdParam, 'params'),
@@ -154,6 +157,7 @@ router.post(
   asyncHandler(learn.genPodcast),
 );
 router.get('/classes/:classId/podcasts', validate(learn.classIdParam, 'params'), asyncHandler(learn.listPodcasts));
+router.delete('/podcasts/:podcastId', validate(learn.podcastIdParam, 'params'), asyncHandler(learn.removePodcast));
 router.get('/podcast-voices', asyncHandler(learn.listPodcastVoices));
 router.post(
   '/podcasts/:podcastId/listen',

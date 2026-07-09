@@ -107,6 +107,10 @@ export const updateDeckSchema = z.object({ name: z.string().trim().min(1, 'Name 
 export async function updateDeck(req, res) {
   res.json({ deck: await flashcards.updateDeck(req.user.id, req.params.deckId, req.body) });
 }
+export async function removeDeck(req, res) {
+  await flashcards.deleteDeck(req.user.id, req.params.deckId);
+  res.status(204).end();
+}
 
 export async function updateCard(req, res) {
   const card = await flashcards.updateCard(req.user.id, req.params.cardId, req.body);
@@ -199,6 +203,10 @@ export async function getQuiz(req, res) {
 export async function submitQuiz(req, res) {
   res.json(await quizzes.submitQuiz(req.user.id, req.params.quizId, req.body));
 }
+export async function removeQuiz(req, res) {
+  await quizzes.deleteQuiz(req.user.id, req.params.quizId);
+  res.status(204).end();
+}
 
 // ---- study guides ----
 export async function genGuide(req, res) {
@@ -213,6 +221,10 @@ export async function getGuide(req, res) {
 }
 export async function markGuide(req, res) {
   res.json({ guide: await guides.markGuide(req.user.id, req.params.guideId, req.body) });
+}
+export async function removeGuide(req, res) {
+  await guides.deleteGuide(req.user.id, req.params.guideId);
+  res.status(204).end();
 }
 
 // ---- mind maps ----
@@ -239,6 +251,10 @@ export async function listPodcastVoices(req, res) {
 }
 export async function listenPodcast(req, res) {
   res.json(await podcasts.recordListen(req.user.id, req.params.podcastId, req.body.completionPercent));
+}
+export async function removePodcast(req, res) {
+  await podcasts.deletePodcast(req.user.id, req.params.podcastId);
+  res.status(204).end();
 }
 
 // ---- detailed analytics ----

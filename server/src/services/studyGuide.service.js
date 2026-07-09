@@ -84,6 +84,12 @@ export async function getGuide(userId, guideId) {
   return toPublicGuide(rows[0], { withContent: true });
 }
 
+/** Delete a study guide the user owns. */
+export async function deleteGuide(userId, guideId) {
+  const { rowCount } = await query('DELETE FROM study_guides WHERE id = $1 AND user_id = $2', [guideId, userId]);
+  if (!rowCount) throw AppError.notFound('Study guide not found');
+}
+
 export async function markGuide(userId, guideId, { completed, bookmarked }) {
   const sets = [];
   const params = [];

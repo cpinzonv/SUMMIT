@@ -14,6 +14,8 @@ import {
   classAccent,
   isGlassColor,
   CLASS_COLOR_PRESETS,
+  KebabMenu,
+  ConfirmModal,
 } from '../components/ui';
 import { EmptyHero, AssignmentsIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
@@ -45,6 +47,7 @@ export default function ClassDetailPage() {
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('assignments');
   const [asgView, setAsgView] = useState('table'); // 'table' | 'board'
+  const [confirmAsg, setConfirmAsg] = useState(null); // assignment pending delete
   const [toast, setToast] = useState(null);
   // Plays the archive exit animation on the header before navigating away.
   const [archiving, setArchiving] = useState(false);
@@ -107,7 +110,6 @@ export default function ClassDetailPage() {
   };
 
   const handleDelete = async (assignment) => {
-    if (!confirm(`Delete "${assignment.title}"? This can't be undone.`)) return;
     try {
       await api.delete(`/api/assignments/${assignment.id}`);
       await load();
@@ -366,19 +368,11 @@ export default function ClassDetailPage() {
                       )}
                     </td>
                     <td className="px-5 py-3">
-                      <div className="flex justify-end gap-3 text-xs font-semibold">
-                        <button
-                          onClick={() => setModal({ type: 'assignment', assignment: a })}
-                          className="text-muted transition hover:text-brand-600"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(a)}
-                          className="text-muted transition hover:text-rose-500"
-                        >
-                          Delete
-                        </button>
+                      <div className="flex justify-end">
+                        <KebabMenu
+                          onEdit={() => setModal({ type: 'assignment', assignment: a })}
+                          onDelete={() => setConfirmAsg(a)}
+                        />
                       </div>
                     </td>
                   </tr>
@@ -401,6 +395,16 @@ export default function ClassDetailPage() {
           </>
         )}
       </section>
+      )}
+
+      {confirmAsg && (
+        <ConfirmModal
+          title="Delete assignment?"
+          message="This permanently deletes the assignment, its grade, and any submission. This can’t be undone."
+          detail={confirmAsg.title}
+          onConfirm={() => { const a = confirmAsg; setConfirmAsg(null); handleDelete(a); }}
+          onClose={() => setConfirmAsg(null)}
+        />
       )}
 
       {modal?.type === 'assignment' && (

@@ -1,5 +1,65 @@
 /** Small shared presentational helpers used across pages. */
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+/**
+ * Kebab (⋮) options menu used consistently across the app. Shows "Edit" only
+ * when `onEdit` is given (generated items are delete-only) and "Delete" when
+ * `onDelete` is given. Clicks stop propagation so it can live inside a clickable
+ * card without triggering the card.
+ */
+export function KebabMenu({ onEdit, onDelete, editLabel = 'Edit', deleteLabel = 'Delete', className = '' }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const pick = (fn) => (e) => { e.stopPropagation(); setOpen(false); fn(); };
+  return (
+    <div ref={ref} className={`relative shrink-0 ${className}`}>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpen((o) => !o); }}
+        aria-label="Options"
+        aria-haspopup="menu"
+        className="grid h-8 w-8 place-items-center rounded-full text-lg leading-none text-muted transition hover:bg-white/70 hover:text-ink"
+      >
+        ⋮
+      </button>
+      {open && (
+        <div role="menu" className="glass-panel absolute right-0 z-30 mt-1 w-32 p-1.5 text-sm shadow-xl">
+          {onEdit && (
+            <button type="button" role="menuitem" onClick={pick(onEdit)} className="menu-item"><span>✎</span> {editLabel}</button>
+          )}
+          {onDelete && (
+            <button type="button" role="menuitem" onClick={pick(onDelete)} className="menu-item text-rose-600"><span>🗑</span> {deleteLabel}</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Styled "Delete X? This can't be undone." confirmation. `detail` optionally
+ * shows the item's name/summary in a chip.
+ */
+export function ConfirmModal({ title = 'Delete?', message = "This can’t be undone.", detail, confirmLabel = 'Delete', onConfirm, onClose }) {
+  return (
+    <Modal title={title} onClose={onClose}>
+      <p className="text-sm text-muted">{message}</p>
+      {detail && <p className="mt-2 rounded-lg bg-white/50 p-3 text-sm font-medium text-ink">{detail}</p>}
+      <div className="mt-4 flex justify-end gap-2">
+        <button className="btn btn-soft" onClick={onClose}>Cancel</button>
+        <button className="btn btn-danger" onClick={onConfirm}>{confirmLabel}</button>
+      </div>
+    </Modal>
+  );
+}
 
 /** Centered modal dialog. Closes on backdrop click or Escape. */
 export function Modal({ title, onClose, children, wide = false }) {
