@@ -27,6 +27,7 @@ const DEFAULT_PREFS = {
   defaultCalendarView: 'month',
   notificationsEnabled: false,
   showArchived: false,
+  boardExtraColumns: false, // show Backlog + Planning columns on the Kanban boards
 };
 
 /** Apply visual preferences (theme/font/compact) to the document root. */

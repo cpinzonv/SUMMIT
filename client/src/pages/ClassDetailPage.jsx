@@ -20,6 +20,7 @@ import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
 import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
 import { suggestHours } from '../lib/workload';
 import { ClassNotes } from '../components/ClassNotes';
+import { ClassAssignmentsBoard } from '../components/ClassAssignmentsBoard';
 import { ClassAttendance } from '../components/ClassAttendance';
 import { ClassFiles } from '../components/ClassFiles';
 import NotesChatbot from '../components/NotesChatbot';
@@ -43,6 +44,7 @@ export default function ClassDetailPage() {
   // Active modal: { type: 'assignment', assignment? } or { type: 'grade', assignment }
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('assignments');
+  const [asgView, setAsgView] = useState('table'); // 'table' | 'board'
   const [toast, setToast] = useState(null);
   // Plays the archive exit animation on the header before navigating away.
   const [archiving, setArchiving] = useState(false);
@@ -249,11 +251,43 @@ export default function ClassDetailPage() {
 
       {tab === 'assignments' && (
       <section className="mt-5">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-bold">Assignments</h2>
-          <button onClick={() => setModal({ type: 'assignment' })} className="btn btn-primary">
-            + Add assignment
-          </button>
+          <div className="flex items-center gap-2">
+            {assignments.length > 0 && (
+              <div className="flex gap-1 rounded-full bg-white/45 p-1 backdrop-blur">
+                {[
+                  { key: 'table', label: 'Table' },
+                  { key: 'board', label: 'Board' },
+                ].map((v) => (
+                  <button
+                    key={v.key}
+                    onClick={() => setAsgView(v.key)}
+                    className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
+                      asgView === v.key ? 'bg-white/80 text-brand-700 shadow-sm' : 'text-muted hover:text-ink'
+                    }`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {/* Desktop: full label. Mobile: a compact circular gradient "+". */}
+            <button
+              onClick={() => setModal({ type: 'assignment' })}
+              className="btn btn-primary hidden sm:inline-flex"
+            >
+              + Add assignment
+            </button>
+            <button
+              onClick={() => setModal({ type: 'assignment' })}
+              aria-label="Add assignment"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-2xl leading-none text-white shadow-md transition hover:-translate-y-0.5 hover:shadow-lg sm:hidden"
+              style={{ backgroundImage: 'var(--grad-teal-purple)' }}
+            >
+              +
+            </button>
+          </div>
         </div>
 
         {assignments.length === 0 ? (
@@ -263,6 +297,12 @@ export default function ClassDetailPage() {
             subheading="Assignments will appear here as they're added. Stay on top of your deadlines."
             ctaLabel="Add your first assignment"
             onCta={() => setModal({ type: 'assignment' })}
+          />
+        ) : asgView === 'board' ? (
+          <ClassAssignmentsBoard
+            assignments={assignments}
+            onChanged={load}
+            onOpen={(a) => setModal({ type: 'assignment', assignment: a })}
           />
         ) : (
           <>

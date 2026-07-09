@@ -685,6 +685,12 @@ function PreferencesTab({ prefs, set }) {
         <Row label="Show archived semesters" hint="Include archived classes in views.">
           <Toggle on={!!prefs.showArchived} onChange={() => set('showArchived')(!prefs.showArchived)} />
         </Row>
+        <Row
+          label="Extra board columns"
+          hint="Add Backlog & Planning to the To-Do and class boards (default is Not Started · In Progress · Done)."
+        >
+          <Toggle on={!!prefs.boardExtraColumns} onChange={() => set('boardExtraColumns')(!prefs.boardExtraColumns)} />
+        </Row>
       </Section>
 
       <PodcastVoicesSection prefs={prefs} set={set} />

@@ -14,6 +14,7 @@ function toPublicAssignment(row) {
     pointValue: row.point_value == null ? null : Number(row.point_value),
     estimatedHours: row.estimated_hours == null ? null : Number(row.estimated_hours),
     status: row.status,
+    boardStage: row.board_stage ?? 'not_started', // shared Kanban stage (To-Do + class boards)
     priority: row.priority ?? 'none',
     externalSource: row.external_source ?? null, // 'canvas' if synced from an LMS
     grade:
