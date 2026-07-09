@@ -30,6 +30,17 @@ router.post(
   asyncHandler(authController.resendVerification),
 );
 
+router.post(
+  '/forgot-password',
+  validate(authController.forgotPasswordSchema),
+  asyncHandler(authController.forgotPassword),
+);
+router.post(
+  '/reset-password',
+  validate(authController.resetPasswordSchema),
+  asyncHandler(authController.resetPassword),
+);
+
 // Second step when the account has 2FA enabled.
 router.post(
   '/login/2fa',

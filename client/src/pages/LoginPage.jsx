@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { errorMessage } from '../api/client';
+import { api, errorMessage } from '../api/client';
 import { ErrorBanner } from '../components/ui';
 import { MountainMark } from '../components/MountainMark';
 import { SocialAuthButtons } from '../components/SocialAuthButtons';
@@ -27,6 +27,7 @@ export default function LoginPage() {
   const [verify, setVerify] = useState(null); // { email, devCode } when email-confirmation step is shown
   const [resent, setResent] = useState('');
   const [code, setCode] = useState('');
+  const [forgot, setForgot] = useState(false); // show the forgot-password panel
 
   // Already authenticated → skip the form.
   if (!loading && user) return <Navigate to={from} replace />;
@@ -150,7 +151,13 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {verify ? (
+        {forgot ? (
+          <ForgotPasswordPanel
+            initialEmail={form.email}
+            onBack={() => setForgot(false)}
+            onDone={(email) => { setForgot(false); setMode('login'); setForm((f) => ({ ...f, email, password: '' })); setError(''); }}
+          />
+        ) : verify ? (
           <form onSubmit={submitVerify} className="glass-panel space-y-4 p-6">
             <div>
               <h2 className="text-lg font-bold text-ink">Confirm your email</h2>
@@ -231,6 +238,18 @@ export default function LoginPage() {
           <Field label="Email" type="email" value={form.email} onChange={update('email')} required />
           <Field label="Password" type="password" value={form.password} onChange={update('password')} required />
 
+          {mode === 'login' && (
+            <div className="-mt-1 text-right">
+              <button
+                type="button"
+                onClick={() => { setForgot(true); setError(''); }}
+                className="text-sm font-semibold text-brand-600 hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+
           {mode === 'register' && (
             <>
               <label className="block">
@@ -282,6 +301,112 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Forgot-password flow: pick where to send a reset code (primary email, backup
+ * email, or SMS), enter the code + a new password, done. The server answers
+ * generically so no step reveals whether an account or channel exists.
+ */
+function ForgotPasswordPanel({ initialEmail, onBack, onDone }) {
+  const [stage, setStage] = useState('request'); // request | reset
+  const [email, setEmail] = useState(initialEmail || '');
+  const [method, setMethod] = useState('email');
+  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [devCode, setDevCode] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const METHODS = [
+    { value: 'email', label: 'Primary email' },
+    { value: 'recovery_email', label: 'Recovery email' },
+    { value: 'sms', label: 'Text (SMS)' },
+  ];
+
+  const sendCode = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      const { data } = await api.post('/api/auth/forgot-password', { email: email.trim().toLowerCase(), method });
+      setDevCode(data.devCode || '');
+      setStage('reset');
+    } catch (err) {
+      setError(errorMessage(err, 'Something went wrong. Please try again.'));
+    } finally { setBusy(false); }
+  };
+
+  const submitReset = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      await api.post('/api/auth/reset-password', { email: email.trim().toLowerCase(), code: code.trim(), newPassword: password });
+      onDone(email.trim().toLowerCase());
+    } catch (err) {
+      setError(errorMessage(err, 'That code is not valid.'));
+      setBusy(false);
+    }
+  };
+
+  const chosen = METHODS.find((m) => m.value === method)?.label.toLowerCase();
+
+  return stage === 'request' ? (
+    <form onSubmit={sendCode} className="glass-panel space-y-4 p-6">
+      <div>
+        <h2 className="text-lg font-bold text-ink">Reset your password</h2>
+        <p className="mt-0.5 text-sm text-muted">Enter your account email and where to send a reset code.</p>
+      </div>
+      <ErrorBanner message={error} />
+      <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@school.edu" autoComplete="email" autoFocus required />
+      <div>
+        <span className="mb-1.5 block text-sm font-semibold text-ink">Send the code to</span>
+        <div className="grid grid-cols-3 gap-1.5">
+          {METHODS.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => setMethod(m.value)}
+              className={`rounded-xl px-2 py-2 text-xs font-semibold transition ${
+                method === m.value ? 'bg-brand-600 text-white shadow-sm' : 'bg-white/60 text-muted hover:bg-white/80'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button type="submit" disabled={busy || !email.trim()} className="btn btn-primary w-full">
+        {busy ? 'Sending…' : 'Send reset code'}
+      </button>
+      <button type="button" onClick={onBack} className="w-full text-center text-sm font-semibold text-muted hover:text-ink">
+        ← Back to sign in
+      </button>
+    </form>
+  ) : (
+    <form onSubmit={submitReset} className="glass-panel space-y-4 p-6">
+      <div>
+        <h2 className="text-lg font-bold text-ink">Enter your code</h2>
+        <p className="mt-0.5 text-sm text-muted">
+          If an account exists with a verified {chosen}, we've sent a 6-digit code. Enter it and choose a new password.
+        </p>
+      </div>
+      {devCode && (
+        <p className="rounded-lg bg-amber-100/70 px-3 py-2 text-sm text-amber-900">
+          Dev mode — your code is <span className="font-mono font-bold">{devCode}</span>
+        </p>
+      )}
+      <ErrorBanner message={error} />
+      <Field label="Reset code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" autoComplete="one-time-code" inputMode="numeric" autoFocus required />
+      <Field label="New password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" autoComplete="new-password" required />
+      <button type="submit" disabled={busy || !code.trim() || password.length < 8} className="btn btn-primary w-full">
+        {busy ? 'Resetting…' : 'Reset password'}
+      </button>
+      <div className="flex items-center justify-between text-sm">
+        <button type="button" onClick={() => { setStage('request'); setError(''); }} className="font-semibold text-muted hover:text-ink">← Back</button>
+        <button type="button" onClick={sendCode} className="font-semibold text-brand-600 hover:underline">Resend code</button>
+      </div>
+    </form>
   );
 }
 
