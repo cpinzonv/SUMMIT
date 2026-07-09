@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as userService from '../services/user.service.js';
 import * as twofa from '../services/twofa.service.js';
+import * as account from '../services/account.service.js';
 
 export const preferencesSchema = z
   .object({
@@ -66,4 +67,40 @@ export async function twofaConfirm(req, res) {
 export async function twofaDisable(req, res) {
   await twofa.disable(req.user.id, req.body.password);
   res.json({ ok: true });
+}
+
+/* ---- Account security & recovery (phone, backup email, change email) --- */
+const codeSchema = z.object({ code: z.string().min(1, 'Enter the code we sent you') });
+
+export const phoneSchema = z.object({ phone: z.string().min(1, 'Enter a phone number') });
+export const phoneVerifySchema = codeSchema;
+export async function addPhone(req, res) {
+  res.json(await account.addPhone(req.user.id, req.body.phone));
+}
+export async function verifyPhone(req, res) {
+  res.json(await account.verifyPhone(req.user.id, req.body.code));
+}
+export async function removePhone(req, res) {
+  res.json(await account.removePhone(req.user.id));
+}
+
+export const recoveryEmailSchema = z.object({ email: z.string().email('Enter a valid email').toLowerCase() });
+export const recoveryEmailVerifySchema = codeSchema;
+export async function addRecoveryEmail(req, res) {
+  res.json(await account.addRecoveryEmail(req.user.id, req.body.email));
+}
+export async function verifyRecoveryEmail(req, res) {
+  res.json(await account.verifyRecoveryEmail(req.user.id, req.body.code));
+}
+export async function removeRecoveryEmail(req, res) {
+  res.json(await account.removeRecoveryEmail(req.user.id));
+}
+
+export const emailChangeSchema = z.object({ email: z.string().email('Enter a valid email').toLowerCase() });
+export const emailChangeVerifySchema = codeSchema;
+export async function requestEmailChange(req, res) {
+  res.json(await account.requestEmailChange(req.user.id, req.body.email));
+}
+export async function verifyEmailChange(req, res) {
+  res.json(await account.verifyEmailChange(req.user.id, req.body.code));
 }

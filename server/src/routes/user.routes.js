@@ -27,4 +27,16 @@ router.post('/2fa/setup', asyncHandler(user.twofaSetup));
 router.post('/2fa/confirm', validate(user.twofaConfirmSchema), asyncHandler(user.twofaConfirm));
 router.post('/2fa/disable', validate(user.twofaDisableSchema), asyncHandler(user.twofaDisable));
 
+// Account security & recovery — phone (SMS), backup email, change primary email.
+router.post('/phone', validate(user.phoneSchema), asyncHandler(user.addPhone));
+router.post('/phone/verify', validate(user.phoneVerifySchema), asyncHandler(user.verifyPhone));
+router.delete('/phone', asyncHandler(user.removePhone));
+
+router.post('/recovery-email', validate(user.recoveryEmailSchema), asyncHandler(user.addRecoveryEmail));
+router.post('/recovery-email/verify', validate(user.recoveryEmailVerifySchema), asyncHandler(user.verifyRecoveryEmail));
+router.delete('/recovery-email', asyncHandler(user.removeRecoveryEmail));
+
+router.post('/email/change', validate(user.emailChangeSchema), asyncHandler(user.requestEmailChange));
+router.post('/email/change/verify', validate(user.emailChangeVerifySchema), asyncHandler(user.verifyEmailChange));
+
 export default router;

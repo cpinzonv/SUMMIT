@@ -96,7 +96,11 @@ function AccountTab({ user }) {
         <Row label="Member since">{<span className="text-sm text-muted">{created}</span>}</Row>
       </Section>
 
+      <ChangeEmailSection user={user} />
+
       <ChangePassword />
+
+      <RecoverySection user={user} />
 
       <TwoFactorSection user={user} />
 
@@ -106,6 +110,222 @@ function AccountTab({ user }) {
         </button>
       </Section>
     </>
+  );
+}
+
+/* ---- Account security & recovery --------------------------------------- */
+
+/**
+ * A contact (phone or backup email) you add, then confirm with a one-time code.
+ * Handles all three states: none yet (add form), pending confirmation (enter the
+ * code), and verified (badge + remove). `devCode` is surfaced in dev when no
+ * provider is configured so the flow is testable without real delivery.
+ */
+function VerifiableContact({
+  title, description, inputLabel, inputType, placeholder, autoComplete,
+  value, verified, addUrl, verifyUrl, removeUrl, buildBody, sentHint,
+}) {
+  const { refreshUser } = useAuth();
+  const [stage, setStage] = useState(value && !verified ? 'code' : 'idle');
+  const [input, setInput] = useState('');
+  const [code, setCode] = useState('');
+  const [devCode, setDevCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const startAdd = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      const { data } = await api.post(addUrl, buildBody(input.trim()));
+      setDevCode(data.devCode || '');
+      setStage('code');
+    } catch (err) {
+      setError(errorMessage(err, 'Something went wrong. Please try again.'));
+    } finally { setBusy(false); }
+  };
+
+  const confirm = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      await api.post(verifyUrl, { code: code.trim() });
+      await refreshUser();
+      setStage('idle'); setInput(''); setCode(''); setDevCode('');
+    } catch (err) {
+      setError(errorMessage(err, 'That code is not valid.'));
+    } finally { setBusy(false); }
+  };
+
+  const resend = async () => {
+    setError('');
+    try {
+      const { data } = await api.post(addUrl, buildBody(value));
+      setDevCode(data.devCode || '');
+      setToast({ type: 'success', msg: 'A new code is on its way.' });
+    } catch (err) { setError(errorMessage(err, 'Could not resend the code.')); }
+  };
+
+  const remove = async () => {
+    setBusy(true); setError('');
+    try { await api.delete(removeUrl); await refreshUser(); setStage('idle'); setDevCode(''); }
+    catch (err) { setError(errorMessage(err, 'Could not remove it.')); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Section title={title} description={description}>
+      <Toast toast={toast} />
+
+      {verified ? (
+        <div className="flex items-center justify-between gap-4">
+          <span className="inline-flex items-center gap-2 text-sm">
+            <span className="font-semibold text-ink">{value}</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-600">✓ Verified</span>
+          </span>
+          <button onClick={remove} disabled={busy} className="btn btn-soft">Remove</button>
+        </div>
+      ) : stage === 'code' ? (
+        <form onSubmit={confirm} className="space-y-3">
+          <p className="text-sm text-muted">{sentHint(value || input)}</p>
+          {devCode && (
+            <p className="rounded-lg bg-amber-100/70 px-3 py-2 text-sm text-amber-900">
+              Dev mode — your code is <span className="font-mono font-bold">{devCode}</span>
+            </p>
+          )}
+          <ErrorBanner message={error} />
+          <Field label="Confirmation code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" autoComplete="one-time-code" inputMode="numeric" required />
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="submit" disabled={busy || !code.trim()} className="btn btn-primary">{busy ? 'Confirming…' : 'Confirm'}</button>
+            <button type="button" onClick={resend} className="btn btn-soft">Resend code</button>
+            <button type="button" onClick={remove} disabled={busy} className="text-sm font-semibold text-muted hover:text-ink">Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={startAdd} className="space-y-3">
+          <ErrorBanner message={error} />
+          <Field label={inputLabel} type={inputType} value={input} onChange={(e) => setInput(e.target.value)} placeholder={placeholder} autoComplete={autoComplete} required />
+          <button type="submit" disabled={busy || !input.trim()} className="btn btn-primary">{busy ? 'Sending…' : 'Send code'}</button>
+        </form>
+      )}
+    </Section>
+  );
+}
+
+/** Phone (SMS) + backup recovery email — both used to recover a locked-out account. */
+function RecoverySection({ user }) {
+  return (
+    <>
+      <VerifiableContact
+        title="Recovery phone"
+        description="Add a mobile number so you can reset your password by text. Optional, but recommended."
+        inputLabel="Phone number"
+        inputType="tel"
+        placeholder="+1 555 123 4567"
+        autoComplete="tel"
+        value={user?.phone}
+        verified={user?.phoneVerified}
+        addUrl="/api/user/phone"
+        verifyUrl="/api/user/phone/verify"
+        removeUrl="/api/user/phone"
+        buildBody={(phone) => ({ phone })}
+        sentHint={(to) => `We texted a 6-digit code to ${to}. Enter it below to confirm your number.`}
+      />
+      <VerifiableContact
+        title="Recovery email"
+        description="A backup email we can use if you ever lose access to your primary address."
+        inputLabel="Backup email"
+        inputType="email"
+        placeholder="you@backup.com"
+        autoComplete="email"
+        value={user?.recoveryEmail}
+        verified={user?.recoveryEmailVerified}
+        addUrl="/api/user/recovery-email"
+        verifyUrl="/api/user/recovery-email/verify"
+        removeUrl="/api/user/recovery-email"
+        buildBody={(email) => ({ email })}
+        sentHint={(to) => `We emailed a 6-digit code to ${to}. Enter it below to confirm.`}
+      />
+    </>
+  );
+}
+
+/** Change the primary email: confirm a code sent to the NEW address; the old one gets a heads-up. */
+function ChangeEmailSection({ user }) {
+  const { refreshUser } = useAuth();
+  const [stage, setStage] = useState('idle'); // idle | code
+  const [newEmail, setNewEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [devCode, setDevCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [toast, setToast] = useState(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const request = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      const { data } = await api.post('/api/user/email/change', { email: newEmail.trim() });
+      setDevCode(data.devCode || '');
+      setStage('code');
+    } catch (err) { setError(errorMessage(err, 'Could not start the change.')); }
+    finally { setBusy(false); }
+  };
+
+  const confirm = async (e) => {
+    e.preventDefault();
+    setBusy(true); setError('');
+    try {
+      await api.post('/api/user/email/change/verify', { code: code.trim() });
+      await refreshUser();
+      setStage('idle'); setNewEmail(''); setCode(''); setDevCode('');
+      setToast({ type: 'success', msg: 'Your email address was updated.' });
+    } catch (err) { setError(errorMessage(err, 'That code is not valid.')); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Section
+      title="Change email"
+      description="Move your account to a new email. We'll send a code to the new address to confirm it, and notify your current one."
+    >
+      <Toast toast={toast} />
+      <Row label="Current email"><span className="text-sm text-muted">{user?.email}</span></Row>
+
+      {stage === 'code' ? (
+        <form onSubmit={confirm} className="mt-4 space-y-3">
+          <p className="text-sm text-muted">We emailed a 6-digit code to <span className="font-semibold text-ink">{newEmail}</span>. Enter it to finish the switch.</p>
+          {devCode && (
+            <p className="rounded-lg bg-amber-100/70 px-3 py-2 text-sm text-amber-900">
+              Dev mode — your code is <span className="font-mono font-bold">{devCode}</span>
+            </p>
+          )}
+          <ErrorBanner message={error} />
+          <Field label="Confirmation code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" autoComplete="one-time-code" inputMode="numeric" required />
+          <div className="flex items-center gap-2">
+            <button type="submit" disabled={busy || !code.trim()} className="btn btn-primary">{busy ? 'Confirming…' : 'Confirm & switch'}</button>
+            <button type="button" onClick={() => { setStage('idle'); setCode(''); setError(''); }} className="text-sm font-semibold text-muted hover:text-ink">Cancel</button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={request} className="mt-4 space-y-3">
+          <ErrorBanner message={error} />
+          <Field label="New email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="you@newschool.edu" autoComplete="email" required />
+          <button type="submit" disabled={busy || !newEmail.trim()} className="btn btn-primary">{busy ? 'Sending…' : 'Send code'}</button>
+        </form>
+      )}
+    </Section>
   );
 }
 
