@@ -112,12 +112,51 @@ export async function rateCard(userId, cardId, rating) {
       [cardId, res.easeFactor, res.interval, res.repetitions, nextDays],
     );
 
-    // History log (keeps existing analytics/streaks working).
+    // History log.
     await client.query(
       `INSERT INTO card_reviews
          (user_id, card_id, confidence, correct, interval_days, ease_factor, next_review_at)
        VALUES ($1, $2, $3, $4, $5, $6, now() + make_interval(days => $7))`,
       [userId, cardId, rating, rating >= 3, res.interval, res.easeFactor, nextDays],
+    );
+
+    // Mastery ("how much you know") — % of this card's reviews that were correct
+    // (rating ≥ 3). Drives the per-card + deck progress bars and the Stats tab.
+    const correct = rating >= 3 ? 1 : 0;
+    const masteryStatus = res.repetitions >= 4 ? 'mastered' : res.repetitions >= 1 ? 'review' : 'learning';
+    await client.query(
+      `INSERT INTO mastery_levels
+         (card_id, user_id, status, correct_count, total_reviews, confidence_average, mastery_percent)
+       VALUES ($1, $2, $3::mastery_status, $4, 1, $5, $6)
+       ON CONFLICT (card_id, user_id) DO UPDATE SET
+         total_reviews = mastery_levels.total_reviews + 1,
+         correct_count = mastery_levels.correct_count + $4,
+         confidence_average = round(
+           ((COALESCE(mastery_levels.confidence_average, 0) * mastery_levels.total_reviews) + $5)
+           / (mastery_levels.total_reviews + 1), 2),
+         mastery_percent = round(
+           (mastery_levels.correct_count + $4)::numeric / (mastery_levels.total_reviews + 1) * 100),
+         status = $3::mastery_status,
+         updated_at = now()`,
+      [cardId, userId, masteryStatus, correct, rating, correct * 100],
+    );
+
+    // Daily learning streak (global). Same day = no change; consecutive day = +1;
+    // a gap (or first ever) resets to 1. This is what the Learn header counts.
+    const streakExpr = `CASE
+        WHEN learning_streaks.last_reviewed_at = CURRENT_DATE THEN learning_streaks.current_streak
+        WHEN learning_streaks.last_reviewed_at = CURRENT_DATE - 1 THEN learning_streaks.current_streak + 1
+        ELSE 1 END`;
+    await client.query(
+      `INSERT INTO learning_streaks (user_id, class_id, current_streak, longest_streak, last_reviewed_at, reviews_today)
+       VALUES ($1, NULL, 1, 1, CURRENT_DATE, 1)
+       ON CONFLICT (user_id) WHERE class_id IS NULL DO UPDATE SET
+         current_streak = ${streakExpr},
+         longest_streak = GREATEST(learning_streaks.longest_streak, ${streakExpr}),
+         reviews_today = CASE WHEN learning_streaks.last_reviewed_at = CURRENT_DATE
+                              THEN learning_streaks.reviews_today + 1 ELSE 1 END,
+         last_reviewed_at = CURRENT_DATE`,
+      [userId],
     );
 
     // Daily deck stats.
