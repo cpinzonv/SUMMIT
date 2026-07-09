@@ -268,7 +268,7 @@ export default function CalendarPage() {
             All assignments across your classes — drag to reschedule
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
           <div className="flex gap-1 rounded-full bg-white/45 p-1 backdrop-blur">
             {VIEWS.map((v) => (
               <button
@@ -282,9 +282,9 @@ export default function CalendarPage() {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center justify-center gap-2 sm:flex-none">
             <button onClick={() => shift(-1)} className="btn btn-soft !px-3 !py-1.5">←</button>
-            <span className="min-w-[170px] text-center text-sm font-bold">{label}</span>
+            <span className="min-w-[120px] flex-1 text-center text-sm font-bold sm:min-w-[170px] sm:flex-none">{label}</span>
             <button onClick={() => shift(1)} className="btn btn-soft !px-3 !py-1.5">→</button>
           </div>
         </div>
