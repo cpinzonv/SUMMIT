@@ -1,6 +1,7 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { renderMarkdown } from '../utils/markdown';
+import { MathInline } from '../lib/mathExtension';
 
 // Legacy notes were stored as Markdown; new ones are HTML. If the content has
 // no HTML tags, treat it as Markdown and convert so it loads formatted.
@@ -19,6 +20,7 @@ export function RichTextEditor({ value, onChange, fullHeight = false }) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+      MathInline,
     ],
     content: toHtml(value),
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
@@ -42,6 +44,17 @@ export function RichTextEditor({ value, onChange, fullHeight = false }) {
         <ToolBtn active={editor.isActive('heading', { level: 2 })} onClick={cmd((c) => c.toggleHeading({ level: 2 }))} title="Heading">H</ToolBtn>
         <ToolBtn active={editor.isActive('bulletList')} onClick={cmd((c) => c.toggleBulletList())} title="Bulleted list">☰ List</ToolBtn>
         <ToolBtn active={editor.isActive('orderedList')} onClick={cmd((c) => c.toggleOrderedList())} title="Numbered list">1. List</ToolBtn>
+        <span className="mx-1 h-4 w-px" style={{ background: 'var(--note-border)' }} />
+        <ToolBtn
+          onClick={() => {
+            // eslint-disable-next-line no-alert
+            const latex = window.prompt('Enter LaTeX (e.g. \\frac{a}{b}, x^2 + 1):', '');
+            if (latex && latex.trim()) editor.chain().focus().insertMath(latex.trim()).run();
+          }}
+          title="Insert math (LaTeX)"
+        >
+          ∑ Math
+        </ToolBtn>
       </div>
       <div className={`note-editor ${fullHeight ? 'note-editor--full min-h-0 flex-1' : ''}`}>
         <EditorContent editor={editor} className={fullHeight ? 'h-full' : ''} />
