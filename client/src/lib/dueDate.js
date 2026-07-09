@@ -34,10 +34,12 @@ export function dueStatus(dueDate, now = new Date()) {
   return { hasDue: true, isPastDue, daysLeft, daysOverdue, countdownLabel, lateLabel };
 }
 
-/** An assignment counts as "done" (no longer overdue/needs-doing) when submitted,
- *  graded, or it already has a grade. Used by past-due + planned-date features. */
+/** An assignment counts as "done" (no longer overdue/needs-doing) when it's in the
+ *  board's Done column, submitted, graded, or already has a grade. Used by the
+ *  past-due badge + planned-date features. */
 export function isDone(assignment) {
   return (
+    assignment?.boardStage === 'done' || // moved to Done on the Kanban board
     assignment?.status === 'submitted' ||
     assignment?.status === 'graded' ||
     assignment?.status === 'completed' ||

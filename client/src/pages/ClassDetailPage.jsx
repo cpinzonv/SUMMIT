@@ -34,6 +34,16 @@ const TABS = [
   { key: 'attendance', label: 'Attendance' },
 ];
 
+// Board-stage labels — the table's status line follows the Kanban stage so the
+// two views always agree.
+const STAGE_LABEL = {
+  backlog: 'Backlog',
+  planning: 'Planning',
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  done: 'Done',
+};
+
 export default function ClassDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -338,7 +348,10 @@ export default function ClassDetailPage() {
                         )}
                       </div>
                       <div className="text-xs text-muted">
-                        {a.category || a.status?.replace('_', ' ')}
+                        {a.category ? `${a.category} · ` : ''}
+                        <span className={a.boardStage === 'done' ? 'font-semibold text-emerald-600' : ''}>
+                          {STAGE_LABEL[a.boardStage] || a.status?.replace('_', ' ')}
+                        </span>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-slate-600">
