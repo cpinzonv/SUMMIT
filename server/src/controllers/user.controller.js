@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as userService from '../services/user.service.js';
 import * as twofa from '../services/twofa.service.js';
+import { logSecurityEvent } from '../services/audit.service.js';
 import * as account from '../services/account.service.js';
 
 export const preferencesSchema = z
@@ -62,10 +63,18 @@ export async function twofaSetup(req, res) {
   res.json(await twofa.setup(req.user.id));
 }
 export async function twofaConfirm(req, res) {
-  res.json(await twofa.confirm(req.user.id, req.body.code));
+  const result = await twofa.confirm(req.user.id, req.body.code);
+  await logSecurityEvent({ action: '2fa_enable', outcome: 'success', userId: req.user.id, ip: req.ip });
+  res.json(result);
 }
 export async function twofaDisable(req, res) {
-  await twofa.disable(req.user.id, req.body.password);
+  try {
+    await twofa.disable(req.user.id, req.body.password);
+  } catch (err) {
+    await logSecurityEvent({ action: '2fa_disable', outcome: 'failure', userId: req.user.id, ip: req.ip });
+    throw err;
+  }
+  await logSecurityEvent({ action: '2fa_disable', outcome: 'success', userId: req.user.id, ip: req.ip });
   res.json({ ok: true });
 }
 
