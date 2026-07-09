@@ -122,12 +122,14 @@
     inset: 0;
     border-radius: inherit;
     padding: 1.25px;
+    /* Colored edges are a lighter tint of the theme's primary (brand-400) fading
+       into the primary itself (brand-600), so the glare tracks the color scheme. */
     background: linear-gradient(
       140deg,
       rgba(255, 255, 255, 0.95) 0%,
       rgba(255, 255, 255, 0.25) 35%,
-      rgba(255, 160, 120, 0.55) 70%,
-      rgba(90, 169, 214, 0.6) 100%
+      color-mix(in srgb, var(--color-brand-400), transparent 45%) 70%,
+      color-mix(in srgb, var(--color-brand-600), transparent 40%) 100%
     );
     -webkit-mask:
       linear-gradient(#000 0 0) content-box,
@@ -787,7 +789,7 @@ html[data-theme='dark'] .glass-panel {
 }
 html[data-theme='dark'] .glass-card::after,
 html[data-theme='dark'] .glass-panel::after {
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.06) 40%, rgba(255, 160, 120, 0.3) 75%, rgba(90, 169, 214, 0.32) 100%);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.06) 40%, color-mix(in srgb, var(--color-brand-400), transparent 70%) 75%, color-mix(in srgb, var(--color-brand-600), transparent 68%) 100%);
 }
 html[data-theme='dark'] .field {
   background: rgba(40, 36, 50, 0.6);
