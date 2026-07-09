@@ -23,6 +23,7 @@ import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
 import { suggestHours } from '../lib/workload';
 import { ClassNotes } from '../components/ClassNotes';
 import { ClassAssignmentsBoard } from '../components/ClassAssignmentsBoard';
+import { AssignmentDetailModal, estimateLabel } from '../components/AssignmentDetailModal';
 import { ClassAttendance } from '../components/ClassAttendance';
 import { ClassFiles } from '../components/ClassFiles';
 import NotesChatbot from '../components/NotesChatbot';
@@ -338,7 +339,14 @@ export default function ClassDetailPage() {
                   <tr key={a.id} className={`transition hover:bg-white/40 ${overdue ? 'bg-rose-50/70' : ''}`}>
                     <td className="px-5 py-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-ink">{a.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => setModal({ type: 'assignment', assignment: a })}
+                          className="font-semibold text-ink transition hover:text-brand-600"
+                          title="Open assignment"
+                        >
+                          {a.title}
+                        </button>
                         <PriorityBadge priority={a.priority} />
                         {a.externalSource && <LmsBadge source={a.externalSource} />}
                         {overdue && (
@@ -352,6 +360,9 @@ export default function ClassDetailPage() {
                         <span className={a.boardStage === 'done' ? 'font-semibold text-emerald-600' : ''}>
                           {STAGE_LABEL[a.boardStage] || a.status?.replace('_', ' ')}
                         </span>
+                        {estimateLabel(a.estimatedHours) && (
+                          <span className="text-violet-600"> · ⏱ {estimateLabel(a.estimatedHours)}</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-3 text-slate-600">
@@ -420,16 +431,23 @@ export default function ClassDetailPage() {
         />
       )}
 
-      {modal?.type === 'assignment' && (
+      {modal?.type === 'assignment' && !modal.assignment && (
         <AssignmentModal
           classId={id}
-          assignment={modal.assignment}
+          assignment={null}
           onClose={() => setModal(null)}
           onChanged={load}
           onSaved={async () => {
             setModal(null);
             await load();
           }}
+        />
+      )}
+      {modal?.type === 'assignment' && modal.assignment && (
+        <AssignmentDetailModal
+          assignment={modal.assignment}
+          onClose={() => setModal(null)}
+          onChanged={load}
         />
       )}
       {modal?.type === 'grade' && (

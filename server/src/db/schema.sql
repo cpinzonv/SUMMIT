@@ -467,6 +467,37 @@ ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submission_file_id UUID REFEREN
 ALTER TABLE assignments ADD COLUMN IF NOT EXISTS submitted_at       TIMESTAMPTZ;
 
 -- ----------------------------------------------------------------------------
+-- Assignment detail workspace (tabbed modal): rich instructions, an in-app
+-- "Working" scratchpad (HTML from the rich-text editor, autosaved), a per-file
+-- link so uploads can belong to an assignment (instruction docs + submissions),
+-- and a full submission history. `estimated_hours` (declared above) doubles as
+-- the AI time estimate — decimal hours, e.g. 1.5 = 1h 30m.
+-- ----------------------------------------------------------------------------
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS instructions     TEXT; -- rich HTML, separate from `description`
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS working_content  TEXT; -- Working tab (HTML), autosaved
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS working_saved_at TIMESTAMPTZ;
+
+-- Files can belong to a specific assignment (instruction docs, submission files).
+-- Nullable so existing class-level files (syllabus/notes) are unaffected.
+ALTER TABLE class_files ADD COLUMN IF NOT EXISTS assignment_id UUID REFERENCES assignments(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_class_files_assignment ON class_files(assignment_id);
+
+-- Submission history — one row per submission attempt. kind:
+--   'file'    → an uploaded completed-work file (file_id → class_files)
+--   'link'    → an external URL (e.g. a Google Doc)  (url)
+--   'working' → a snapshot copied from the Working tab (text = HTML)
+CREATE TABLE IF NOT EXISTS assignment_submissions (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  assignment_id UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL,
+  text          TEXT,
+  url           TEXT,
+  file_id       UUID REFERENCES class_files(id) ON DELETE SET NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_assignment_submissions ON assignment_submissions(assignment_id, created_at DESC);
+
+-- ----------------------------------------------------------------------------
 -- transcripts — lecture transcripts per class (pasted/uploaded text, or text
 -- attached to an in-app recording). `audio_file_id` optionally links the stored
 -- recording (a class_files row). `timestamps` holds optional HH:MM:SS markers.

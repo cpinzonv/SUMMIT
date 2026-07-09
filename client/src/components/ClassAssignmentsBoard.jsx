@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { dueStatus } from '../lib/dueDate';
+import { estimateLabel } from './AssignmentDetailModal';
 import { boardColumns, visibleStage } from '../lib/board';
 import { StageBoard } from './StageBoard';
 
@@ -73,6 +74,9 @@ function AssignmentCardBody({ a }) {
           </span>
         )}
         {a.pointValue != null && <span className="text-muted">{a.pointValue} pts</span>}
+        {estimateLabel(a.estimatedHours) && (
+          <span className="font-semibold text-violet-600">⏱ {estimateLabel(a.estimatedHours)}</span>
+        )}
         {done && <span className="font-semibold text-emerald-600">✓ Done</span>}
       </div>
     </div>
