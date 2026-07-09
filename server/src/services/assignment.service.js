@@ -160,33 +160,11 @@ export async function listAssignments(userId, classId) {
   return rows.map(toPublicAssignment);
 }
 
-/** Kanban WIP limit: how many of a class's assignments may be in-flight. */
-export const WIP_LIMIT = 3;
-// Both non-Done columns count toward the limit.
-const IN_FLIGHT = ['planning', 'in_progress'];
-
-/**
- * Move an assignment to a Kanban stage. Entering an in-flight column
- * (`planning`/`in_progress`) is blocked (409) when it would exceed the class's
- * WIP limit of in-flight cards.
- */
+/** Move an assignment to a Kanban stage (backlog/in_progress/done). */
 export async function setAssignmentStage(userId, assignmentId, stage) {
-  const row = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  await getOwnedAssignment(userId, assignmentId); // 404s if not owned
   if (!['planning', 'in_progress', 'done'].includes(stage)) {
     throw AppError.badRequest('Invalid stage.');
-  }
-  // Only enforce WIP when moving INTO an in-flight column from outside it.
-  if (IN_FLIGHT.includes(stage) && !IN_FLIGHT.includes(row.stage)) {
-    const { rows: cnt } = await query(
-      `SELECT count(*)::int AS n FROM assignments
-        WHERE class_id = $1 AND stage = ANY($2) AND id <> $3`,
-      [row.class_id, IN_FLIGHT, assignmentId],
-    );
-    if (cnt[0].n >= WIP_LIMIT) {
-      throw new AppError(409, `You have ${WIP_LIMIT}/${WIP_LIMIT} active. Pause or complete one first.`, {
-        code: 'wip_limit',
-      });
-    }
   }
   // Stamp completion time on the first move to Done; clear it when reopened.
   const completedClause = stage === 'done'
@@ -194,16 +172,6 @@ export async function setAssignmentStage(userId, assignmentId, stage) {
     : ', completed_at = NULL';
   await query(`UPDATE assignments SET stage = $1::assignment_stage${completedClause} WHERE id = $2`, [stage, assignmentId]);
   return fetchPublicAssignment(assignmentId);
-}
-
-/** List a class's in-flight count + limit (for the board's WIP badge). */
-export async function assignmentWip(userId, classId) {
-  await getOwnedClass(userId, classId);
-  const { rows } = await query(
-    `SELECT count(*)::int AS n FROM assignments WHERE class_id = $1 AND stage = ANY($2)`,
-    [classId, IN_FLIGHT],
-  );
-  return { active: rows[0].n, limit: WIP_LIMIT };
 }
 
 /** Submission files attached to an assignment (class_files tagged with its id). */

@@ -18,18 +18,11 @@ export const assignmentsApi = {
   removeFile: (fileId) => api.delete(`/api/files/${fileId}`),
 };
 
-export const WIP_LIMIT = 3;
-
-/** Kanban columns in board order. Both non-Done columns count toward the WIP limit. */
+/** Kanban columns in board order. */
 export const STAGES = [
-  { key: 'planning', label: 'Not Started', tint: 'bg-sky-100 text-sky-700', dot: '#0ea5e9', inFlight: true },
-  { key: 'in_progress', label: 'In Progress', tint: 'bg-indigo-100 text-indigo-700', dot: '#6366f1', inFlight: true },
+  { key: 'planning', label: 'Not Started', tint: 'bg-sky-100 text-sky-700', dot: '#0ea5e9' },
+  { key: 'in_progress', label: 'In Progress', tint: 'bg-indigo-100 text-indigo-700', dot: '#6366f1' },
   { key: 'done', label: 'Done', tint: 'bg-emerald-100 text-emerald-700', dot: '#10b981' },
 ];
 
 export const stageMeta = (key) => STAGES.find((s) => s.key === key) || STAGES[0];
-
-/** Count of in-flight (planning + in_progress) assignments. */
-export function inFlightCount(assignments) {
-  return (assignments || []).filter((a) => a.stage === 'planning' || a.stage === 'in_progress').length;
-}

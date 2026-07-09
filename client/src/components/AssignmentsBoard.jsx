@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { Modal, Toast, Spinner } from './ui';
 import { dueStatus, countdownTone } from '../lib/dueDate';
-import { assignmentsApi, STAGES, WIP_LIMIT, stageMeta, inFlightCount } from '../lib/assignments';
+import { assignmentsApi, STAGES, stageMeta } from '../lib/assignments';
 
 const toDateInput = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 
@@ -26,7 +26,6 @@ export default function AssignmentsBoard({ classId, assignments, onChanged }) {
   }, [toast]);
 
   const flash = (msg, type = 'success') => setToast({ type, msg });
-  const inFlight = inFlightCount(items);
 
   const move = async (id, stage) => {
     const cur = items.find((a) => a.id === id);
@@ -38,7 +37,7 @@ export default function AssignmentsBoard({ classId, assignments, onChanged }) {
       setItems((list) => list.map((a) => (a.id === id ? updated : a)));
       onChanged?.();
     } catch (e) {
-      setItems(prev); // revert (e.g. WIP block)
+      setItems(prev); // revert on error
       flash(errorMessage(e), 'error');
     }
   };
@@ -57,12 +56,7 @@ export default function AssignmentsBoard({ classId, assignments, onChanged }) {
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm text-muted">Drag cards between columns. Max {WIP_LIMIT} in flight.</p>
-        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${inFlight >= WIP_LIMIT ? 'bg-rose-100 text-rose-600' : 'bg-white/70 text-muted'}`}>
-          {inFlight}/{WIP_LIMIT} in flight
-        </span>
-      </div>
+      <p className="mb-3 text-sm text-muted">Drag cards between columns.</p>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {STAGES.map((s) => {
@@ -80,7 +74,7 @@ export default function AssignmentsBoard({ classId, assignments, onChanged }) {
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.dot }} />
                   <span className="text-sm font-bold text-ink">{s.label}</span>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${s.inFlight && inFlight >= WIP_LIMIT ? 'bg-rose-100 text-rose-600' : 'text-muted'}`}>{cards.length}</span>
+                <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-muted">{cards.length}</span>
               </div>
               <div className="space-y-2">
                 {cards.map((a) => (
