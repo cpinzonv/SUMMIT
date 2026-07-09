@@ -211,12 +211,14 @@ export default function ClassDetailPage() {
       <ErrorBanner message={error} />
 
       {/* Tabs */}
-      <div className="mt-6 flex gap-1.5">
+      {/* Scrollable tab strip — bleeds to the screen edges on mobile so all tabs
+          stay reachable without breaking the layout. */}
+      <div className="no-scrollbar mt-6 -mx-4 flex gap-1.5 overflow-x-auto px-4">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition ${
               tab === t.key
                 ? 'bg-white/75 text-brand-700 shadow-sm'
                 : 'text-muted hover:bg-white/50 hover:text-ink'
@@ -714,7 +716,7 @@ function ClassEditModal({ cls, onClose, onSaved }) {
     <Modal title="Edit class" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Input label="Name" value={form.name} onChange={update('name')} required />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Code" value={form.code} onChange={update('code')} placeholder="CS 250" />
           <Input label="Term" value={form.term} onChange={update('term')} placeholder="Fall 2026" />
         </div>
@@ -728,7 +730,7 @@ function ClassEditModal({ cls, onClose, onSaved }) {
           />
         </label>
         <ColorPicker value={form.color} onChange={(c) => setForm((f) => ({ ...f, color: c }))} />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Start date" type="date" value={form.startDate} onChange={update('startDate')} />
           <Input label="End date" type="date" value={form.endDate} onChange={update('endDate')} />
         </div>
@@ -1096,11 +1098,11 @@ function AssignmentModal({ classId, assignment, onClose, onSaved }) {
         <ErrorBanner message={error} />
         <Input label="Title" value={form.title} onChange={update('title')} required />
         <Input label="Category" value={form.category} onChange={update('category')} placeholder="Homework, Exam…" />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Due date" type="date" value={form.dueDate} onChange={update('dueDate')} />
           <Input label="Planned date" type="date" value={form.plannedDate} onChange={update('plannedDate')} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Point value" type="number" value={form.pointValue} onChange={update('pointValue')} />
           <label className="block">
             <span className="mb-1 block text-xs font-semibold text-ink">Priority</span>
@@ -1205,7 +1207,7 @@ function GradeModal({ assignment, onClose, onSaved }) {
     >
       <form onSubmit={submit} className="space-y-3">
         <ErrorBanner message={error} />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input label="Points earned" type="number" value={form.pointsEarned} onChange={update('pointsEarned')} placeholder="—" />
           <Input label="Points possible" type="number" value={form.pointsPossible} onChange={update('pointsPossible')} placeholder={assignment.pointValue ?? '?'} />
         </div>
