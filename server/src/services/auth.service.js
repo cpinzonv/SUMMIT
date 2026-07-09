@@ -16,7 +16,7 @@ import { issueCode, verifyCode } from './verification.service.js';
 const SALT_ROUNDS = 12;
 
 /** Shape returned to clients — never includes password_hash or LMS tokens. */
-function toPublicUser(row) {
+export function toPublicUser(row) {
   return {
     id: row.id,
     email: row.email,
