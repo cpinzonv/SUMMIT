@@ -53,7 +53,7 @@ function PricingCard({ pricing, locked }) {
   );
 }
 
-export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted }) {
+export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted, preview = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [claimedNumber, setClaimedNumber] = useState(null);
@@ -80,6 +80,7 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
   const pricing = status.pricing?.[cardTier];
 
   const claim = async () => {
+    if (preview) { setClaimedNumber(42); return; } // admin preview — no real claim
     setBusy(true);
     setError('');
     try {
@@ -98,6 +99,7 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
   };
 
   const joinWaitlist = async () => {
+    if (preview) { setWaitlisted(true); return; } // admin preview — no real signup
     setBusy(true);
     setError('');
     try {
@@ -112,6 +114,7 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
   };
 
   const upgrade = async () => {
+    if (preview) { setError('Checkout is launching soon.'); return; } // admin preview
     setBusy(true);
     setError('');
     try {
