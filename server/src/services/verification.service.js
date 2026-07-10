@@ -10,6 +10,7 @@ import { query } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { env } from '../config/env.js';
 import { sendEmail, sendSms, emailConfigured, smsConfigured } from './messaging.service.js';
+import { verificationEmail } from '../emails/templates.js';
 
 const CODE_TTL_MIN = 10;
 const MAX_ATTEMPTS = 5;
@@ -35,14 +36,20 @@ export async function issueCode({ userId, purpose, channel = 'email', destinatio
     [userId, purpose, codeHash, destination ?? null],
   );
 
-  const line = `${intro || 'Your Summit verification code is'} ${code}. It expires in ${CODE_TTL_MIN} minutes. If you didn't request this, you can ignore it.`;
+  // SMS sends a single plain line; email sends the branded HTML template plus a
+  // plain-text fallback (both fields — so non-HTML clients render and spam
+  // filters stay happy).
+  const smsLine = `${intro || 'Your Summit verification code is'} ${code}. It expires in ${CODE_TTL_MIN} minutes. If you didn't request this, you can ignore it.`;
   // Capture the ACTUAL provider result so a configured-but-failing send (e.g.
   // Resend 403 on an unverified domain) is reported as delivered:false instead of
   // silently succeeding — the failure detail is already logged in messaging.service.
-  const result =
-    channel === 'sms'
-      ? await sendSms({ to: destination, body: line })
-      : await sendEmail({ to: destination, subject: subject || 'Your Summit verification code', text: line });
+  let result;
+  if (channel === 'sms') {
+    result = await sendSms({ to: destination, body: smsLine });
+  } else {
+    const { html, text } = verificationEmail({ code });
+    result = await sendEmail({ to: destination, subject: subject || 'Your Summit verification code', html, text });
+  }
 
   const unconfigured = channel === 'sms' ? !smsConfigured() : !emailConfigured();
   const dev = env.nodeEnv !== 'production' && unconfigured;
