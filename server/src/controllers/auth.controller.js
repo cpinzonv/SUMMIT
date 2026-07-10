@@ -137,6 +137,13 @@ export async function logout(req, res) {
   res.status(204).end();
 }
 
+/** Sign out everywhere: revoke ALL of the caller's active refresh tokens. */
+export async function logoutAll(req, res) {
+  await authService.logoutAll(req.user.id);
+  await logSecurityEvent({ action: 'logout_all', outcome: 'success', userId: req.user.id, ip: req.ip });
+  res.json({ ok: true });
+}
+
 export async function me(req, res) {
   const user = await authService.getCurrentUser(req.user.id);
   res.json({ user });

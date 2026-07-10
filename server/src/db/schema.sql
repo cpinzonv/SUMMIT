@@ -1326,3 +1326,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_logs_subject ON audit_logs(subject_student_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant  ON audit_logs(tenant_id, occurred_at DESC);
+
+-- ----------------------------------------------------------------------------
+-- Session & 2FA hardening (SECURITY_AUDIT M5/L3/M6). Refresh tokens gain a
+-- rotation family + lineage + device context so reuse can be detected and whole
+-- families revoked; users gain the last-consumed TOTP step for replay protection.
+-- All nullable / IF NOT EXISTS so existing rows are untouched (no table rewrite).
+-- ----------------------------------------------------------------------------
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS family_id   UUID;   -- rotation family (theft → revoke whole family)
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS replaced_by UUID;   -- the token this one rotated into
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS user_agent  TEXT;   -- device context (display / soft binding)
+ALTER TABLE refresh_tokens ADD COLUMN IF NOT EXISTS ip          TEXT;
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step BIGINT;       -- last consumed TOTP step (single-use per step)

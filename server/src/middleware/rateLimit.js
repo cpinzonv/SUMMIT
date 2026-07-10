@@ -9,7 +9,7 @@
  * client behind Railway's proxy rather than the proxy's address. Responses use
  * the app's standard { error: { message } } shape with HTTP 429.
  */
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 const json429 = (message) => (req, res) => {
   res.status(429).json({ error: { message } });
@@ -43,4 +43,24 @@ export const sensitiveLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
   handler: json429('Too many attempts — wait a minute before trying again.'),
+});
+
+// Refresh / logout (token-in-body, no authenticated user at this layer) — modest
+// per-IP ceiling. Real sessions refresh roughly every 15 min, so 60 / 5 min per
+// IP never bothers a legitimate client but blocks token-guessing/abuse. 30 / min.
+export const refreshLimiter = rateLimit({
+  ...base,
+  windowMs: 5 * 60 * 1000,
+  max: 60,
+  handler: json429('Too many requests — please slow down and try again shortly.'),
+});
+
+// Authenticated, per-ACCOUNT limiter (keyed by the caller's user id, set by
+// requireAuth) for rare account-wide actions like "sign out everywhere".
+export const accountActionLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip),
+  handler: json429('Too many attempts — please wait and try again.'),
 });

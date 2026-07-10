@@ -59,6 +59,7 @@ export async function updateGraduationSettings(req, res) {
 /* ---- Two-factor authentication ----------------------------------------- */
 export const twofaConfirmSchema = z.object({ code: z.string().min(1, 'Enter the 6-digit code') });
 export const twofaDisableSchema = z.object({ password: z.string().min(1, 'Password is required') });
+export const twofaBackupCodesSchema = z.object({ password: z.string().min(1, 'Password is required') });
 
 export async function twofaSetup(req, res) {
   res.json(await twofa.setup(req.user.id));
@@ -79,6 +80,13 @@ export async function twofaDisable(req, res) {
   await trustedDevices.revokeAllTrustedDevices(req.user.id);
   await logSecurityEvent({ action: '2fa_disable', outcome: 'success', userId: req.user.id, ip: req.ip });
   res.json({ ok: true });
+}
+
+/** Regenerate the 10 backup codes (bcrypt-hashed at rest). Re-auth with password. */
+export async function twofaBackupCodes(req, res) {
+  const result = await twofa.regenerateBackupCodes(req.user.id, req.body.password);
+  await logSecurityEvent({ action: '2fa_backup_regenerate', outcome: 'success', userId: req.user.id, ip: req.ip });
+  res.json(result);
 }
 
 /* ---- Trusted devices (remember-this-device for 2FA) -------------------- */

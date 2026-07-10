@@ -3,7 +3,7 @@ import * as authController from '../controllers/auth.controller.js';
 import * as lmsController from '../controllers/lms.controller.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
-import { authLimiter, sensitiveLimiter } from '../middleware/rateLimit.js';
+import { authLimiter, sensitiveLimiter, refreshLimiter, accountActionLimiter } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
@@ -58,14 +58,24 @@ router.post(
 
 router.post(
   '/refresh',
+  refreshLimiter,
   validate(authController.refreshSchema),
   asyncHandler(authController.refresh),
 );
 
 router.post(
   '/logout',
+  refreshLimiter,
   validate(authController.refreshSchema),
   asyncHandler(authController.logout),
+);
+
+// Sign out everywhere (authenticated) — per-account rate limited.
+router.post(
+  '/logout-all',
+  requireAuth,
+  accountActionLimiter,
+  asyncHandler(authController.logoutAll),
 );
 
 // Canvas OAuth callback: the authenticated user exchanges the code Canvas sent
