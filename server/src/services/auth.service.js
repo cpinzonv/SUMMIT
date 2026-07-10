@@ -139,10 +139,23 @@ export async function register({
   );
 
   const user = rows[0];
-  // New email signups start unverified — send a code and gate access until they
-  // confirm it. No tokens are issued yet.
-  const { devCode } = await sendSignupCode(user);
-  return { verificationRequired: true, email: user.email, ...(devCode ? { devCode } : {}) };
+  // New email signups start unverified — send the confirmation code and gate
+  // access until they confirm it. No tokens are issued yet.
+  const result = await sendSignupCode(user);
+
+  // "Deliverable" = Resend actually accepted the send, OR we're in the dev
+  // fallback (unconfigured + non-production) where the code is returned in the
+  // response. If the code can't reach the user, do NOT leave a half-created,
+  // unverifiable account: roll it back so signup can be retried, and surface the
+  // failure. The underlying Resend error was already logged in messaging.service.
+  const deliverable = result.delivered || Boolean(result.devCode);
+  if (!deliverable) {
+    await query('DELETE FROM users WHERE id = $1', [user.id]).catch((err) =>
+      console.error(`[auth] rollback after undelivered signup code failed for ${user.email}:`, err?.message),
+    );
+    throw new AppError(502, 'We could not send your verification email. Please try again in a few minutes.');
+  }
+  return { verificationRequired: true, email: user.email, ...(result.devCode ? { devCode: result.devCode } : {}) };
 }
 
 /** Issue + email a signup verification code for a user. */
