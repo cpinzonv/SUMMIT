@@ -67,7 +67,15 @@ export function enforceTranscription() {
       if (raw == null || raw === '') {
         return next(AppError.badRequest('Recording duration (durationSeconds) is required.'));
       }
-      const minutes = Math.ceil((Number(raw) || 0) / 60);
+      // Reject sub-1s recordings up front: ceil(0/60)=0 minutes would meter
+      // nothing, leaving a guaranteed-free path through a metered endpoint. Real
+      // lectures are never 0:00. Bail before getTierRow/checkAndConsume so nothing
+      // is metered and the handler (which saves the recording) never runs.
+      const seconds = Number(raw);
+      if (!Number.isFinite(seconds) || seconds < 1) {
+        return next(AppError.badRequest('Recording is too short to save — duration must be at least 1 second.'));
+      }
+      const minutes = Math.ceil(seconds / 60);
       const row = await getTierRow(req.user.id);
       const tier = effectiveTier(row);
       const limitDef = limitFor(tier, 'transcription_minutes');

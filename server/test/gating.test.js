@@ -2,7 +2,13 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { effectiveTier, checkAndConsume, getTierRow, refundUsage, reconcileUsage } from '../src/services/usageGating.service.js';
 import { claimFounding, foundingClaimedCount, foundingCap, setFlag } from '../src/services/billing.service.js';
+import { enforceTranscription } from '../src/middleware/enforceUsage.js';
 import { query, pool } from '../src/config/db.js';
+
+// Run a middleware to completion, capturing whatever it passes to next().
+function runMiddleware(mw, req) {
+  return new Promise((resolve) => { mw(req, {}, (err) => resolve(err)); });
+}
 
 // ---- Pure: effective tier resolution (no DB) -------------------------------
 
@@ -25,6 +31,26 @@ test('effectiveTier — plain tier passthrough', () => {
   assert.equal(effectiveTier({ role: 'user', tier: 'pro' }), 'pro');
   assert.equal(effectiveTier({ role: 'user', tier: 'max' }), 'max');
   assert.equal(effectiveTier(null), 'free');
+});
+
+// ---- Transcription duration guard (no DB — bails before getTierRow) --------
+
+test('enforceTranscription — sub-1s durations rejected with 400 before metering', async () => {
+  const mw = enforceTranscription();
+  for (const d of [0, '0', -5, 0.4, 'abc']) {
+    const err = await runMiddleware(mw, { body: { durationSeconds: d }, user: { id: 'nobody' } });
+    assert.equal(err?.statusCode, 400, `duration ${d} → 400`);
+    assert.match(err.message, /too short/i);
+  }
+});
+
+test('enforceTranscription — missing/empty duration still 400 (required, distinct message)', async () => {
+  const mw = enforceTranscription();
+  for (const d of [null, undefined, '']) {
+    const err = await runMiddleware(mw, { body: { durationSeconds: d }, user: { id: 'nobody' } });
+    assert.equal(err?.statusCode, 400);
+    assert.match(err.message, /required/i);
+  }
 });
 
 // ---- DB integration --------------------------------------------------------
@@ -103,6 +129,17 @@ test('checkAndConsume — premium voice on non-max → premium_voice gate (Max)'
   assert.equal(r.allowed, false);
   assert.equal(r.gate, 'premium_voice');
   assert.equal(r.requiredTier, 'max');
+});
+
+test('enforceTranscription — 0-second recording is not metered (no counter row)', async (t) => {
+  if (!dbReady) return t.skip('no DB');
+  const uid = await mkUser();
+  const err = await runMiddleware(enforceTranscription(), { body: { durationSeconds: 0 }, user: { id: uid } });
+  assert.equal(err?.statusCode, 400); // stops the chain → route handler never saves
+  const { rows } = await query(
+    "SELECT 1 FROM usage_counters WHERE user_id=$1 AND metric='transcription_minutes'", [uid],
+  );
+  assert.equal(rows.length, 0, 'nothing metered — no transcription counter created');
 });
 
 test('refund on failure — consume then refund leaves the counter unchanged',
