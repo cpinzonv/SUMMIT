@@ -14,6 +14,7 @@ import { assertInstitutionActive } from './institution.service.js';
 import { issueCode, verifyCode } from './verification.service.js';
 import { assignFoundingOnSignup } from './billing.service.js';
 import { isDeviceTrusted, trustDevice } from './trustedDevice.service.js';
+import { sendEmail } from './messaging.service.js';
 
 const SALT_ROUNDS = 12;
 
@@ -118,12 +119,20 @@ export async function register({
   referralSource,
   referralSourceDetail,
 }) {
-  const existing = await query('SELECT 1 FROM users WHERE email = $1', [email]);
+  // Hash first so BOTH branches below pay the bcrypt cost — response timing must
+  // not reveal whether the email is already registered.
+  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+  const existing = await query('SELECT id, email FROM users WHERE email = $1', [email]);
   if (existing.rowCount > 0) {
-    throw AppError.conflict('An account with that email already exists');
+    // Do NOT reveal that the account exists and do NOT create a duplicate. Nudge
+    // the REAL owner to sign in / reset instead — awaited so timing matches the
+    // new-signup path's email send, but its result NEVER changes the API response,
+    // which is byte-for-byte identical to the fresh-signup return below.
+    await notifyExistingAccount(existing.rows[0].email);
+    return { verificationRequired: true, email };
   }
 
-  const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const { rows } = await query(
     `INSERT INTO users (email, password_hash, full_name, school, timezone, referral_source, referral_source_detail)
      VALUES ($1, $2, $3, $4, COALESCE($5, 'UTC'), $6, $7)
@@ -162,6 +171,26 @@ export async function register({
   await assignFoundingOnSignup(user.id);
 
   return { verificationRequired: true, email: user.email, ...(result.devCode ? { devCode: result.devCode } : {}) };
+}
+
+/**
+ * Best-effort "you already have an account" notice, sent to the REAL owner when
+ * someone attempts to sign up with an already-registered email. This is the only
+ * side effect of the exists branch: it sends NO verification code and NO
+ * account-activation link (nothing an attacker could use to hijack the flow), and
+ * its result is intentionally ignored so the signup API response never depends on
+ * it. sendEmail() never throws; the extra try/catch is belt-and-suspenders.
+ */
+async function notifyExistingAccount(email) {
+  const text =
+    'Someone tried to create a Summit account with this email, but you already have one. ' +
+    'If this was you, just sign in — or use "Forgot password" if you need to reset it. ' +
+    "If it wasn't you, no action is needed; your account is unchanged.";
+  try {
+    await sendEmail({ to: email, subject: 'You already have a Summit account', text });
+  } catch {
+    /* never let a notification failure affect signup */
+  }
 }
 
 /** Issue + email a signup verification code for a user. */
