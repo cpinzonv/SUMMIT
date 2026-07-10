@@ -84,7 +84,8 @@ export async function weeklyWorkload(userId, now = new Date()) {
        JOIN classes c ON c.id = a.class_id
       WHERE c.user_id = $1 AND c.archived_at IS NULL
         AND COALESCE(a.planned_date, a.due_date) IS NOT NULL
-        AND a.status NOT IN ('submitted', 'graded')`,
+        AND a.status NOT IN ('submitted', 'graded')
+        AND a.board_stage <> 'done'`,
     [userId],
   );
 

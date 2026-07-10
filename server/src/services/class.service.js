@@ -146,16 +146,21 @@ export async function updateClass(userId, classId, input) {
 
 /** List the user's active (non-archived) classes, each with grade + attendance. */
 export async function listCurrentClasses(userId) {
-  const { rows } = await query(
-    `SELECT * FROM classes
-     WHERE user_id = $1 AND archived_at IS NULL
-     ORDER BY created_at DESC`,
-    [userId],
-  );
+  const [{ rows }, tz] = await Promise.all([
+    query(
+      `SELECT * FROM classes
+       WHERE user_id = $1 AND archived_at IS NULL
+       ORDER BY created_at DESC`,
+      [userId],
+    ),
+    // The user's timezone drives the "before today" calendar-day comparison so the
+    // overdue count matches what the student sees locally.
+    query('SELECT timezone FROM users WHERE id = $1', [userId]).then((r) => r.rows[0]?.timezone || 'UTC'),
+  ]);
   return Promise.all(
     rows.map(async (row) => {
       const currentGrade = await computeClassGrade(row.id);
-      const overdueCount = await countOverdueAssignments(row.id);
+      const overdueCount = await countOverdueAssignments(row.id, tz);
       const nextDueDate = await nextUpcomingDue(row.id);
       return {
         ...toPublicClass(row),
@@ -171,13 +176,24 @@ export async function listCurrentClasses(userId) {
   );
 }
 
-/** Count a class's assignments that are past due and not yet submitted/graded. */
-async function countOverdueAssignments(classId) {
+/**
+ * Count a class's OVERDUE assignments — matching the table/Kanban "overdue" badge
+ * exactly, so the card count never disagrees with what's visible:
+ *   • due DAY is before today in the user's timezone (a task due today is "Due
+ *     today", not late — calendar day, not the exact timestamp)
+ *   • NOT done: not submitted/graded AND not moved to the board's Done column
+ *     (a late assignment marked Done no longer counts)
+ * Uses due_date only (never planned_date) so it can't count the same item twice.
+ */
+async function countOverdueAssignments(classId, tz = 'UTC') {
   const { rows } = await query(
     `SELECT count(*)::int AS n FROM assignments
-     WHERE class_id = $1 AND due_date IS NOT NULL AND due_date < now()
-       AND status NOT IN ('submitted', 'graded')`,
-    [classId],
+      WHERE class_id = $1
+        AND due_date IS NOT NULL
+        AND (due_date AT TIME ZONE $2)::date < (now() AT TIME ZONE $2)::date
+        AND status NOT IN ('submitted', 'graded')
+        AND board_stage <> 'done'`,
+    [classId, tz],
   );
   return rows[0]?.n ?? 0;
 }
@@ -188,6 +204,7 @@ async function nextUpcomingDue(classId) {
     `SELECT due_date FROM assignments
      WHERE class_id = $1 AND due_date IS NOT NULL AND due_date >= now()
        AND status NOT IN ('submitted', 'graded')
+       AND board_stage <> 'done'
      ORDER BY due_date ASC LIMIT 1`,
     [classId],
   );
