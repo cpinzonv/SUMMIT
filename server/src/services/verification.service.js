@@ -36,12 +36,17 @@ export async function issueCode({ userId, purpose, channel = 'email', destinatio
   );
 
   const line = `${intro || 'Your Summit verification code is'} ${code}. It expires in ${CODE_TTL_MIN} minutes. If you didn't request this, you can ignore it.`;
-  if (channel === 'sms') await sendSms({ to: destination, body: line });
-  else await sendEmail({ to: destination, subject: subject || 'Your Summit verification code', text: line });
+  // Capture the ACTUAL provider result so a configured-but-failing send (e.g.
+  // Resend 403 on an unverified domain) is reported as delivered:false instead of
+  // silently succeeding — the failure detail is already logged in messaging.service.
+  const result =
+    channel === 'sms'
+      ? await sendSms({ to: destination, body: line })
+      : await sendEmail({ to: destination, subject: subject || 'Your Summit verification code', text: line });
 
   const unconfigured = channel === 'sms' ? !smsConfigured() : !emailConfigured();
   const dev = env.nodeEnv !== 'production' && unconfigured;
-  return { sent: true, delivered: !unconfigured, ...(dev ? { devCode: code } : {}) };
+  return { sent: true, delivered: Boolean(result?.delivered), ...(dev ? { devCode: code } : {}) };
 }
 
 /** Verify + consume a code for (userId, purpose). Throws AppError on failure. */
