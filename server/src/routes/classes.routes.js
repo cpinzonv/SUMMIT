@@ -173,7 +173,8 @@ router.post(
   '/:id/transcripts',
   validate(classes.classIdParam, 'params'),
   validate(transcripts.createSchema),
-  enforceTranscription(), // meters durationSeconds against the transcription cap
+  // Not metered: this stores a manual/pasted transcript (no audio compute). Audio
+  // recordings go through /record below, which IS metered.
   asyncHandler(transcripts.create),
 );
 router.post(

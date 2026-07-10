@@ -9,13 +9,13 @@ import { billingApi } from '../api/billing';
  * No Stripe is loaded here; Mode C's Upgrade hits a 501 stub.
  */
 
-// gate name → human label for the headline.
-const FEATURE_LABEL = {
-  extraction: 'syllabus extraction',
-  ai_cards: 'AI flashcards',
-  transcription: 'transcription',
-  podcasts: 'podcasts',
-  premium_voice: 'premium podcast voices',
+// gate name → the phrase that completes "You've used ___ for this semester".
+const USED_PHRASE = {
+  extraction: 'your 2 free syllabus extractions',
+  ai_cards: 'your free AI flashcards',
+  transcription: 'your free recordings',
+  podcasts: 'your free podcast',
+  premium_voice: 'the free podcast voices',
 };
 
 function PricingCard({ pricing, locked }) {
@@ -53,7 +53,7 @@ function PricingCard({ pricing, locked }) {
   );
 }
 
-export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted }) {
+export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted, preview = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [claimedNumber, setClaimedNumber] = useState(null);
@@ -69,7 +69,7 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
   if (!status) return null;
 
   const gateName = gate?.gate || 'this feature';
-  const feature = FEATURE_LABEL[gateName] || 'this feature';
+  const usedPhrase = USED_PHRASE[gateName] || 'your free plan';
   const realMode = status.paywall_enabled && status.billing_enabled;
   const mode = realMode ? 'C' : status.founding_slots_left > 0 ? 'A' : 'B';
 
@@ -80,6 +80,7 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
   const pricing = status.pricing?.[cardTier];
 
   const claim = async () => {
+    if (preview) { setClaimedNumber(42); return; } // admin preview — no real claim
     setBusy(true);
     setError('');
     try {
@@ -98,6 +99,7 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
   };
 
   const joinWaitlist = async () => {
+    if (preview) { setWaitlisted(true); return; } // admin preview — no real signup
     setBusy(true);
     setError('');
     try {
@@ -112,6 +114,7 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
   };
 
   const upgrade = async () => {
+    if (preview) { setError('Checkout is launching soon.'); return; } // admin preview
     setBusy(true);
     setError('');
     try {
@@ -149,14 +152,23 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
           </div>
         ) : (
           <>
-            <h3 className="font-display text-xl font-bold text-ink">
-              You’ve hit your free limit for {feature}
-            </h3>
+            {mode === 'C' ? (
+              <>
+                <h3 className="font-display text-xl font-bold text-ink">Your whole semester, handled.</h3>
+                <p className="mt-2 text-sm text-muted">
+                  Unlimited extractions, flashcards, and recording hours — one payment covers you through the end of the term.
+                </p>
+              </>
+            ) : (
+              <h3 className="font-display text-xl font-bold text-ink">
+                You’ve used {usedPhrase} for this semester
+              </h3>
+            )}
 
             {mode === 'A' && (
               <>
                 <p className="mt-2 text-sm text-muted">
-                  Founding members get Summit Pro free for a full year.{' '}
+                  Founding members get a full year of Summit Pro — free.{' '}
                   <span className="font-semibold text-ink">
                     {status.founding_slots_left} of {status.founding_cap} spots left.
                   </span>
@@ -175,12 +187,15 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
             {mode === 'B' && (
               <>
                 <p className="mt-2 text-sm text-muted">Summit Pro launches this January.</p>
+                <p className="mt-2 text-sm text-ink">
+                  Keep using everything free until January — Pro just adds unlimited.
+                </p>
                 <div className="mt-4">
                   <PricingCard pricing={pricing} locked />
                 </div>
                 <div className="mt-5 flex flex-col items-center gap-3">
                   <button className="btn btn-primary w-full" onClick={joinWaitlist} disabled={busy}>
-                    {busy ? 'Joining…' : 'Join the Waitlist'}
+                    {busy ? 'Saving…' : 'Save my spot for January'}
                   </button>
                   <button className="text-sm font-semibold text-muted hover:text-ink" onClick={onClose}>
                     Maybe later
@@ -191,13 +206,12 @@ export function PaywallModal({ gate, status, onClose, onClaimed, onWaitlisted })
 
             {mode === 'C' && (
               <>
-                <p className="mt-2 text-sm text-muted">Upgrade to keep going without limits.</p>
                 <div className="mt-4">
                   <PricingCard pricing={pricing} />
                 </div>
                 <div className="mt-5 flex flex-col items-center gap-3">
                   <button className="btn btn-primary w-full" onClick={upgrade} disabled={busy}>
-                    {busy ? 'Opening…' : 'Upgrade'}
+                    {busy ? 'Opening…' : 'Get Summit Pro'}
                   </button>
                   <button className="text-sm font-semibold text-muted hover:text-ink" onClick={onClose}>
                     Maybe later

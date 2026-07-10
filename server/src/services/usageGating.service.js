@@ -12,25 +12,37 @@
  */
 import { query, withTransaction } from '../config/db.js';
 import { TIER_LIMITS, METRIC_GATE, limitFor, periodKeyFor } from '../config/tiers.js';
+import { institutionAccessOf } from './featureGating.service.js';
 
 /** Fetch the columns needed to resolve a user's effective tier. */
 export async function getTierRow(userId) {
   const { rows } = await query(
     `SELECT u.id, u.role, u.tier, u.founding_member, u.founding_member_number, u.pro_until,
-            (w.user_id IS NOT NULL) AS is_whitelisted
+            (w.user_id IS NOT NULL) AS is_whitelisted,
+            u.institution_id,
+            i.feature_flags AS institution_feature_flags,
+            i.contract_end  AS institution_contract_end,
+            i.revoked_at    AS institution_revoked_at
        FROM users u
        LEFT JOIN premium_whitelist w ON w.user_id = u.id
+       LEFT JOIN institutions i ON i.id = u.institution_id
       WHERE u.id = $1`,
     [userId],
   );
   return rows[0] || null;
 }
 
-/** Resolve the effective tier from a tier row (see module doc). */
+/**
+ * Resolve the effective tier (see module doc). Order:
+ *   admin/demo → max, whitelist → pro, ACTIVE institution contract → pro,
+ *   founding + valid pro_until → pro, else users.tier.
+ */
 export function effectiveTier(row) {
   if (!row) return 'free';
   if (row.role === 'admin' || row.role === 'demo') return 'max';
   if (row.is_whitelisted) return 'pro';
+  const inst = institutionAccessOf(row); // uses institution_* aliases on the row
+  if (inst && inst.active) return 'pro'; // active institutional contract = Pro
   if (row.founding_member && row.pro_until && new Date(row.pro_until) > new Date()) return 'pro';
   return TIER_LIMITS[row.tier] ? row.tier : 'free';
 }
@@ -82,7 +94,7 @@ export async function checkAndConsume(userId, metric, amount = 1, opts = {}) {
   // Unlimited: record usage for analytics but never block.
   if (cap === null) {
     if (consume) await bumpCounter(userId, metric, periodKey, amount);
-    return { allowed: true, tier, remaining: null };
+    return { allowed: true, tier, remaining: null, periodKey, amount };
   }
 
   if (!consume) {
@@ -90,7 +102,7 @@ export async function checkAndConsume(userId, metric, amount = 1, opts = {}) {
     if (used + amount > cap) {
       return { allowed: false, gate, requiredTier: requiredTierFor(tier), tier, limit: cap, used };
     }
-    return { allowed: true, tier, remaining: cap - (used + amount) };
+    return { allowed: true, tier, remaining: cap - (used + amount), periodKey, amount };
   }
 
   // Atomic consume: increment inside a transaction and roll back if it would
@@ -113,7 +125,7 @@ export async function checkAndConsume(userId, metric, amount = 1, opts = {}) {
         err.used = newTotal - amount;
         throw err; // rolls back the increment
       }
-      return { allowed: true, tier, remaining: cap - newTotal };
+      return { allowed: true, tier, remaining: cap - newTotal, periodKey, amount };
     });
   } catch (err) {
     if (err.overLimit) {
@@ -130,5 +142,35 @@ async function bumpCounter(userId, metric, periodKey, amount) {
      ON CONFLICT (user_id, metric, period_key)
      DO UPDATE SET amount = usage_counters.amount + EXCLUDED.amount`,
     [userId, metric, periodKey, amount],
+  );
+}
+
+/**
+ * Refund previously-consumed usage (clamped at 0). Used when the gated operation
+ * fails after the counter was charged — e.g. an AI generation errors out, so the
+ * student shouldn't lose the quota.
+ */
+export async function refundUsage(userId, metric, periodKey, amount) {
+  if (!amount) return;
+  await query(
+    `UPDATE usage_counters SET amount = GREATEST(amount - $4, 0)
+      WHERE user_id = $1 AND metric = $2 AND period_key = $3`,
+    [userId, metric, periodKey, amount],
+  );
+}
+
+/**
+ * Adjust a counter by a signed delta (clamped at 0). Used to reconcile an
+ * up-front estimate to the real amount after success (e.g. AI cards: charge the
+ * estimate, then true-up to the number of cards actually generated).
+ */
+export async function reconcileUsage(userId, metric, periodKey, delta) {
+  if (!delta) return;
+  await query(
+    `INSERT INTO usage_counters (user_id, metric, period_key, amount)
+     VALUES ($1, $2, $3, GREATEST($4, 0))
+     ON CONFLICT (user_id, metric, period_key)
+     DO UPDATE SET amount = GREATEST(usage_counters.amount + $4, 0)`,
+    [userId, metric, periodKey, delta],
   );
 }

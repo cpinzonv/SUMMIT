@@ -6,6 +6,7 @@ import * as guides from '../services/studyGuide.service.js';
 import * as mindmaps from '../services/mindMap.service.js';
 import * as podcasts from '../services/podcast.service.js';
 import * as analytics from '../services/learnAnalytics.service.js';
+import { reconcileUsage } from '../services/usageGating.service.js';
 
 const difficulty = z.enum(['easy', 'medium', 'hard']);
 const sourceType = z.enum(['note', 'file', 'transcript']);
@@ -93,6 +94,12 @@ export async function createCard(req, res) {
 
 export async function generate(req, res) {
   const cards = await flashcards.generateCards(req.user.id, req.params.classId, req.body);
+  // True-up the up-front ai_cards estimate to the number actually generated
+  // (refund the difference, or charge the extra). On failure the handler throws
+  // before this, and enforceUsage refunds the full estimate on the 5xx.
+  if (req.usage?.metric === 'ai_cards' && req.usage.periodKey != null) {
+    await reconcileUsage(req.user.id, 'ai_cards', req.usage.periodKey, cards.length - req.usage.amount).catch(() => {});
+  }
   res.status(201).json({ cards });
 }
 

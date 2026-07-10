@@ -50,11 +50,14 @@ kill switch) and the admin **Paywall mode** toggle (`feature_flags.paywall_enabl
    MAX_SEMESTER_PRICE_ID   = price_________________
    ```
 
-> NOTE — reconcile display copy: the fake-door pricing shown to users lives in
-> `server/src/config/tiers.js` (`PRICING`). It currently leads with `$5.55/mo` (Pro)
-> and `$11.11/mo` (Max) framing with the higher monthly as the "cancel anytime"
-> line. The **charge amounts above are the source of truth**; update `PRICING` to
-> match whatever we actually bill before flipping to real mode.
+> NOTE — the display copy is intentional and consistent with these charges, no
+> change needed. The fake-door pricing in `server/src/config/tiers.js` (`PRICING`)
+> leads with **$5.55/mo** (Pro) / **$11.11/mo** (Max): this is a *per-month framing
+> of the semester price* ($24.99 / $49.99 spread across the ~4.5-month term), shown
+> with "billed once — $24.99 for the full semester" underneath and the true recurring
+> monthly ($8.99 / $17.99) as the "cancel anytime" alternative line. So **$5.55 is
+> not a separate price** — it's how the one-time $24.99 semester charge is presented.
+> Create the Stripe prices at the actual charge amounts in the table above.
 
 ---
 

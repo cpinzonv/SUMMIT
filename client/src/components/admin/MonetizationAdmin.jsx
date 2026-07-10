@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { billingApi } from '../../api/billing';
 import { api, errorMessage } from '../../api/client';
 import { Spinner, Toggle, ConfirmModal, Toast } from '../ui';
+import { PaywallModal } from '../PaywallModal';
 
 /** Admin → Monetization. Master paywall toggle, founding members, waitlist,
  *  and gate (conversion-intent) analytics. Fake-door until BILLING_ENABLED. */
@@ -33,6 +34,27 @@ export default function MonetizationAdmin() {
   const [capDraft, setCapDraft] = useState('');
   const [range, setRange] = useState({ from: '', to: '' });
   const [toast, setToast] = useState(null);
+  const [preview, setPreview] = useState(null); // { status, gate } for the modal preview
+
+  // Render the paywall modal in a chosen mode with mock data (no real API calls),
+  // so styling can be checked without exhausting real limits.
+  const openPreview = async (mode) => {
+    let pricing;
+    try { pricing = (await billingApi.status()).pricing; } catch { pricing = undefined; }
+    const base = {
+      billing_enabled: false,
+      paywall_enabled: false,
+      founding_cap: 500,
+      founding_slots_left: 437,
+      pricing,
+      user: { tier: 'free', founding_member: false },
+    };
+    const status =
+      mode === 'A' ? base
+        : mode === 'B' ? { ...base, founding_slots_left: 0 }
+          : { ...base, paywall_enabled: true, billing_enabled: true };
+    setPreview({ status, gate: { gate: 'ai_cards', requiredTier: 'pro' } });
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -134,6 +156,15 @@ export default function MonetizationAdmin() {
             Master kill switch (BILLING_ENABLED) is OFF — checkout cannot activate regardless of this toggle.
           </div>
         )}
+      </Panel>
+
+      {/* Preview the paywall modal in each mode (mock data, no real API calls) */}
+      <Panel title="Preview paywall modal" subtitle="Render each mode with mock data to check styling.">
+        <div className="flex flex-wrap gap-2">
+          <button className="btn btn-soft" onClick={() => openPreview('A')}>Mode A — founding slots left</button>
+          <button className="btn btn-soft" onClick={() => openPreview('B')}>Mode B — waitlist</button>
+          <button className="btn btn-soft" onClick={() => openPreview('C')}>Mode C — real checkout</button>
+        </div>
       </Panel>
 
       {/* Founding members */}
@@ -269,6 +300,9 @@ export default function MonetizationAdmin() {
           onConfirm={() => { setConfirmOn(false); setPaywall(true); }}
           onClose={() => setConfirmOn(false)}
         />
+      )}
+      {preview && (
+        <PaywallModal preview gate={preview.gate} status={preview.status} onClose={() => setPreview(null)} />
       )}
       {toast && <Toast toast={toast} />}
     </div>
