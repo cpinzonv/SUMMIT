@@ -33,11 +33,15 @@
   --grad-teal-purple: linear-gradient(135deg, #ff8a4c 0%, #ff6f73 45%, #4f9fd6 100%);
   --grad-pink-lavender: linear-gradient(135deg, #ff7e79 0%, #ffc59e 100%);
 
-  /* Glass-card glare endpoints — the theme's VISUAL primary → secondary (the ends
-     of --grad-teal-purple), so the shine matches the ambient look rather than the
-     brand scale. Overridden per color scheme below. Default = coral → blue. */
-  --glare-1: #ffa078;
-  --glare-2: #5aa9d6;
+  /* Glass-card shine + glow palette — LITERAL rgba (no color-mix, so it renders
+     identically in every browser, and can't be silently dropped). Default is the
+     original warm coral-pink "Summit magic". Each color scheme overrides these
+     below with its own warm/cool tint. */
+  --glare-mid: rgba(255, 160, 120, 0.55);  /* shine mid-stop — peach-coral   */
+  --glare-edge: rgba(90, 169, 214, 0.6);   /* shine end-stop — soft blue      */
+  --card-depth: rgba(214, 130, 78, 0.42);  /* card drop-shadow tint           */
+  --card-glow: rgba(255, 235, 220, 0.25);  /* card inner luminous glow        */
+  --btn-glow: rgba(255, 120, 80, 0.5);     /* primary-button halo             */
 
   /* Notes editor palette — warm white surface, teal accent, soft shadow. */
   --note-bg: #fafaf8;
@@ -112,14 +116,13 @@
     background: rgba(255, 251, 246, 0.5);
     backdrop-filter: blur(22px) saturate(180%);
     -webkit-backdrop-filter: blur(22px) saturate(180%);
-    /* Luminous depth + inner glow, TINTED with the theme's own primary (glare-1)
-       so each scheme keeps its warm/cool magic without clashing: coral/sunset
-       glow warm, ocean/forest glow cool. The inner glow lightens the tint toward
-       white for a soft luminosity rather than a saturated vignette. */
+    /* Luminous depth + soft inner glow — warm by default, retinted per theme via
+       the --card-depth / --card-glow tokens. Literal rgba so the shadow always
+       paints (a dropped color-mix would leave cards flat and washed-out). */
     box-shadow:
-      0 20px 54px -22px color-mix(in srgb, var(--glare-1), transparent 56%),
-      inset 0 1px 0 rgba(255, 255, 255, 0.78),
-      inset 0 0 40px color-mix(in srgb, color-mix(in srgb, var(--glare-1), white 45%), transparent 72%);
+      0 20px 54px -22px var(--card-depth),
+      inset 0 1px 0 rgba(255, 255, 255, 0.75),
+      inset 0 0 36px var(--card-glow);
   }
   .glass-panel {
     background: rgba(255, 251, 246, 0.66);
@@ -132,14 +135,14 @@
     inset: 0;
     border-radius: inherit;
     padding: 1.25px;
-    /* Bright top-left highlight fading into the theme's own colors (glare-1 →
-       glare-2), so the shine matches each color scheme's ambient look. */
+    /* Bright top-left highlight fading into the theme's own colors (--glare-mid →
+       --glare-edge), so the shine matches each color scheme's ambient look. */
     background: linear-gradient(
       140deg,
       rgba(255, 255, 255, 0.95) 0%,
       rgba(255, 255, 255, 0.25) 35%,
-      color-mix(in srgb, var(--glare-1), transparent 45%) 70%,
-      color-mix(in srgb, var(--glare-2), transparent 40%) 100%
+      var(--glare-mid) 70%,
+      var(--glare-edge) 100%
     );
     /* Paint ONLY the rounded border ring: two full masks, one clipped to the
        content box, XOR'd so the padding (the frame) shows. Standard + -webkit so
@@ -178,14 +181,14 @@
     color: #fff;
     background-image: var(--grad-teal-purple);
     box-shadow:
-      0 12px 28px -8px color-mix(in srgb, var(--glare-1), transparent 45%),
+      0 12px 28px -8px var(--btn-glow),
       inset 0 1px 0 rgba(255, 255, 255, 0.35);
   }
   .btn-primary:hover:not(:disabled) {
     transform: translateY(-1px);
     filter: brightness(1.05) saturate(1.08);
     box-shadow:
-      0 18px 36px -8px color-mix(in srgb, var(--glare-1), transparent 40%),
+      0 18px 36px -4px var(--btn-glow),
       inset 0 1px 0 rgba(255, 255, 255, 0.4);
   }
   .btn-primary:disabled {
@@ -805,7 +808,7 @@ html[data-theme='dark'] .glass-panel {
 }
 html[data-theme='dark'] .glass-card::after,
 html[data-theme='dark'] .glass-panel::after {
-  background: linear-gradient(140deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.06) 40%, color-mix(in srgb, var(--glare-1), transparent 70%) 75%, color-mix(in srgb, var(--glare-2), transparent 68%) 100%);
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.06) 40%, var(--glare-mid) 75%, var(--glare-edge) 100%);
 }
 html[data-theme='dark'] .field {
   background: rgba(40, 36, 50, 0.6);
@@ -867,8 +870,11 @@ html[data-color-scheme='ocean'] {
   --grad-teal-purple: linear-gradient(135deg, #011c40 0%, #26658c 50%, #54acbf 100%);
   --grad-pink-lavender: linear-gradient(135deg, #54acbf 0%, #a7ebf2 100%);
   --note-accent: #26658c;
-  --glare-1: #54acbf;
-  --glare-2: #26658c;
+  --glare-mid: rgba(84, 172, 191, 0.55);
+  --glare-edge: rgba(38, 101, 140, 0.6);
+  --card-depth: rgba(38, 101, 140, 0.42);
+  --card-glow: rgba(210, 236, 246, 0.24);
+  --btn-glow: rgba(38, 101, 140, 0.5);
 }
 html[data-color-scheme='ocean']:not([data-theme='dark']) body {
   background-color: #eef6fa;
@@ -890,8 +896,11 @@ html[data-color-scheme='forest'] {
   --grad-teal-purple: linear-gradient(135deg, #051f20 0%, #235367 50%, #8eb69b 100%);
   --grad-pink-lavender: linear-gradient(135deg, #8eb69b 0%, #daf1de 100%);
   --note-accent: #235367;
-  --glare-1: #8eb69b;
-  --glare-2: #235367;
+  --glare-mid: rgba(142, 182, 155, 0.55);
+  --glare-edge: rgba(35, 83, 103, 0.6);
+  --card-depth: rgba(35, 83, 103, 0.42);
+  --card-glow: rgba(220, 240, 225, 0.24);
+  --btn-glow: rgba(35, 83, 103, 0.5);
 }
 html[data-color-scheme='forest']:not([data-theme='dark']) body {
   background-color: #eef7f0;
@@ -913,8 +922,11 @@ html[data-color-scheme='sunset'] {
   --grad-teal-purple: linear-gradient(135deg, #951a21 0%, #d55123 50%, #e47a24 100%);
   --grad-pink-lavender: linear-gradient(135deg, #e47a24 0%, #f2b183 100%);
   --note-accent: #d55123;
-  --glare-1: #e47a24;
-  --glare-2: #d55123;
+  --glare-mid: rgba(228, 122, 36, 0.55);
+  --glare-edge: rgba(213, 81, 35, 0.6);
+  --card-depth: rgba(213, 81, 35, 0.42);
+  --card-glow: rgba(255, 224, 205, 0.25);
+  --btn-glow: rgba(213, 81, 35, 0.5);
 }
 html[data-color-scheme='sunset']:not([data-theme='dark']) body {
   background-color: #fbeee4;
