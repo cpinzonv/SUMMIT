@@ -18,6 +18,7 @@ import {
   ConfirmModal,
 } from '../components/ui';
 import { EmptyHero, AssignmentsIllustration } from '../components/EmptyHero';
+import { buildMeetingTimes, scheduleFromClass } from '../lib/classSchedule';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
 import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
 import { suggestHours } from '../lib/workload';
@@ -752,8 +753,11 @@ function ConfirmDialog({ title, body, confirmLabel, onConfirm, onClose, danger =
   );
 }
 
-/** Edit a class's basic fields (name, code, term, description, color, dates). */
+const EDIT_MEETING_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** Edit a class's basic fields (name, code, term, description, color, dates) + meeting schedule. */
 function ClassEditModal({ cls, onClose, onSaved }) {
+  const initialSchedule = scheduleFromClass(cls);
   const [form, setForm] = useState({
     name: cls?.name ?? '',
     code: cls?.code ?? '',
@@ -763,14 +767,23 @@ function ClassEditModal({ cls, onClose, onSaved }) {
     startDate: toDateInput(cls?.startDate),
     endDate: toDateInput(cls?.endDate),
   });
+  const [days, setDays] = useState(initialSchedule.days);
+  const [startTime, setStartTime] = useState(initialSchedule.start);
+  const [endTime, setEndTime] = useState(initialSchedule.end);
+  const [location, setLocation] = useState(initialSchedule.location);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+  const toggleDay = (d) => setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
 
   const submit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) {
       setError('Name is required');
+      return;
+    }
+    if (startTime && endTime && endTime <= startTime) {
+      setError('Meeting end time must be after the start time.');
       return;
     }
     setSaving(true);
@@ -784,6 +797,11 @@ function ClassEditModal({ cls, onClose, onSaved }) {
         color: form.color.trim() || null,
         startDate: form.startDate ? dateInputToISO(form.startDate) : null,
         endDate: form.endDate ? dateInputToISO(form.endDate) : null,
+        // Rich schedule → server re-derives meeting_days for attendance.
+        syllabus: {
+          meetingTimes: buildMeetingTimes(days, startTime, endTime, location),
+          location: location.trim() || null,
+        },
       });
       await onSaved();
     } catch (err) {
@@ -814,6 +832,44 @@ function ClassEditModal({ cls, onClose, onSaved }) {
           <Input label="Start date" type="date" value={form.startDate} onChange={update('startDate')} />
           <Input label="End date" type="date" value={form.endDate} onChange={update('endDate')} />
         </div>
+
+        {/* Meeting schedule (rich meetingTimes; drives timetable, calendar, attendance) */}
+        <div>
+          <span className="mb-1.5 block text-xs font-semibold text-ink">Meeting days</span>
+          <div className="flex flex-wrap gap-1.5">
+            {EDIT_MEETING_DAYS.map((d) => {
+              const on = days.includes(d);
+              return (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => toggleDay(d)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    on ? 'text-white shadow-sm' : 'bg-white/55 text-muted hover:bg-white/80'
+                  }`}
+                  style={on ? { backgroundImage: 'var(--grad-teal-purple)' } : undefined}
+                >
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-ink">Start time</span>
+              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="field" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-ink">End time</span>
+              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="field" />
+            </label>
+          </div>
+          <label className="mt-3 block">
+            <span className="mb-1 block text-xs font-semibold text-ink">Location <span className="font-normal text-muted">(optional)</span></span>
+            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Building / room" className="field" />
+          </label>
+        </div>
+
         {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
         <ModalActions saving={saving} onClose={onClose} label="Save changes" />
       </form>

@@ -12,6 +12,7 @@ import {
   gradeColor,
 } from '../components/ui';
 import { dueStatus } from '../lib/dueDate';
+import { generateClassSessions } from '../lib/classMeetings';
 import { TodoBoard } from '../components/TodoBoard';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -39,10 +40,23 @@ const PRIORITY_LABEL = { high: 'High', medium: 'Medium', low: 'Low', none: 'None
 // Dot color for a calendar event: a past-due (and not-done) DUE deadline turns
 // red to stand out; otherwise the dot follows the assignment's priority.
 function eventDot(ev) {
+  if (ev.type === 'session') return 'bg-slate-400';
   if (ev.type === 'due' && !ev.a.done && dueStatus(ev.a.dueDate).isPastDue) {
     return 'bg-rose-600 ring-1 ring-rose-300';
   }
   return PRIORITY_DOT[ev.a.priority || 'none'];
+}
+
+// 'HH:MM' → compact 12-hour label, e.g. '10:00' → '10am', '13:30' → '1:30pm'.
+function fmt12(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = String(hhmm).split(':').map(Number);
+  const ap = h >= 12 ? 'pm' : 'am';
+  const h12 = ((h + 11) % 12) + 1;
+  return m ? `${h12}:${String(m).padStart(2, '0')}${ap}` : `${h12}${ap}`;
+}
+function sessionTimeLabel(s) {
+  return s.end ? `${fmt12(s.start)}–${fmt12(s.end)}` : fmt12(s.start);
 }
 
 const localKey = (d) =>
@@ -65,10 +79,15 @@ const toDateInput = (iso) => {
 };
 const dateInputToISO = (v) => new Date(`${v}T00:00:00`).toISOString();
 
-// Sort by priority (High → Medium → Low → None), then by date ascending.
+// Class sessions first (time-anchored, chronological), then assignments by
+// priority (High → Medium → Low → None) and date.
 function sortEvents(evs) {
   return [...evs].sort((a, b) => {
-    const pr = PRIORITY_RANK[b.a.priority || 'none'] - PRIORITY_RANK[a.a.priority || 'none'];
+    const aS = a.type === 'session';
+    const bS = b.type === 'session';
+    if (aS !== bS) return aS ? -1 : 1;
+    if (aS && bS) return (a.session.startMin ?? 0) - (b.session.startMin ?? 0);
+    const pr = PRIORITY_RANK[b.a?.priority || 'none'] - PRIORITY_RANK[a.a?.priority || 'none'];
     return pr !== 0 ? pr : a.date - b.date;
   });
 }
@@ -129,6 +148,26 @@ export default function CalendarPage() {
         // Hide the planned-date indicator once the item is done.
         if (card.plannedDate && !card.done)
           evs.push({ id: `${card.id}:planned`, date: new Date(card.plannedDate), type: 'planned', a, cls, gradient, glass });
+      });
+
+      // Recurring class meetings — same source (meetingTimes) the Schedule tab
+      // reads. One event per session between the class's start and end dates.
+      clsRes.data.classes.forEach((cls, i) => {
+        if (cls.archivedAt) return;
+        const gradient = classGradient(cls, i);
+        const glass = isGlassColor(cls.color);
+        for (const session of generateClassSessions(cls)) {
+          const [y, m, d] = session.date.split('-').map(Number);
+          evs.push({
+            id: `session:${cls.id}:${session.date}:${session.start}`,
+            date: new Date(y, m - 1, d),
+            type: 'session',
+            session,
+            cls,
+            gradient,
+            glass,
+          });
+        }
       });
       setEvents(evs);
     } catch (err) {
@@ -650,6 +689,7 @@ function MonthView({ cursor, byDay, todayKey, act, dnd }) {
 }
 
 function MonthChip({ ev, act, dnd }) {
+  if (ev.type === 'session') return <SessionChip ev={ev} />;
   const isDue = ev.type === 'due';
   const draggable = !ev.cls.archivedAt;
   const isDragging = dnd.draggingId === ev.id;
@@ -676,6 +716,44 @@ function MonthChip({ ev, act, dnd }) {
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ev.glass ? '' : 'ring-1 ring-white/70'} ${eventDot(ev)}`} />
       <span className="truncate">{ev.a.title}</span>
     </button>
+  );
+}
+
+/** Read-only class-meeting chip (month grid): class-colored, left accent + time. */
+function SessionChip({ ev }) {
+  const s = ev.session;
+  const label = `${ev.cls.code || ev.cls.name} · ${fmt12(s.start)}`;
+  return (
+    <div
+      title={`${ev.cls.name} — ${sessionTimeLabel(s)}${s.location ? ` · ${s.location}` : ''}`}
+      className={`flex w-full items-center gap-1 truncate rounded-lg border-l-[3px] px-1.5 py-0.5 text-left text-[11px] font-semibold ${
+        ev.glass ? 'border-slate-300 bg-white/55 text-ink' : 'text-white'
+      }`}
+      style={ev.glass ? undefined : { backgroundImage: ev.gradient, opacity: 0.9, borderColor: 'rgba(255,255,255,0.7)' }}
+    >
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+/** Read-only class-meeting row (week/day lists): time + class + location. */
+function SessionRow({ ev }) {
+  const s = ev.session;
+  return (
+    <div
+      title={s.location ? `${ev.cls.name} · ${s.location}` : ev.cls.name}
+      className="flex w-full items-center gap-2 rounded-lg border border-white/50 bg-white/40 px-2 py-1.5 text-left"
+    >
+      <span className="h-6 w-1 shrink-0 rounded-full" style={{ backgroundImage: ev.gradient }} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-xs font-semibold text-ink">{ev.cls.name}</span>
+        <span className="block truncate text-[10px] text-muted">
+          {sessionTimeLabel(s)}
+          {s.location ? ` · ${s.location}` : ''}
+        </span>
+      </span>
+      <span className="shrink-0 text-[9px] font-semibold uppercase text-muted">class</span>
+    </div>
   );
 }
 
@@ -735,6 +813,7 @@ function dayHours(evs) {
 }
 
 function EventRow({ ev, act, dnd }) {
+  if (ev.type === 'session') return <SessionRow ev={ev} />;
   const isDue = ev.type === 'due';
   const draggable = !ev.cls.archivedAt;
   const isDragging = dnd.draggingId === ev.id;
@@ -787,6 +866,7 @@ function DayView({ cursor, byDay, act }) {
 }
 
 function DayRow({ ev, act }) {
+  if (ev.type === 'session') return <SessionRow ev={ev} />;
   const isDue = ev.type === 'due';
   const p = ev.a.priority || 'none';
   return (
