@@ -9,6 +9,17 @@ import { pool, withTransaction } from '../config/db.js';
 const DEMO_EMAIL = 'demo@student.app';
 
 async function main() {
+  // Refuse to seed a production database. Seeding overwrites the demo user and
+  // creates a known-credential demo account, so running it against the live DB
+  // is destructive. Require an explicit ALLOW_PROD_SEED=true to override.
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PROD_SEED !== 'true') {
+    console.error(
+      'Refusing to seed: NODE_ENV=production. Set ALLOW_PROD_SEED=true to override.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   await withTransaction(async (client) => {
     const passwordHash = await bcrypt.hash('password123', 12);
 
@@ -74,7 +85,7 @@ async function main() {
       [assignmentRows[0].id, 92, 100],
     );
 
-    console.log('Seeded demo student (demo@student.app / password123).');
+    console.log('Seeded demo student.');
   });
 }
 
