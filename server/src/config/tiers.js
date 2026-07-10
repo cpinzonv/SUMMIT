@@ -118,3 +118,20 @@ export function periodKeyFor(period, now = new Date()) {
   if (period === 'semester') return `${year}-${now.getMonth() < 6 ? 'S1' : 'S2'}`; // Jan–Jun = S1
   throw new Error(`Unknown usage period: ${period}`);
 }
+
+/**
+ * When the current usage window resets, as a 'YYYY-MM-DD' date. Monthly → first
+ * of next month. Semester → next boundary (S1 ends Jun 30 → Jul 1; S2 ends
+ * Dec 31 → Jan 1). Lifetime → null (never resets). Drives the QuietNotice copy.
+ */
+export function resetDateFor(period, now = new Date()) {
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if (period === 'lifetime') return null;
+  if (period === 'month') return iso(new Date(now.getFullYear(), now.getMonth() + 1, 1));
+  if (period === 'semester') {
+    return now.getMonth() < 6
+      ? iso(new Date(now.getFullYear(), 6, 1)) // → Jul 1
+      : iso(new Date(now.getFullYear() + 1, 0, 1)); // → Jan 1 next year
+  }
+  throw new Error(`Unknown usage period: ${period}`);
+}

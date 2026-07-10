@@ -11,7 +11,7 @@
  * A founding member whose pro_until has passed falls back to users.tier (free).
  */
 import { query, withTransaction } from '../config/db.js';
-import { TIER_LIMITS, METRIC_GATE, limitFor, periodKeyFor } from '../config/tiers.js';
+import { TIER_LIMITS, METRIC_GATE, limitFor, periodKeyFor, resetDateFor } from '../config/tiers.js';
 import { institutionAccessOf } from './featureGating.service.js';
 
 /** Fetch the columns needed to resolve a user's effective tier. */
@@ -20,6 +20,7 @@ export async function getTierRow(userId) {
     `SELECT u.id, u.role, u.tier, u.founding_member, u.founding_member_number, u.pro_until,
             (w.user_id IS NOT NULL) AS is_whitelisted,
             u.institution_id,
+            i.name          AS institution_name,
             i.feature_flags AS institution_feature_flags,
             i.contract_end  AS institution_contract_end,
             i.revoked_at    AS institution_revoked_at
@@ -45,6 +46,17 @@ export function effectiveTier(row) {
   if (inst && inst.active) return 'pro'; // active institutional contract = Pro
   if (row.founding_member && row.pro_until && new Date(row.pro_until) > new Date()) return 'pro';
   return TIER_LIMITS[row.tier] ? row.tier : 'free';
+}
+
+/**
+ * Account type for gate/analytics purposes: 'institutional' when the user has an
+ * ACTIVE institutional contract (school-paid), else 'b2c' (self-pay). Reuses the
+ * SAME resolution as effectiveTier — institutional students must never see B2C
+ * sales paywalls.
+ */
+export function accountTypeOf(row) {
+  const inst = institutionAccessOf(row);
+  return inst && inst.active ? 'institutional' : 'b2c';
 }
 
 /** Current usage amount for (user, metric, period_key). */
@@ -78,10 +90,14 @@ export async function checkAndConsume(userId, metric, amount = 1, opts = {}) {
   const { premiumVoice = false, consume = true, tierRow } = opts;
   const row = tierRow || (await getTierRow(userId));
   const tier = effectiveTier(row);
+  // Institutional context carried on every 402 so the client can route
+  // school-paid students to the quiet notice (never a B2C sales paywall).
+  const account_type = accountTypeOf(row);
+  const institution_name = row?.institution_name || null;
 
   // Podcast premium voice is a Max-only capability regardless of remaining count.
   if (metric === 'podcasts' && premiumVoice && tier !== 'max') {
-    return { allowed: false, gate: 'premium_voice', requiredTier: 'max', tier };
+    return { allowed: false, gate: 'premium_voice', requiredTier: 'max', tier, account_type, institution_name, reset_date: null };
   }
 
   const limitDef = limitFor(tier, metric);
@@ -90,6 +106,7 @@ export async function checkAndConsume(userId, metric, amount = 1, opts = {}) {
   const gate = METRIC_GATE[metric] || metric;
   const cap = limitDef.limit; // null = unlimited
   const periodKey = periodKeyFor(limitDef.period);
+  const reset_date = resetDateFor(limitDef.period);
 
   // Unlimited: record usage for analytics but never block.
   if (cap === null) {
@@ -100,7 +117,7 @@ export async function checkAndConsume(userId, metric, amount = 1, opts = {}) {
   if (!consume) {
     const used = await currentUsage(userId, metric, periodKey);
     if (used + amount > cap) {
-      return { allowed: false, gate, requiredTier: requiredTierFor(tier), tier, limit: cap, used };
+      return { allowed: false, gate, requiredTier: requiredTierFor(tier), tier, limit: cap, used, account_type, institution_name, reset_date };
     }
     return { allowed: true, tier, remaining: cap - (used + amount), periodKey, amount };
   }
@@ -129,7 +146,7 @@ export async function checkAndConsume(userId, metric, amount = 1, opts = {}) {
     });
   } catch (err) {
     if (err.overLimit) {
-      return { allowed: false, gate, requiredTier: requiredTierFor(tier), tier, limit: cap, used: err.used };
+      return { allowed: false, gate, requiredTier: requiredTierFor(tier), tier, limit: cap, used: err.used, account_type, institution_name, reset_date };
     }
     throw err;
   }

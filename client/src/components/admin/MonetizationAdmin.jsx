@@ -3,6 +3,7 @@ import { billingApi } from '../../api/billing';
 import { api, errorMessage } from '../../api/client';
 import { Spinner, Toggle, ConfirmModal, Toast } from '../ui';
 import { PaywallModal } from '../PaywallModal';
+import { QuietNotice } from '../QuietNotice';
 
 /** Admin → Monetization. Master paywall toggle, founding members, waitlist,
  *  and gate (conversion-intent) analytics. Fake-door until BILLING_ENABLED. */
@@ -49,11 +50,26 @@ export default function MonetizationAdmin() {
       pricing,
       user: { tier: 'free', founding_member: false },
     };
+    if (mode === 'Q') {
+      // Institutional student quiet-notice — real mode so the add-on line shows.
+      const now = new Date();
+      const reset = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const iso = `${reset.getFullYear()}-${String(reset.getMonth() + 1).padStart(2, '0')}-01`;
+      setPreview({
+        view: 'quiet',
+        status: { ...base, paywall_enabled: true, billing_enabled: true },
+        gate: {
+          gate: 'transcription', account_type: 'institutional',
+          institution_name: 'Riverside University', limit: 480, used: 480, reset_date: iso,
+        },
+      });
+      return;
+    }
     const status =
       mode === 'A' ? base
         : mode === 'B' ? { ...base, founding_slots_left: 0 }
           : { ...base, paywall_enabled: true, billing_enabled: true };
-    setPreview({ status, gate: { gate: 'ai_cards', requiredTier: 'pro' } });
+    setPreview({ view: 'paywall', status, gate: { gate: 'ai_cards', requiredTier: 'pro' } });
   };
 
   const load = useCallback(async () => {
@@ -164,6 +180,7 @@ export default function MonetizationAdmin() {
           <button className="btn btn-soft" onClick={() => openPreview('A')}>Mode A — founding slots left</button>
           <button className="btn btn-soft" onClick={() => openPreview('B')}>Mode B — waitlist</button>
           <button className="btn btn-soft" onClick={() => openPreview('C')}>Mode C — real checkout</button>
+          <button className="btn btn-soft" onClick={() => openPreview('Q')}>QuietNotice (institutional)</button>
         </div>
       </Panel>
 
@@ -274,7 +291,11 @@ export default function MonetizationAdmin() {
               <div key={g.gate}>
                 <div className="mb-1 flex items-center justify-between text-sm">
                   <span className="font-semibold text-ink">{g.gate}</span>
-                  <span className="text-muted">{g.total} events</span>
+                  <span className="flex items-center gap-2 text-muted">
+                    <span className="rounded-full bg-white/50 px-2 py-0.5 text-xs">B2C {g.b2c ?? 0}</span>
+                    <span className="rounded-full bg-white/50 px-2 py-0.5 text-xs">Institutional {g.institutional ?? 0}</span>
+                    <span>{g.total} events</span>
+                  </span>
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-white/50">
                   <div className="h-full rounded-full" style={{ width: `${(g.total / maxShown) * 100}%`, backgroundImage: 'var(--grad-teal-purple)' }} />
@@ -301,7 +322,10 @@ export default function MonetizationAdmin() {
           onClose={() => setConfirmOn(false)}
         />
       )}
-      {preview && (
+      {preview?.view === 'quiet' && (
+        <QuietNotice preview gate={preview.gate} status={preview.status} onClose={() => setPreview(null)} />
+      )}
+      {preview && preview.view !== 'quiet' && (
         <PaywallModal preview gate={preview.gate} status={preview.status} onClose={() => setPreview(null)} />
       )}
       {toast && <Toast toast={toast} />}

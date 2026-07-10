@@ -11,16 +11,18 @@
  * (see reconcileUsage) — e.g. AI cards true-up to the number actually generated.
  */
 import { AppError } from '../utils/AppError.js';
-import { checkAndConsume, getTierRow, effectiveTier, refundUsage } from '../services/usageGating.service.js';
+import { checkAndConsume, getTierRow, effectiveTier, refundUsage, accountTypeOf } from '../services/usageGating.service.js';
 import { logGateEvent } from '../services/billing.service.js';
-import { limitFor } from '../config/tiers.js';
+import { limitFor, resetDateFor } from '../config/tiers.js';
 
 const val = (v, req) => (typeof v === 'function' ? v(req) : v);
 
-function blocked(req, next, { gate, requiredTier, tier, limit, used }, message) {
-  logGateEvent(req.user.id, { gate, action: 'shown', tierAtTime: tier }).catch(() => {});
+function blocked(req, next, result, message) {
+  const { gate, requiredTier, tier, limit, used, account_type, institution_name, reset_date } = result;
+  logGateEvent(req.user.id, { gate, action: 'shown', tierAtTime: tier, accountType: account_type }).catch(() => {});
   return next(new AppError(402, message || 'You’ve hit your free limit.', {
-    code: 'usage_limit', gate, requiredTier, tier, limit, used,
+    // account_type routes the client to QuietNotice (institutional) vs PaywallModal (b2c).
+    code: 'usage_limit', gate, requiredTier, tier, limit, used, account_type, institution_name, reset_date,
   }));
 }
 
@@ -65,7 +67,15 @@ export function enforceTranscription() {
       if (raw == null || raw === '') {
         return next(AppError.badRequest('Recording duration (durationSeconds) is required.'));
       }
-      const minutes = Math.ceil((Number(raw) || 0) / 60);
+      // Reject sub-1s recordings up front: ceil(0/60)=0 minutes would meter
+      // nothing, leaving a guaranteed-free path through a metered endpoint. Real
+      // lectures are never 0:00. Bail before getTierRow/checkAndConsume so nothing
+      // is metered and the handler (which saves the recording) never runs.
+      const seconds = Number(raw);
+      if (!Number.isFinite(seconds) || seconds < 1) {
+        return next(AppError.badRequest('Recording is too short to save — duration must be at least 1 second.'));
+      }
+      const minutes = Math.ceil(seconds / 60);
       const row = await getTierRow(req.user.id);
       const tier = effectiveTier(row);
       const limitDef = limitFor(tier, 'transcription_minutes');
@@ -73,7 +83,12 @@ export function enforceTranscription() {
       if (limitDef?.maxPerRecording && minutes > limitDef.maxPerRecording) {
         return blocked(
           req, next,
-          { gate: 'transcription', requiredTier: tier === 'free' ? 'pro' : 'max', tier, limit: limitDef.maxPerRecording },
+          {
+            gate: 'transcription', requiredTier: tier === 'free' ? 'pro' : 'max', tier,
+            limit: limitDef.maxPerRecording,
+            account_type: accountTypeOf(row), institution_name: row?.institution_name || null,
+            reset_date: resetDateFor(limitDef.period),
+          },
           `Recordings are capped at ${limitDef.maxPerRecording} minutes on your plan.`,
         );
       }

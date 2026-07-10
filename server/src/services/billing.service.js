@@ -104,7 +104,7 @@ export async function claimFounding(userId) {
       [userId, next],
     );
     await client.query(
-      "INSERT INTO gate_events (user_id, gate, tier_at_time, action) VALUES ($1, $2, 'free', 'claimed_founding')",
+      "INSERT INTO gate_events (user_id, gate, tier_at_time, action, account_type) VALUES ($1, $2, 'free', 'claimed_founding', 'b2c')",
       [userId, 'founding'],
     );
     return { founding_member_number: next };
@@ -134,14 +134,14 @@ export async function joinWaitlist(userId, { interestedTier, sourceGate } = {}) 
      ON CONFLICT (user_id) DO UPDATE SET interested_tier = EXCLUDED.interested_tier, source_gate = EXCLUDED.source_gate`,
     [userId, email, interestedTier ?? null, sourceGate ?? null],
   );
-  await logGateEvent(userId, { gate: sourceGate, action: 'joined_waitlist', tierAtTime: null });
+  await logGateEvent(userId, { gate: sourceGate, action: 'joined_waitlist', tierAtTime: null, accountType: 'b2c' });
   return { joined: true };
 }
 
-export async function logGateEvent(userId, { gate, action, tierAtTime }) {
+export async function logGateEvent(userId, { gate, action, tierAtTime, accountType }) {
   await query(
-    'INSERT INTO gate_events (user_id, gate, tier_at_time, action) VALUES ($1, $2, $3, $4)',
-    [userId, gate ?? null, tierAtTime ?? null, action],
+    'INSERT INTO gate_events (user_id, gate, tier_at_time, action, account_type) VALUES ($1, $2, $3, $4, $5)',
+    [userId, gate ?? null, tierAtTime ?? null, action, accountType ?? null],
   );
   return { logged: true };
 }
@@ -173,18 +173,26 @@ const GATE_ACTIONS = ['shown', 'claimed_founding', 'joined_waitlist', 'dismissed
 /** Per-gate totals by action, optionally within a date range. */
 export async function gateAnalytics({ from, to } = {}) {
   const { rows } = await query(
-    `SELECT COALESCE(gate, '(none)') AS gate, action, count(*)::int AS n
+    `SELECT COALESCE(gate, '(none)') AS gate, action,
+            COALESCE(account_type, 'b2c') AS account_type, count(*)::int AS n
        FROM gate_events
       WHERE ($1::timestamptz IS NULL OR created_at >= $1)
         AND ($2::timestamptz IS NULL OR created_at < $2)
-      GROUP BY COALESCE(gate, '(none)'), action`,
+      GROUP BY COALESCE(gate, '(none)'), action, COALESCE(account_type, 'b2c')`,
     [from ?? null, to ?? null],
   );
   const byGate = {};
   for (const r of rows) {
-    byGate[r.gate] ??= { gate: r.gate, ...Object.fromEntries(GATE_ACTIONS.map((a) => [a, 0])), total: 0 };
-    byGate[r.gate][r.action] = r.n;
+    byGate[r.gate] ??= {
+      gate: r.gate,
+      ...Object.fromEntries(GATE_ACTIONS.map((a) => [a, 0])),
+      total: 0,
+      b2c: 0,
+      institutional: 0,
+    };
+    byGate[r.gate][r.action] += r.n; // action totals sum across account types
     byGate[r.gate].total += r.n;
+    byGate[r.gate][r.account_type] += r.n; // b2c vs institutional split
   }
   return Object.values(byGate).sort((a, b) => b.total - a.total);
 }

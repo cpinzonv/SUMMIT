@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import * as billing from '../services/billing.service.js';
+import { getTierRow, accountTypeOf } from '../services/usageGating.service.js';
 
 // ---- schemas ---------------------------------------------------------------
 export const waitlistSchema = z.object({
@@ -43,7 +44,10 @@ export async function joinWaitlist(req, res) {
 }
 
 export async function gateEvent(req, res) {
-  res.json(await billing.logGateEvent(req.user.id, { gate: req.body.gate, action: req.body.action }));
+  // Derive account_type server-side (never trust the client) so the b2c vs
+  // institutional analytics split is trustworthy.
+  const accountType = accountTypeOf(await getTierRow(req.user.id));
+  res.json(await billing.logGateEvent(req.user.id, { gate: req.body.gate, action: req.body.action, accountType }));
 }
 
 /**
