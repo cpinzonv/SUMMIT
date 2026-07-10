@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as inst from '../services/institution.service.js';
+import { logAudit } from '../services/audit.service.js';
 
 /**
  * Institution-admin (school IT) endpoints. Every handler is scoped to
@@ -24,5 +25,13 @@ export async function overview(req, res) {
 
 export async function uploadRoster(req, res) {
   // { created: [{ email, inviteToken }], skipped: [{ email, reason }] }
-  res.json(await inst.addStudents(req.institutionId, req.body.students));
+  const result = await inst.addStudents(req.institutionId, req.body.students);
+  logAudit(req, {
+    action: 'admin.roster_add',
+    targetType: 'institution',
+    targetId: req.institutionId,
+    tenantId: req.institutionId,
+    metadata: { created: result.created?.length ?? 0, skipped: result.skipped?.length ?? 0 },
+  });
+  res.json(result);
 }

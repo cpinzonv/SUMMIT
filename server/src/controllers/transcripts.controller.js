@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as transcriptService from '../services/transcript.service.js';
 import { AppError } from '../utils/AppError.js';
+import { logAudit } from '../services/audit.service.js';
 
 const dateString = z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
 
@@ -29,6 +30,13 @@ export const transcriptIdParam = z.object({
 
 export async function list(req, res) {
   const transcripts = await transcriptService.listTranscripts(req.user.id, req.params.id, req.query.q || '');
+  logAudit(req, {
+    action: 'record.view',
+    targetType: 'transcript',
+    targetId: req.params.id,
+    subjectStudentId: req.user.id,
+    metadata: { scope: 'class-list', count: transcripts.length },
+  });
   res.json({ transcripts, autoTranscription: transcriptService.isTranscriptionConfigured() });
 }
 
@@ -55,6 +63,12 @@ export async function update(req, res) {
 
 export async function remove(req, res) {
   await transcriptService.deleteTranscript(req.user.id, req.params.transcriptId);
+  logAudit(req, {
+    action: 'record.delete',
+    targetType: 'transcript',
+    targetId: req.params.transcriptId,
+    subjectStudentId: req.user.id,
+  });
   res.status(204).end();
 }
 

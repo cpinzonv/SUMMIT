@@ -6,6 +6,7 @@ import * as institutions from '../services/institution.service.js';
 import { query } from '../config/db.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
+import { logAudit } from '../services/audit.service.js';
 
 export async function overview(req, res) {
   res.json(await analytics.overview());
@@ -66,16 +67,39 @@ export async function listInstitutions(req, res) {
 }
 export async function createInstitution(req, res) {
   // Returns { institution, inviteToken } — the caller builds the invite link.
-  res.status(201).json(await institutions.createInstitution(req.user.id, req.body));
+  const result = await institutions.createInstitution(req.user.id, req.body);
+  logAudit(req, {
+    action: 'admin.institution_create',
+    targetType: 'institution',
+    targetId: result.institution?.id ?? null,
+    tenantId: result.institution?.id ?? null,
+  });
+  res.status(201).json(result);
 }
 export async function getInstitution(req, res) {
   res.json({ institution: await institutions.getInstitution(req.params.institutionId) });
 }
 export async function updateInstitution(req, res) {
-  res.json({ institution: await institutions.updateInstitution(req.params.institutionId, req.body) });
+  const institution = await institutions.updateInstitution(req.params.institutionId, req.body);
+  logAudit(req, {
+    action: 'admin.institution_update',
+    targetType: 'institution',
+    targetId: req.params.institutionId,
+    tenantId: req.params.institutionId,
+  });
+  res.json({ institution });
 }
 export async function revokeInstitution(req, res) {
-  res.json({ institution: await institutions.setRevoked(req.params.institutionId, req.body.revoked !== false) });
+  const revoked = req.body.revoked !== false;
+  const institution = await institutions.setRevoked(req.params.institutionId, revoked);
+  logAudit(req, {
+    action: 'admin.institution_revoke',
+    targetType: 'institution',
+    targetId: req.params.institutionId,
+    tenantId: req.params.institutionId,
+    metadata: { revoked },
+  });
+  res.json({ institution });
 }
 export async function signups(req, res) {
   res.json(await analytics.signups());
@@ -118,12 +142,14 @@ async function resolveUserId({ email, userId }) {
 export async function whitelistAdd(req, res) {
   const userId = await resolveUserId(req.body);
   await gating.addToWhitelist({ userId, reason: req.body.reason, whitelistedBy: req.user.id });
+  logAudit(req, { action: 'admin.whitelist_add', targetType: 'user', targetId: userId });
   res.status(201).json({ success: true, entry: (await gating.listWhitelist()).find((w) => w.userId === userId) });
 }
 
 export async function whitelistRemove(req, res) {
   const userId = await resolveUserId(req.body);
   const removed = await gating.removeFromWhitelist(userId);
+  logAudit(req, { action: 'admin.whitelist_remove', targetType: 'user', targetId: userId });
   res.json({ success: true, removed });
 }
 
@@ -148,5 +174,7 @@ export async function bootstrap(req, res) {
   if (!email) throw AppError.badRequest('email is required.');
   const { rowCount } = await query("UPDATE users SET role = 'admin' WHERE email = $1", [email]);
   if (!rowCount) throw AppError.notFound('No user with that email — sign up first, then bootstrap.');
+  // Actor is unauthenticated (this creates the first admin); record the grant.
+  logAudit(req, { action: 'admin.role_grant', targetType: 'user', targetId: email, metadata: { role: 'admin', via: 'bootstrap' } });
   res.json({ ok: true, email, role: 'admin' });
 }
