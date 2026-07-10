@@ -1217,12 +1217,19 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS founding_member BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS founding_member_number INTEGER;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS pro_until TIMESTAMPTZ;
+-- Guard on pg_constraint so re-running is idempotent. (A bare EXCEPTION WHEN
+-- duplicate_object misses the UNIQUE case, which raises duplicate_table/42P07
+-- for the backing index — that would fail every deploy after the first.)
 DO $$ BEGIN
-  ALTER TABLE users ADD CONSTRAINT users_tier_check CHECK (tier IN ('free','pro','max'));
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_tier_check') THEN
+    ALTER TABLE users ADD CONSTRAINT users_tier_check CHECK (tier IN ('free','pro','max'));
+  END IF;
+END $$;
 DO $$ BEGIN
-  ALTER TABLE users ADD CONSTRAINT users_founding_number_unique UNIQUE (founding_member_number);
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_founding_number_unique') THEN
+    ALTER TABLE users ADD CONSTRAINT users_founding_number_unique UNIQUE (founding_member_number);
+  END IF;
+END $$;
 
 -- Per-user, per-metric, per-period usage. period_key is 'YYYY-MM' (monthly),
 -- 'YYYY-S1'/'YYYY-S2' (semester: S1=Jan1-Jun30, S2=Jul1-Dec31), or 'lifetime'.
@@ -1246,6 +1253,9 @@ CREATE TABLE IF NOT EXISTS gate_events (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_gate_events_gate ON gate_events(gate, action, created_at DESC);
+-- account_type distinguishes B2C (self-pay) vs institutional (school-paid) events,
+-- so the admin gate analytics can split conversion intent by audience.
+ALTER TABLE gate_events ADD COLUMN IF NOT EXISTS account_type TEXT;
 
 -- Waitlist (fake-door Mode B). One row per user.
 CREATE TABLE IF NOT EXISTS waitlist (

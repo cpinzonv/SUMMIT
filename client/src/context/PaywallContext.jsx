@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { billingApi } from '../api/billing';
 import { setPaywallHandler } from '../lib/paywallBus';
 import { PaywallModal } from '../components/PaywallModal';
+import { QuietNotice } from '../components/QuietNotice';
+import { gateView } from '../lib/gateRouting';
 
 /**
  * App-wide paywall. Holds /api/billing/status, opens the modal on a 402
@@ -55,10 +57,13 @@ export function PaywallProvider({ children }) {
 
   const onResolved = useCallback(() => refresh(), [refresh]);
 
+  // Institutional (school-paid) students get the QuietNotice; everyone else the
+  // B2C PaywallModal. account_type is the ONLY thing that decides this.
   return (
     <PaywallCtx.Provider value={{ status, refresh, openGate, close }}>
       {children}
-      {gate && (
+      {gate && gateView(gate) === 'quiet' && <QuietNotice gate={gate} status={status} onClose={close} />}
+      {gate && gateView(gate) === 'paywall' && (
         <PaywallModal gate={gate} status={status} onClose={close} onClaimed={onResolved} onWaitlisted={onResolved} />
       )}
     </PaywallCtx.Provider>
