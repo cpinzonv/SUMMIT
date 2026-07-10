@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as attendanceService from '../services/attendance.service.js';
+import { logAudit } from '../services/audit.service.js';
 
 const dateString = z
   .string()
@@ -17,6 +18,13 @@ export const attendanceIdParam = z.object({
 
 export async function list(req, res) {
   const result = await attendanceService.listAttendance(req.user.id, req.params.id);
+  logAudit(req, {
+    action: 'record.view',
+    targetType: 'attendance',
+    targetId: req.params.id,
+    subjectStudentId: req.user.id,
+    metadata: { scope: 'class-list', count: result?.sessions?.length ?? 0 },
+  });
   res.json(result);
 }
 

@@ -1299,3 +1299,30 @@ BEGIN
      WHERE u.id = t.id;
   END IF;
 END $$;
+
+-- ----------------------------------------------------------------------------
+-- audit_logs — append-only FERPA audit trail: WHO accessed / exported / deleted
+-- WHOSE educational record, and who performed admin actions. Stores ids, counts,
+-- and non-sensitive context ONLY — never record values (grades, transcript text,
+-- note bodies, file contents…). Written best-effort by
+-- services/audit.service.logAudit(), which never blocks or fails a request.
+-- Append-only by convention: the app issues INSERTs only, never UPDATE/DELETE.
+-- No FK constraints so a user/institution deletion never rewrites audit history
+-- and logging can never fail on a missing reference.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  occurred_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  actor_user_id      UUID,          -- who acted (null = unauthenticated/system, e.g. bootstrap)
+  actor_role         TEXT,          -- actor's role at the time: user | demo | admin | institution_admin
+  tenant_id          UUID,          -- institution context, when applicable
+  action             TEXT NOT NULL, -- 'record.view' | 'record.export' | 'record.delete' | 'admin.role_grant' | …
+  target_type        TEXT,          -- 'class' | 'assignment' | 'transcript' | 'note' | 'file' | 'attendance' | 'archive' | 'institution' | 'user'
+  target_id          TEXT,          -- id (or email) of the thing acted on
+  subject_student_id UUID,          -- WHOSE educational record this concerns (null for non-record admin actions)
+  ip                 TEXT,
+  user_agent         TEXT,
+  metadata           JSONB          -- ids / counts / flags only — never record values
+);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_subject ON audit_logs(subject_student_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant  ON audit_logs(tenant_id, occurred_at DESC);

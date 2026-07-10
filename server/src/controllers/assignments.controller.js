@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import * as assignmentService from '../services/assignment.service.js';
 import { AppError } from '../utils/AppError.js';
+import { logAudit } from '../services/audit.service.js';
 
 const timestamp = z
   .string()
@@ -92,11 +93,24 @@ export async function list(req, res) {
     req.user.id,
     req.params.id,
   );
+  logAudit(req, {
+    action: 'record.view',
+    targetType: 'assignment',
+    targetId: req.params.id,
+    subjectStudentId: req.user.id,
+    metadata: { scope: 'class-list', count: assignments.length },
+  });
   res.json({ assignments });
 }
 
 export async function getOne(req, res) {
   const assignment = await assignmentService.getAssignmentForUser(req.user.id, req.params.assignmentId);
+  logAudit(req, {
+    action: 'record.view',
+    targetType: 'assignment',
+    targetId: req.params.assignmentId,
+    subjectStudentId: req.user.id,
+  });
   res.json({ assignment });
 }
 
@@ -111,6 +125,12 @@ export async function update(req, res) {
 
 export async function remove(req, res) {
   await assignmentService.deleteAssignment(req.user.id, req.params.assignmentId);
+  logAudit(req, {
+    action: 'record.delete',
+    targetType: 'assignment',
+    targetId: req.params.assignmentId,
+    subjectStudentId: req.user.id,
+  });
   res.status(204).end();
 }
 

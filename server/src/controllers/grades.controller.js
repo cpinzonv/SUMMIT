@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as gradeService from '../services/grade.service.js';
+import { logAudit } from '../services/audit.service.js';
 
 export const submitGradeSchema = z.object({
   assignmentId: z.string().uuid('Invalid assignment id'),
@@ -27,6 +28,12 @@ export async function submit(req, res) {
 /** Clear a grade (delete the record) so the assignment is ungraded again. */
 export async function clear(req, res) {
   const result = await gradeService.clearGrade(req.user.id, req.params.assignmentId);
+  logAudit(req, {
+    action: 'record.delete',
+    targetType: 'grade',
+    targetId: req.params.assignmentId,
+    subjectStudentId: req.user.id,
+  });
   res.json(result);
 }
 

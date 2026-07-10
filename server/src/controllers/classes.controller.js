@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as classService from '../services/class.service.js';
+import { logAudit } from '../services/audit.service.js';
 
 // A calendar date (YYYY-MM-DD) or full ISO timestamp; stored in a DATE column.
 const dateString = z
@@ -94,16 +95,37 @@ export async function update(req, res) {
 
 export async function list(req, res) {
   const classes = await classService.listCurrentClasses(req.user.id);
+  // Bulk read of the student's classes, which carry grade roll-ups and syllabus data.
+  logAudit(req, {
+    action: 'record.view',
+    targetType: 'class',
+    subjectStudentId: req.user.id,
+    metadata: { scope: 'list', count: classes.length },
+  });
   res.json({ classes });
 }
 
 export async function archive(req, res) {
   const result = await classService.archiveClass(req.user.id, req.params.id);
+  // Archiving snapshots the class + assignments + grades into an export record.
+  logAudit(req, {
+    action: 'record.export',
+    targetType: 'class',
+    targetId: req.params.id,
+    subjectStudentId: req.user.id,
+    metadata: { op: 'archive' },
+  });
   res.json(result);
 }
 
 export async function remove(req, res) {
   await classService.deleteClass(req.user.id, req.params.id);
+  logAudit(req, {
+    action: 'record.delete',
+    targetType: 'class',
+    targetId: req.params.id,
+    subjectStudentId: req.user.id,
+  });
   res.status(204).end();
 }
 
