@@ -11,7 +11,9 @@ export function signAccessToken(userId) {
 
 /** Verify an access token, returning its payload or throwing. */
 export function verifyAccessToken(token) {
-  return jwt.verify(token, env.jwt.accessSecret);
+  // Pin the algorithm to the one we sign with (HS256) so alg:none and
+  // algorithm-confusion tokens are rejected.
+  return jwt.verify(token, env.jwt.accessSecret, { algorithms: ['HS256'] });
 }
 
 /**
@@ -24,7 +26,7 @@ export function signTwoFactorChallenge(userId) {
 }
 
 export function verifyTwoFactorChallenge(token) {
-  const payload = jwt.verify(token, env.jwt.accessSecret);
+  const payload = jwt.verify(token, env.jwt.accessSecret, { algorithms: ['HS256'] });
   if (payload.typ !== '2fa') throw new Error('Not a 2FA challenge token');
   return payload;
 }
@@ -40,7 +42,7 @@ export function signOAuthState(payload = {}) {
 }
 
 export function verifyOAuthState(token) {
-  const payload = jwt.verify(token, env.jwt.accessSecret);
+  const payload = jwt.verify(token, env.jwt.accessSecret, { algorithms: ['HS256'] });
   if (payload.typ !== 'oauth_state') throw new Error('Not an OAuth state token');
   return payload;
 }
