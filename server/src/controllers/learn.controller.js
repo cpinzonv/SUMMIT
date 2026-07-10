@@ -176,6 +176,10 @@ export const genSourceSchema = z.object({
 export const quizGenSchema = genSourceSchema.extend({
   questionCount: z.coerce.number().int().min(3).max(20).optional(),
 });
+// premiumVoice = request a Max-only AI voice; the usage gate rejects it on non-Max tiers.
+export const podcastGenSchema = genSourceSchema.extend({
+  premiumVoice: z.coerce.boolean().optional(),
+});
 export const quizIdParam = z.object({ quizId: z.string().uuid('Invalid quiz id') });
 export const guideIdParam = z.object({ guideId: z.string().uuid('Invalid guide id') });
 export const mindmapIdParam = z.object({ mindmapId: z.string().uuid('Invalid mind map id') });

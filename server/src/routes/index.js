@@ -18,6 +18,7 @@ import lmsRoutes from './lms.routes.js';
 import learnRoutes from './learn.routes.js';
 import { flashcardsRouter, decksRouter, studyRouter } from './deckStudy.routes.js';
 import featuresRoutes from './features.routes.js';
+import billingRoutes from './billing.routes.js';
 import institutionAdminRoutes from './institutionAdmin.routes.js';
 import activityRoutes from './activity.routes.js';
 import todoRoutes from './todo.routes.js';
@@ -65,6 +66,7 @@ router.use('/flashcards', flashcardsRouter); // classic SM-2: rate a card 1–5
 router.use('/decks', decksRouter); // deck settings, deadlines, study plan
 router.use('/study', studyRouter); // today's study queue (respects limits)
 router.use('/features', featuresRoutes); // feature gating status (lock icons + paywall)
+router.use('/billing', billingRoutes); // fake-door paywall, founding members, tiers, usage gates
 router.use('/institution', institutionAdminRoutes); // institution-admin: roster + overview (tenant-scoped)
 router.use('/activities', activityRoutes); // anti-procrastination projects (non-class work)
 router.use('/todo', todoRoutes); // unified calendar + Kanban feed (assignments + activity tasks)

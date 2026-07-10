@@ -14,6 +14,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePremium } from '../middleware/requirePremium.js';
+import { enforceUsage } from '../middleware/enforceUsage.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as learn from '../controllers/learn.controller.js';
@@ -37,6 +38,7 @@ router.post(
   '/classes/:classId/generate',
   validate(learn.classIdParam, 'params'),
   validate(learn.generateSchema),
+  enforceUsage('ai_cards', { amount: (req) => Number(req.body?.count) || 10 }), // free: 50 lifetime
   asyncHandler(learn.generate),
 );
 
@@ -151,9 +153,11 @@ router.get('/mindmaps/:mindmapId', validate(learn.mindmapIdParam, 'params'), asy
 // Podcasts
 router.post(
   '/classes/:classId/podcasts/generate',
-  requirePremium('podcasts'),
+  // Metered, not premium-gated: free tier gets 1 lifetime podcast (standard voice).
+  // Premium AI voices require Max; the counter caps pro at 3/mo and max at 10/mo.
   validate(learn.classIdParam, 'params'),
-  validate(learn.genSourceSchema),
+  validate(learn.podcastGenSchema),
+  enforceUsage('podcasts', { premiumVoice: (req) => Boolean(req.body?.premiumVoice) }),
   asyncHandler(learn.genPodcast),
 );
 router.get('/classes/:classId/podcasts', validate(learn.classIdParam, 'params'), asyncHandler(learn.listPodcasts));
