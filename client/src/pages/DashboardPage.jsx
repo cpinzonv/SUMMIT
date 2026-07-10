@@ -215,20 +215,20 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Stat label="Active classes" value={classes.length} glow={classGradient(null, 0)} />
+            <Stat label="Active classes" value={classes.length} glow="var(--grad-teal-purple)" />
             <Stat
               label="Current GPA"
               value={gpa == null ? '—' : gpa.toFixed(2)}
               gradient
-              glow={classGradient(null, 2)}
+              glow="var(--grad-pink-lavender)"
             />
             <Stat
               label="Overall average"
               value={average == null ? '—' : `${average}%`}
               valueClass={gradeColor(average)}
-              glow={classGradient(null, 1)}
+              glow="var(--grad-teal-purple)"
             />
-            <Stat label="Graded classes" value={graded.length} glow={classGradient(null, 3)} />
+            <Stat label="Graded classes" value={graded.length} glow="var(--grad-pink-lavender)" />
           </div>
 
           {workload?.weeks?.some((w) => w.totalHours > 0) && (

@@ -1,5 +1,6 @@
 /** Small shared presentational helpers used across pages. */
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Kebab (⋮) options menu used consistently across the app. Shows "Edit" only
@@ -9,36 +10,65 @@ import { useEffect, useRef, useState } from 'react';
  */
 export function KebabMenu({ onEdit, onDelete, editLabel = 'Edit', deleteLabel = 'Delete', className = '' }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  // Menu is rendered in a portal with fixed positioning anchored to the button,
+  // so it's never clipped by an `overflow-hidden` ancestor (tables, cards).
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
-    const onDown = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    const onDown = (e) => {
+      if (btnRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    const onScroll = () => setOpen(false); // fixed menu would detach on scroll
     window.addEventListener('mousedown', onDown);
     window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, [open]);
+  const toggle = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+    }
+    setOpen((o) => !o);
+  };
   const pick = (fn) => (e) => { e.stopPropagation(); setOpen(false); fn(); };
   return (
-    <div ref={ref} className={`relative shrink-0 ${className}`}>
+    <div className={`relative shrink-0 ${className}`}>
       <button
+        ref={btnRef}
         type="button"
-        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setOpen((o) => !o); }}
+        onClick={toggle}
         aria-label="Options"
         aria-haspopup="menu"
         className="grid h-8 w-8 place-items-center rounded-full text-lg leading-none text-muted transition hover:bg-white/70 hover:text-ink"
       >
         ⋮
       </button>
-      {open && (
-        <div role="menu" className="glass-panel absolute right-0 z-30 mt-1 w-32 p-1.5 text-sm shadow-xl">
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 60 }}
+          className="glass-panel w-32 p-1.5 text-sm shadow-xl"
+        >
           {onEdit && (
             <button type="button" role="menuitem" onClick={pick(onEdit)} className="menu-item"><span>✎</span> {editLabel}</button>
           )}
           {onDelete && (
             <button type="button" role="menuitem" onClick={pick(onDelete)} className="menu-item text-rose-600"><span>🗑</span> {deleteLabel}</button>
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

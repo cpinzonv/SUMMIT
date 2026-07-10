@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
-import { ErrorBanner, Toast, Toggle, Modal, Spinner, ConfirmModal, classGradient, gradeColor } from '../components/ui';
+import { ErrorBanner, Toast, Toggle, Modal, Spinner, ConfirmModal, gradeColor } from '../components/ui';
 import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
 import { gcalApi, summarizeGcalSync } from '../lib/gcal';
 import SettingsGraduationSection from '../components/SettingsGraduationSection';
@@ -1593,7 +1593,9 @@ function DisplayTab({ prefs, set }) {
 }
 
 function Preview() {
-  const gradient = classGradient(null, 0);
+  // Use the live theme gradient so the sample recolors with the selected scheme
+  // (blue on Ocean, green on Forest…) instead of a fixed decorative orange.
+  const gradient = 'var(--grad-teal-purple)';
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {/* Mini class card */}
