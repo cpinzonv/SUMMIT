@@ -21,6 +21,12 @@ function optional(name, fallback) {
   return value === undefined || value === '' ? fallback : value;
 }
 
+// Sender used when EMAIL_FROM is unset. MUST be a verified learnsummit.app
+// address — NEVER a resend.dev sandbox address, which only delivers to the
+// Resend account owner's own inbox (so real signups would get nothing). A
+// startup WARNING fires when we fall back to this (see index.js).
+const DEFAULT_EMAIL_FROM = 'Summit <noreply@learnsummit.app>';
+
 export const env = {
   nodeEnv: optional('NODE_ENV', 'development'),
   port: Number(optional('PORT', '4000')),
@@ -53,7 +59,10 @@ export const env = {
   // Transactional messaging. Empty = dev fallback: codes are logged server-side
   // and (outside production) returned in the API response so flows are testable.
   resendApiKey: optional('RESEND_API_KEY', ''),
-  emailFrom: optional('EMAIL_FROM', 'Summit <onboarding@resend.dev>'),
+  emailFrom: optional('EMAIL_FROM', DEFAULT_EMAIL_FROM),
+  // Whether EMAIL_FROM was actually provided (vs. falling back to DEFAULT_EMAIL_FROM).
+  // Presence only — used by the boot sanity log; the value itself is fine to log.
+  emailFromFromEnv: Boolean(process.env.EMAIL_FROM),
   twilioSid: optional('TWILIO_ACCOUNT_SID', ''),
   twilioToken: optional('TWILIO_AUTH_TOKEN', ''),
   twilioFrom: optional('TWILIO_FROM', ''),
