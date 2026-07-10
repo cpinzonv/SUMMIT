@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { effectiveTier, checkAndConsume, getTierRow } from '../src/services/usageGating.service.js';
+import { effectiveTier, checkAndConsume, getTierRow, refundUsage, reconcileUsage } from '../src/services/usageGating.service.js';
 import { claimFounding, foundingClaimedCount, foundingCap, setFlag } from '../src/services/billing.service.js';
 import { query, pool } from '../src/config/db.js';
 
@@ -31,6 +31,11 @@ test('effectiveTier — plain tier passthrough', () => {
 
 let dbReady = false;
 const temp = [];
+const tempInst = [];
+async function counterAmount(userId, metric, periodKey) {
+  const { rows } = await query('SELECT amount FROM usage_counters WHERE user_id=$1 AND metric=$2 AND period_key=$3', [userId, metric, periodKey]);
+  return rows[0] ? Number(rows[0].amount) : 0;
+}
 async function mkUser(overrides = {}) {
   const cols = { email: `test_${Math.random().toString(36).slice(2)}@ex.com`, password_hash: 'x', full_name: 'T', tier: 'free', ...overrides };
   const keys = Object.keys(cols);
@@ -47,6 +52,7 @@ before(async () => {
 });
 after(async () => {
   if (temp.length) await query(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [temp]).catch(() => {});
+  if (tempInst.length) await query(`DELETE FROM institutions WHERE id = ANY($1::uuid[])`, [tempInst]).catch(() => {});
   await pool.end().catch(() => {});
 });
 
@@ -97,6 +103,46 @@ test('checkAndConsume — premium voice on non-max → premium_voice gate (Max)'
   assert.equal(r.allowed, false);
   assert.equal(r.gate, 'premium_voice');
   assert.equal(r.requiredTier, 'max');
+});
+
+test('refund on failure — consume then refund leaves the counter unchanged',
+async (t) => {
+  if (!dbReady) return t.skip('no DB');
+  const uid = await mkUser();
+  const r = await checkAndConsume(uid, 'extraction'); // consumes 1
+  assert.equal(await counterAmount(uid, 'extraction', r.periodKey), 1);
+  await refundUsage(uid, 'extraction', r.periodKey, r.amount); // simulate 5xx refund
+  assert.equal(await counterAmount(uid, 'extraction', r.periodKey), 0);
+  assert.equal((await checkAndConsume(uid, 'extraction')).allowed, true); // usable again
+});
+
+test('reconcile ai_cards — trues up down (actual<estimate) and up (actual>estimate)',
+async (t) => {
+  if (!dbReady) return t.skip('no DB');
+  const uid = await mkUser();
+  const a = await checkAndConsume(uid, 'ai_cards', 10); // estimate 10
+  assert.equal(await counterAmount(uid, 'ai_cards', a.periodKey), 10);
+  await reconcileUsage(uid, 'ai_cards', a.periodKey, 6 - 10); // actual 6 -> -4
+  assert.equal(await counterAmount(uid, 'ai_cards', a.periodKey), 6);
+  const b = await checkAndConsume(uid, 'ai_cards', 5); // -> 11
+  await reconcileUsage(uid, 'ai_cards', b.periodKey, 12 - 5); // actual 12 -> +7 -> 18
+  assert.equal(await counterAmount(uid, 'ai_cards', b.periodKey), 18);
+});
+
+test('institution contract → effective Pro (podcast #2 allowed while free user blocked)',
+async (t) => {
+  if (!dbReady) return t.skip('no DB');
+  const { rows } = await query(
+    "INSERT INTO institutions (name, admin_email, contract_end) VALUES ('Test U','it@test.edu',(now()+interval '1 year')::date) RETURNING id");
+  tempInst.push(rows[0].id);
+  const instUser = await mkUser({ institution_id: rows[0].id });
+  assert.equal(effectiveTier(await getTierRow(instUser)), 'pro');
+  assert.equal((await checkAndConsume(instUser, 'podcasts')).allowed, true); // #1
+  assert.equal((await checkAndConsume(instUser, 'podcasts')).allowed, true); // #2 (pro: 3/mo)
+
+  const freeUser = await mkUser();
+  assert.equal((await checkAndConsume(freeUser, 'podcasts')).allowed, true); // #1
+  assert.equal((await checkAndConsume(freeUser, 'podcasts')).allowed, false); // #2 blocked (free: 1)
 });
 
 test('founding cap race — concurrent claims never exceed the cap', async (t) => {

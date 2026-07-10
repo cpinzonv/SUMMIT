@@ -5,13 +5,13 @@
  *
  *   router.post('/generate', requireAuth, enforceUsage('ai_cards', { amount }), handler)
  *
- * NOTE: enforceUsage consumes on the ATTEMPT. For the AI endpoints (extraction,
- * ai_cards, podcasts) that's an acceptable product stance — initiating a costly
- * generation spends the allotment. TODO: refund the counter if the generation
- * itself fails (503/no API key) — track req.usage and decrement in the handler.
+ * Usage is consumed up-front (protects against abuse), but REFUNDED if the handler
+ * ends up failing (5xx) — a student must not burn quota on our API being down.
+ * Handlers can also reconcile the estimate to the real amount via `req.usage`
+ * (see reconcileUsage) — e.g. AI cards true-up to the number actually generated.
  */
 import { AppError } from '../utils/AppError.js';
-import { checkAndConsume, getTierRow, effectiveTier } from '../services/usageGating.service.js';
+import { checkAndConsume, getTierRow, effectiveTier, refundUsage } from '../services/usageGating.service.js';
 import { logGateEvent } from '../services/billing.service.js';
 import { limitFor } from '../config/tiers.js';
 
@@ -24,6 +24,17 @@ function blocked(req, next, { gate, requiredTier, tier, limit, used }, message) 
   }));
 }
 
+// Expose what was consumed (for reconciliation) and auto-refund it if the handler
+// fails with a 5xx.
+function armRefund(req, res, metric, result) {
+  req.usage = { metric, periodKey: result.periodKey, amount: result.amount, remaining: result.remaining, tier: result.tier };
+  res.on('finish', () => {
+    if (res.statusCode >= 500) {
+      refundUsage(req.user.id, metric, result.periodKey, result.amount).catch(() => {});
+    }
+  });
+}
+
 export function enforceUsage(metric, opts = {}) {
   return async (req, res, next) => {
     try {
@@ -32,7 +43,8 @@ export function enforceUsage(metric, opts = {}) {
       const consume = opts.consume !== false;
       const result = await checkAndConsume(req.user.id, metric, amount, { premiumVoice, consume });
       if (!result.allowed) return blocked(req, next, result);
-      req.usage = result;
+      if (consume) armRefund(req, res, metric, result);
+      else req.usage = result;
       return next();
     } catch (err) {
       return next(err);
@@ -41,16 +53,19 @@ export function enforceUsage(metric, opts = {}) {
 }
 
 /**
- * Transcription gate: reads durationSeconds from the body, enforces the per-tier
- * per-recording length cap (free: 90 min), then consumes the recording's minutes
- * against the period cap (free 180/semester, pro 480/mo, max 1800/mo). Rejects
- * the recording if it would push the user over their cap.
+ * Transcription gate. A recording MUST report its length: a missing/null
+ * durationSeconds is rejected (metering 0 would slip transcription through free).
+ * Enforces the per-tier per-recording cap (free: 90 min), then consumes the
+ * recording's minutes against the period cap. Refunds on a 5xx failure.
  */
 export function enforceTranscription() {
   return async (req, res, next) => {
     try {
-      const minutes = Math.ceil((Number(req.body?.durationSeconds) || 0) / 60);
-      if (minutes <= 0) return next(); // nothing recorded yet — nothing to meter
+      const raw = req.body?.durationSeconds;
+      if (raw == null || raw === '') {
+        return next(AppError.badRequest('Recording duration (durationSeconds) is required.'));
+      }
+      const minutes = Math.ceil((Number(raw) || 0) / 60);
       const row = await getTierRow(req.user.id);
       const tier = effectiveTier(row);
       const limitDef = limitFor(tier, 'transcription_minutes');
@@ -65,7 +80,7 @@ export function enforceTranscription() {
 
       const result = await checkAndConsume(req.user.id, 'transcription_minutes', minutes, { tierRow: row });
       if (!result.allowed) return blocked(req, next, result);
-      req.usage = result;
+      armRefund(req, res, 'transcription_minutes', result);
       return next();
     } catch (err) {
       return next(err);
