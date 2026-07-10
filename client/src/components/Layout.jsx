@@ -55,9 +55,9 @@ function TabIcon({ name, active }) {
       {active && (
         <defs>
           <linearGradient id={gid} x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#ff8a4c" />
-            <stop offset="0.5" stopColor="#ff6f73" />
-            <stop offset="1" stopColor="#3fb8c9" />
+            <stop offset="0" style={{ stopColor: 'var(--tab-grad-1)' }} />
+            <stop offset="0.5" style={{ stopColor: 'var(--tab-grad-2)' }} />
+            <stop offset="1" style={{ stopColor: 'var(--tab-grad-3)' }} />
           </linearGradient>
         </defs>
       )}
