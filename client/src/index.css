@@ -112,13 +112,14 @@
     background: rgba(255, 251, 246, 0.5);
     backdrop-filter: blur(22px) saturate(180%);
     -webkit-backdrop-filter: blur(22px) saturate(180%);
-    /* Neutral depth + a white top highlight — theme-independent so no warm halo
-       bleeds around the card in the cool (ocean/forest) schemes. The colored
-       accent comes from the glare frame below, which IS theme-aware. */
+    /* Luminous depth + inner glow, TINTED with the theme's own primary (glare-1)
+       so each scheme keeps its warm/cool magic without clashing: coral/sunset
+       glow warm, ocean/forest glow cool. The inner glow lightens the tint toward
+       white for a soft luminosity rather than a saturated vignette. */
     box-shadow:
-      0 20px 54px -22px rgba(28, 25, 45, 0.32),
-      inset 0 1px 0 rgba(255, 255, 255, 0.7),
-      inset 0 0 36px rgba(255, 255, 255, 0.1);
+      0 20px 54px -22px color-mix(in srgb, var(--glare-1), transparent 56%),
+      inset 0 1px 0 rgba(255, 255, 255, 0.78),
+      inset 0 0 40px color-mix(in srgb, color-mix(in srgb, var(--glare-1), white 45%), transparent 72%);
   }
   .glass-panel {
     background: rgba(255, 251, 246, 0.66);
