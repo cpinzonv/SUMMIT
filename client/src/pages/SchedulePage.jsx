@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, classGradient } from '../components/ui';
 import { EmptyHero, ScheduleIllustration } from '../components/EmptyHero';
+import { normalizedMeetings } from '../lib/classMeetings';
 
 /**
  * Weekly timetable: time on the Y axis (8am–6pm), weekdays on the X axis. Class
@@ -56,24 +57,14 @@ function fmtMinutes(mins) {
 function classBlocks(cls, index) {
   const gradient = classGradient(cls, index);
   const out = [];
-  const rich = cls.syllabus?.meetingTimes;
-  if (Array.isArray(rich) && rich.length) {
-    for (const mt of rich) {
-      const d = dayToIndex(mt.day);
-      const start = toMinutes(mt.start);
-      if (d < 0 || start == null) continue;
-      const end = toMinutes(mt.end) ?? start + 50;
-      out.push({ cls, gradient, day: d, start, end, location: mt.location || cls.syllabus?.location || null });
-    }
-  } else if (Array.isArray(cls.meetingDays) && cls.meetingDays.length && cls.meetingTime) {
-    const start = toMinutes(cls.meetingTime);
-    if (start != null) {
-      for (const day of cls.meetingDays) {
-        const d = dayToIndex(day);
-        if (d < 0) continue;
-        out.push({ cls, gradient, day: d, start, end: start + 50, location: cls.syllabus?.location || null });
-      }
-    }
+  // Single source of truth (rich meetingTimes, or legacy flat fields as fallback)
+  // — shared with the calendar so the two views can never disagree.
+  for (const mt of normalizedMeetings(cls)) {
+    const d = dayToIndex(mt.day);
+    const start = toMinutes(mt.start);
+    if (d < 0 || start == null) continue;
+    const end = toMinutes(mt.end) ?? start + 50;
+    out.push({ cls, gradient, day: d, start, end, location: mt.location || null });
   }
   return out;
 }

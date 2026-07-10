@@ -2,29 +2,12 @@ import { useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner, Spinner, Toggle } from '../components/ui';
-import FlipClockPicker from '../components/FlipClockPicker';
+import { buildMeetingTimes } from '../lib/classSchedule';
 
 const ROW_INPUT =
   'rounded-lg border border-white/70 bg-white/60 px-2.5 py-1.5 text-sm text-ink outline-none backdrop-blur transition focus:border-brand-400 focus:bg-white/85';
 
-const MEETING_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-
-// "HH:MM" (24h) string ⇄ the flip picker's { hours (1-12), minutes, ampm }.
-function parseTime(str) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(str || '');
-  const h24 = m ? Number(m[1]) : 9;
-  const minutes = m ? Number(m[2]) : 0;
-  return {
-    hours: h24 % 12 === 0 ? 12 : h24 % 12,
-    minutes,
-    ampm: h24 >= 12 ? 'PM' : 'AM',
-  };
-}
-function toTime24({ hours, minutes, ampm }) {
-  let h = hours % 12;
-  if (ampm === 'PM') h += 12;
-  return `${String(h).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
+const MEETING_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function CreateClassPage() {
   const navigate = useNavigate();
@@ -39,9 +22,12 @@ export default function CreateClassPage() {
     startDate: '',
     endDate: '',
   });
-  // Meeting schedule → drives auto-generated attendance sessions.
+  // Meeting schedule → the rich meetingTimes model (drives the timetable,
+  // calendar, and — via server-derived meeting_days — attendance sessions).
   const [meetingDays, setMeetingDays] = useState([]);
-  const [meetingTime, setMeetingTime] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [meetingLocation, setMeetingLocation] = useState('');
   const [attendanceGraded, setAttendanceGraded] = useState(false);
   const [attendanceWeight, setAttendanceWeight] = useState('');
 
@@ -134,6 +120,11 @@ export default function CreateClassPage() {
   // ---- Create -------------------------------------------------------------
   const submit = async (e) => {
     e.preventDefault();
+    if (startTime && endTime && endTime <= startTime) {
+      setError('Meeting end time must be after the start time.');
+      return;
+    }
+    const meetingTimes = buildMeetingTimes(meetingDays, startTime, endTime, meetingLocation);
     setSaving(true);
     setError('');
     try {
@@ -144,13 +135,16 @@ export default function CreateClassPage() {
         description: form.description || undefined,
         startDate: form.startDate || undefined,
         endDate: form.endDate || undefined,
-        meetingDays: meetingDays.length ? meetingDays : undefined,
-        meetingTime: meetingTime || undefined,
+        // Days with a start time become rich meetingTimes; days without a time
+        // fall back to the flat list so attendance-only schedules still work.
+        meetingDays: meetingDays.length && !startTime ? meetingDays : undefined,
         attendanceGraded: attendanceGraded || undefined,
         attendanceWeight:
           attendanceGraded && attendanceWeight !== '' ? Number(attendanceWeight) : undefined,
         syllabus: {
           instructor: form.instructor || undefined,
+          location: meetingLocation || undefined,
+          meetingTimes: meetingTimes.length ? meetingTimes : undefined,
           gradingScheme: grading
             .filter((g) => g.category && g.weight !== '')
             .map((g) => ({ name: g.category, weight: Number(g.weight) / 100 })),
@@ -258,16 +252,23 @@ export default function CreateClassPage() {
               );
             })}
           </div>
-          <div className="mt-3">
-            <span className="mb-1.5 block text-sm font-semibold text-ink">Meeting time</span>
-            <FlipClockPicker
-              value={parseTime(meetingTime || '09:00')}
-              onChange={(t) => setMeetingTime(toTime24(t))}
-            />
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-ink">Start time</span>
+              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="field" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-ink">End time</span>
+              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="field" />
+            </label>
           </div>
+          <label className="mt-3 block">
+            <span className="mb-1 block text-sm font-semibold text-ink">Location <span className="font-normal text-muted">(optional)</span></span>
+            <input value={meetingLocation} onChange={(e) => setMeetingLocation(e.target.value)} placeholder="Building / room" className="field" />
+          </label>
           <p className="mt-2 text-xs text-muted">
-            Used to auto-generate attendance sessions across the term. Use the arrows, or
-            double-click the hours/minutes to type.
+            Meets on the selected days at this time. Shows on your Schedule and calendar, and
+            generates attendance sessions across the term. Leave blank for classes without a fixed time.
           </p>
         </div>
 

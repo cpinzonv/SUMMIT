@@ -6,12 +6,19 @@ const dateString = z
   .string()
   .refine((v) => !Number.isNaN(Date.parse(v)), 'Invalid date');
 
-const meetingTime = z.object({
-  day: z.string(),
-  start: z.string(),
-  end: z.string(),
-  location: z.string().optional(),
-});
+// Local wall-clock 'HH:MM' (24h). Zero-padded so lexicographic compare == chronological.
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const weekdayToken = z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+
+const meetingTime = z
+  .object({
+    day: weekdayToken,
+    start: z.string().regex(HHMM, 'start must be HH:MM'),
+    end: z.string().regex(HHMM, 'end must be HH:MM').optional(),
+    location: z.string().optional(),
+  })
+  // When both times are present, the class can't end before it starts.
+  .refine((mt) => !mt.end || mt.end > mt.start, { message: 'end time must be after start time', path: ['end'] });
 
 const gradingCategory = z.object({
   name: z.string(),
@@ -62,6 +69,14 @@ export const updateClassSchema = z
     meetingTime: z.string().nullable().optional(),
     attendanceGraded: z.boolean().optional(),
     attendanceWeight: z.number().min(0).max(100).nullable().optional(),
+    // Editing the meeting schedule (rich model). meeting_days is re-derived from
+    // this server-side, so the timetable, calendar, and attendance stay in sync.
+    syllabus: z
+      .object({
+        meetingTimes: z.array(meetingTime).optional(),
+        location: z.string().nullable().optional(),
+      })
+      .optional(),
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 

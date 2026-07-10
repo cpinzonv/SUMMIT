@@ -1,6 +1,7 @@
 import { query, withTransaction } from '../config/db.js';
 import { AppError } from '../utils/AppError.js';
 import { computeClassGrade } from './grade.service.js';
+import { meetingDaysFrom, earliestStart } from '../utils/meetingTimes.js';
 
 /** Map a classes row to the API shape (camelCase, grouped syllabus data). */
 export function toPublicClass(row) {
@@ -49,6 +50,11 @@ export async function getOwnedClass(userId, classId, db = { query }) {
 
 export async function createClass(userId, input) {
   const s = input.syllabus ?? {};
+  // meeting_times is the source of truth: when present, derive the flat
+  // meeting_days (drives attendance sessions) and meeting_time (attendance-tab
+  // display) from it rather than trusting a separately-sent flat pair.
+  const meetingDays = s.meetingTimes?.length ? meetingDaysFrom(s.meetingTimes) : (input.meetingDays ?? null);
+  const meetingTime = s.meetingTimes?.length ? earliestStart(s.meetingTimes) : (input.meetingTime ?? null);
   const params = [
     userId,
     input.name,
@@ -59,8 +65,8 @@ export async function createClass(userId, input) {
     input.color ?? null,
     input.startDate ?? null,
     input.endDate ?? null,
-    input.meetingDays ? JSON.stringify(input.meetingDays) : null,
-    input.meetingTime ?? null,
+    meetingDays ? JSON.stringify(meetingDays) : null,
+    meetingTime ?? null,
     input.attendanceGraded ?? null,
     input.attendanceWeight ?? null,
     s.instructor ?? null,
@@ -132,6 +138,21 @@ export async function updateClass(userId, classId, input) {
   if ('meetingDays' in input) {
     sets.push(`meeting_days = $${i++}::jsonb`);
     values.push(JSON.stringify(input.meetingDays ?? []));
+  }
+  // Editing the rich schedule: meeting_times is authoritative, and meeting_days /
+  // meeting_time are re-derived so attendance and the timetable never diverge.
+  if (input.syllabus && 'meetingTimes' in input.syllabus) {
+    const mts = input.syllabus.meetingTimes ?? [];
+    sets.push(`meeting_times = $${i++}::jsonb`);
+    values.push(JSON.stringify(mts));
+    sets.push(`meeting_days = $${i++}::jsonb`);
+    values.push(JSON.stringify(meetingDaysFrom(mts)));
+    sets.push(`meeting_time = $${i++}`);
+    values.push(earliestStart(mts));
+  }
+  if (input.syllabus && 'location' in input.syllabus) {
+    sets.push(`location = $${i++}`);
+    values.push(input.syllabus.location ?? null);
   }
   if (sets.length === 0) {
     return toPublicClass(await getOwnedClass(userId, classId));
