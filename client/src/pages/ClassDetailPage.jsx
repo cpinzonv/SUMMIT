@@ -336,7 +336,11 @@ export default function ClassDetailPage() {
                   const st = dueStatus(a.dueDate);
                   const overdue = st.isPastDue && !isDone(a);
                   return (
-                  <tr key={a.id} className={`transition hover:bg-white/40 ${overdue ? 'bg-rose-50/70' : ''}`}>
+                  <tr
+                    key={a.id}
+                    onClick={() => setModal({ type: 'assignment', assignment: a })}
+                    className={`cursor-pointer transition hover:bg-white/40 ${overdue ? 'bg-rose-50/70' : ''}`}
+                  >
                     <td className="px-5 py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <button
@@ -376,7 +380,7 @@ export default function ClassDetailPage() {
                     <td className="px-5 py-3">
                       {a.grade ? (
                         <button
-                          onClick={() => setModal({ type: 'grade', assignment: a })}
+                          onClick={(e) => { e.stopPropagation(); setModal({ type: 'grade', assignment: a }); }}
                           className="font-semibold text-ink transition hover:text-brand-600"
                           title="Edit grade"
                         >
@@ -384,7 +388,7 @@ export default function ClassDetailPage() {
                         </button>
                       ) : (
                         <button
-                          onClick={() => setModal({ type: 'grade', assignment: a })}
+                          onClick={(e) => { e.stopPropagation(); setModal({ type: 'grade', assignment: a }); }}
                           className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 transition hover:bg-brand-100"
                         >
                           Grade
