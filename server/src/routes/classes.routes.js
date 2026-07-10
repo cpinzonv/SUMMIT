@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { AppError } from '../utils/AppError.js';
 import { requireAuth } from '../middleware/auth.js';
+import { enforceUsage, enforceTranscription } from '../middleware/enforceUsage.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as classes from '../controllers/classes.controller.js';
@@ -75,6 +76,7 @@ router.use(requireAuth);
 // "/:id" routes so the literal path matches first.
 router.post(
   '/extract-syllabus',
+  enforceUsage('extraction'), // free: 2/semester
   upload.single('file'),
   asyncHandler(syllabus.extractSyllabus),
 );
@@ -171,12 +173,14 @@ router.post(
   '/:id/transcripts',
   validate(classes.classIdParam, 'params'),
   validate(transcripts.createSchema),
+  enforceTranscription(), // meters durationSeconds against the transcription cap
   asyncHandler(transcripts.create),
 );
 router.post(
   '/:id/transcripts/record',
   validate(classes.classIdParam, 'params'),
   audioUpload.single('audio'),
+  enforceTranscription(),
   asyncHandler(transcripts.record),
 );
 

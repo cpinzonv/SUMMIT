@@ -14,6 +14,7 @@ import {
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, EmptyState } from '../components/ui';
 import { PremiumWhitelist } from '../components/PremiumWhitelist';
+import MonetizationAdmin from '../components/admin/MonetizationAdmin';
 import { InstitutionsAdmin } from '../components/InstitutionsAdmin';
 
 const REFRESH_MS = 5 * 60 * 1000; // auto-refresh every 5 minutes
@@ -126,7 +127,7 @@ export default function AdminAnalytics() {
 
   const Tabs = (
     <div className="flex w-fit gap-1 rounded-full bg-white/45 p-1 text-sm">
-      {[['analytics', 'Analytics'], ['institutions', 'Institutions']].map(([k, l]) => (
+      {[['analytics', 'Analytics'], ['monetization', 'Monetization'], ['institutions', 'Institutions']].map(([k, l]) => (
         <button
           key={k}
           onClick={() => setTab(k)}
@@ -138,6 +139,7 @@ export default function AdminAnalytics() {
     </div>
   );
 
+  if (tab === 'monetization') return <div className="space-y-6">{Tabs}<MonetizationAdmin /></div>;
   if (tab === 'institutions') return <div className="space-y-6">{Tabs}<InstitutionsAdmin /></div>;
   if (loading) return <div className="space-y-6">{Tabs}<Spinner label="Loading analytics…" /></div>;
 

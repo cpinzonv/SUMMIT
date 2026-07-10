@@ -1189,3 +1189,103 @@ CREATE TABLE IF NOT EXISTS trusted_devices (
 );
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_user ON trusted_devices(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_trusted_devices_token ON trusted_devices(token_hash);
+
+-- ============================================================================
+-- MONETIZATION INFRASTRUCTURE — founding members, tiers, usage gates, fake-door
+-- paywall. All fake-door until BILLING_ENABLED + paywall_enabled flip on. No
+-- charging, no Stripe. See server/src/config/tiers.js + services/billing.*.
+-- ============================================================================
+
+-- Runtime-editable flags (admin panel). value is JSONB so each flag can carry a
+-- small object. paywall_enabled gates fake-door → real-checkout mode;
+-- founding_member_cap is the hard cap on founding slots.
+CREATE TABLE IF NOT EXISTS feature_flags (
+  key        TEXT PRIMARY KEY,
+  value      JSONB NOT NULL,
+  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+INSERT INTO feature_flags (key, value) VALUES
+  ('paywall_enabled', '{"enabled": false}'::jsonb),
+  ('founding_member_cap', '{"cap": 500}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
+
+-- Tier + founding-member columns on users. `tier` is the paid tier (free/pro/max),
+-- distinct from the legacy subscription_tier. Founding members get
+-- pro_until = signup + 1 year; effective tier falls back to `tier` once expired.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS founding_member BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS founding_member_number INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pro_until TIMESTAMPTZ;
+DO $$ BEGIN
+  ALTER TABLE users ADD CONSTRAINT users_tier_check CHECK (tier IN ('free','pro','max'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  ALTER TABLE users ADD CONSTRAINT users_founding_number_unique UNIQUE (founding_member_number);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Per-user, per-metric, per-period usage. period_key is 'YYYY-MM' (monthly),
+-- 'YYYY-S1'/'YYYY-S2' (semester: S1=Jan1-Jun30, S2=Jul1-Dec31), or 'lifetime'.
+CREATE TABLE IF NOT EXISTS usage_counters (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  metric     TEXT NOT NULL CHECK (metric IN ('extraction','ai_cards','transcription_minutes','podcasts')),
+  period_key TEXT NOT NULL,
+  amount     NUMERIC NOT NULL DEFAULT 0,
+  UNIQUE (user_id, metric, period_key)
+);
+CREATE INDEX IF NOT EXISTS idx_usage_counters_user ON usage_counters(user_id, metric, period_key);
+
+-- Conversion-intent analytics for the paywall (fake-door). One row per event.
+CREATE TABLE IF NOT EXISTS gate_events (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID REFERENCES users(id) ON DELETE SET NULL,
+  gate         TEXT,
+  tier_at_time TEXT,
+  action       TEXT NOT NULL CHECK (action IN ('shown','claimed_founding','joined_waitlist','dismissed','upgraded')),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_gate_events_gate ON gate_events(gate, action, created_at DESC);
+
+-- Waitlist (fake-door Mode B). One row per user.
+CREATE TABLE IF NOT EXISTS waitlist (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  email           TEXT,
+  interested_tier TEXT,
+  source_gate     TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One-time backfill: assign founding numbers to existing users by signup order,
+-- up to the configured cap. Idempotent — only touches users without a number and
+-- never exceeds the cap, so re-running on each deploy is safe. (New signups get
+-- their number via the race-safe claim path in billing.service.js.)
+DO $$
+DECLARE
+  v_cap    INTEGER;
+  v_count  INTEGER;
+  v_maxnum INTEGER;
+  v_slots  INTEGER;
+BEGIN
+  SELECT COALESCE((value->>'cap')::int, 500) INTO v_cap FROM feature_flags WHERE key = 'founding_member_cap';
+  v_cap := COALESCE(v_cap, 500);
+  SELECT count(*) INTO v_count FROM users WHERE founding_member_number IS NOT NULL;
+  SELECT COALESCE(max(founding_member_number), 0) INTO v_maxnum FROM users;
+  v_slots := GREATEST(v_cap - v_count, 0);
+  IF v_slots > 0 THEN
+    WITH to_assign AS (
+      SELECT id, (row_number() OVER (ORDER BY created_at, id)) + v_maxnum AS n
+        FROM users
+       WHERE founding_member_number IS NULL
+       ORDER BY created_at, id
+       LIMIT v_slots
+    )
+    UPDATE users u
+       SET founding_member = true,
+           founding_member_number = t.n,
+           pro_until = COALESCE(u.pro_until, now() + interval '1 year')
+      FROM to_assign t
+     WHERE u.id = t.id;
+  END IF;
+END $$;

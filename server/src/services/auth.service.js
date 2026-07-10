@@ -12,6 +12,7 @@ import { verifyLoginCode } from './twofa.service.js';
 import { hasPremiumAccess } from './featureGating.service.js';
 import { assertInstitutionActive } from './institution.service.js';
 import { issueCode, verifyCode } from './verification.service.js';
+import { assignFoundingOnSignup } from './billing.service.js';
 import { isDeviceTrusted, trustDevice } from './trustedDevice.service.js';
 
 const SALT_ROUNDS = 12;
@@ -155,6 +156,11 @@ export async function register({
     );
     throw new AppError(502, 'We could not send your verification email. Please try again in a few minutes.');
   }
+
+  // Founding-member assignment: grab a slot if any remain (race-safe, best-effort
+  // — never blocks signup). Existing users are covered by the backfill migration.
+  await assignFoundingOnSignup(user.id);
+
   return { verificationRequired: true, email: user.email, ...(result.devCode ? { devCode: result.devCode } : {}) };
 }
 

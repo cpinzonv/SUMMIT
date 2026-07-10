@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { emitPaywallGate } from '../lib/paywallBus';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -111,6 +112,13 @@ api.interceptors.response.use(
         if (isAuthError(refreshError)) forceLogout();
         return Promise.reject(refreshError);
       }
+    }
+
+    // Usage-limit gate (402): surface the paywall. The bus lets this non-React
+    // interceptor open the React modal. The caller still gets the rejection.
+    const details = error.response?.data?.error?.details;
+    if (status === 402 && details?.code === 'usage_limit') {
+      emitPaywallGate(details);
     }
 
     return Promise.reject(error);

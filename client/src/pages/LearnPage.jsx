@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { Spinner, ErrorBanner, EmptyState, Toast } from '../components/ui';
 import { EmptyHero, NotepadIllustration } from '../components/EmptyHero';
 import { UpgradePanel } from '../components/learn/common';
-import { PaywallModal } from '../components/learn/PaywallModal';
+import { usePaywall } from '../context/PaywallContext';
 import { FlashcardsTab } from '../components/learn/FlashcardsTab';
 import { QuizTab } from '../components/learn/QuizTab';
 import { PodcastTab } from '../components/learn/PodcastTab';
@@ -45,7 +45,7 @@ export default function LearnPage() {
   const [featureStatus, setFeatureStatus] = useState(null);
   const billingEnabled = Boolean(featureStatus?.billingEnabled);
   const isPro = Boolean(user?.premium);
-  const [paywall, setPaywall] = useState(null); // { label } when a locked tab is clicked
+  const { openGate } = usePaywall(); // shared fake-door paywall
   const canUse = (t) => !t.premium || (featureStatus?.features?.[t.feature]?.hasAccess ?? isPro);
 
   const [classes, setClasses] = useState([]);
@@ -161,7 +161,7 @@ export default function LearnPage() {
                 return (
                   <button
                     key={t.key}
-                    onClick={() => (tabLocked ? setPaywall({ label: t.label }) : setTab(t.key))}
+                    onClick={() => (tabLocked ? openGate({ gate: t.feature || t.key, requiredTier: 'pro' }) : setTab(t.key))}
                     title={tabLocked ? `${t.label} is a Pro feature` : undefined}
                     className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold transition ${
                       tab === t.key ? 'bg-white/70 text-brand-700 shadow-sm' : 'text-muted hover:bg-white/50 hover:text-ink'
@@ -185,7 +185,6 @@ export default function LearnPage() {
         </>
       )}
 
-      {paywall && <PaywallModal feature={paywall.label} billingEnabled={billingEnabled} onClose={() => setPaywall(null)} />}
       {toast && <Toast toast={toast} />}
     </div>
   );
