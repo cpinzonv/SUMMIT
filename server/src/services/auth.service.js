@@ -218,11 +218,22 @@ export async function resendVerification({ email }) {
 export async function verifyEmail({ email, code }) {
   const { rows } = await query('SELECT * FROM users WHERE email = $1', [email]);
   const user = rows[0];
-  if (!user) throw AppError.badRequest('That code is not valid.');
-  if (user.email_verified) {
-    const tokens = await issueTokens(user.id);
-    return { user: toPublicUser(user), ...tokens };
+
+  // Already verified: signup verification is complete, so this path is done. Do
+  // NOT issue tokens and do NOT skip the code check — there is no token shortcut
+  // here; the user must log in normally. (Previously this branch issued tokens
+  // WITHOUT validating any code, which let anyone who knew a verified email take
+  // over the account. That token shortcut is removed.)
+  if (user?.email_verified) {
+    throw AppError.badRequest('This link is no longer valid. Please sign in.');
   }
+
+  // Tokens are issued ONLY past this point, and ONLY after verifyCode() confirms
+  // a code that is valid, unexpired, single-use, and matches THIS account.
+  // A missing account and a bad/expired/already-used code both fail generically
+  // here with NO tokens (verifyCode does a bcrypt hash-compare and consumes the
+  // code on success, so a code can't be replayed).
+  if (!user) throw AppError.badRequest('That code is not valid.');
   await verifyCode({ userId: user.id, purpose: 'signup', code });
   await query('UPDATE users SET email_verified = true WHERE id = $1', [user.id]);
   const fresh = (await query('SELECT * FROM users WHERE id = $1', [user.id])).rows[0];
