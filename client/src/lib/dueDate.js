@@ -1,11 +1,13 @@
 /**
  * Shared due-date math for past-due indicators and the days-left countdown.
  *
- * Uses calendar-day boundaries (local midnight) for the day counts so "due later
- * today" reads as "Due today" and "due yesterday" reads as "1 day late", while
- * `isPastDue` uses the exact timestamp (a deadline that passed an hour ago is
- * already overdue). Everything is computed at render time, so the counters
- * advance on their own each day with no stored state.
+ * Everything is by CALENDAR DAY (local midnight), so the badge reads the way a
+ * student thinks about a deadline rather than by the exact clock time:
+ *   • due today  (daysLeft === 0) → "Due today"     — NOT late, even if the
+ *                                                      clock time has passed
+ *   • due future (daysLeft  >  0) → "N day(s) left"
+ *   • due past   (daysLeft  <  0) → "N day(s) late"
+ * Computed at render time, so the counters advance on their own each day.
  */
 const MS_DAY = 24 * 60 * 60 * 1000;
 
@@ -13,23 +15,25 @@ function midnight(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
+const days = (n) => `${n} day${n === 1 ? '' : 's'}`;
+
 export function dueStatus(dueDate, now = new Date()) {
   if (!dueDate) {
     return { hasDue: false, isPastDue: false, daysLeft: null, daysOverdue: 0, countdownLabel: null, lateLabel: null };
   }
   const due = new Date(dueDate);
   const daysLeft = Math.round((midnight(due) - midnight(now)) / MS_DAY);
-  const isPastDue = due.getTime() < now.getTime();
-  const daysOverdue = isPastDue ? Math.max(1, Math.round((midnight(now) - midnight(due)) / MS_DAY)) : 0;
+  // Overdue only once the due DAY has fully passed — the day it's due it reads
+  // "Due today", not late.
+  const isPastDue = daysLeft < 0;
+  const daysOverdue = isPastDue ? -daysLeft : 0;
 
   let countdownLabel;
-  if (isPastDue) countdownLabel = 'OVERDUE';
-  else if (daysLeft <= 0) countdownLabel = 'Due today';
-  else if (daysLeft === 1) countdownLabel = 'Due tomorrow';
-  else countdownLabel = `${daysLeft} days left`;
+  if (daysLeft < 0) countdownLabel = `${days(daysOverdue)} late`;
+  else if (daysLeft === 0) countdownLabel = 'Due today';
+  else countdownLabel = `${days(daysLeft)} left`;
 
-  // Badge text for the past-due warning: "OVERDUE" the day of, else "N days late".
-  const lateLabel = isPastDue ? (daysOverdue <= 0 ? 'OVERDUE' : `${daysOverdue} day${daysOverdue === 1 ? '' : 's'} late`) : null;
+  const lateLabel = isPastDue ? `${days(daysOverdue)} late` : null;
 
   return { hasDue: true, isPastDue, daysLeft, daysOverdue, countdownLabel, lateLabel };
 }
