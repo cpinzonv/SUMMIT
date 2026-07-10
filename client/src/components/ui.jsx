@@ -266,9 +266,14 @@ function lighten(hex, amt = 0.22) {
 export const GLASS_GRADIENT =
   'linear-gradient(135deg, rgba(150,140,170,0.38) 0%, rgba(150,140,170,0.12) 100%)';
 
-/** True when a class has no solid color — the "Glass / Clear" look (default). */
+/**
+ * True only when a class was EXPLICITLY set to the "Glass / Clear" frosted look.
+ * A class with no color yet (empty / null) is NOT glass — it renders with a vivid
+ * palette color by default (see classGradient), so an untouched class still looks
+ * colorful like the demo rather than washed-out frosted.
+ */
 export function isGlassColor(color) {
-  return !color || ['transparent', 'clear', 'glass'].includes(String(color).toLowerCase());
+  return ['transparent', 'clear', 'glass'].includes(String(color).toLowerCase());
 }
 
 /**
@@ -276,8 +281,9 @@ export function isGlassColor(color) {
  *  - Decorative callers pass no class (`cls == null`) → vivid palette gradient,
  *    used for non-class UI (stat glows, planner/archive term accents).
  *  - A class with a hex color → a two-stop gradient derived from it.
- *  - A "Glass / Clear" class (no/​transparent color, the default) → a faint
- *    neutral so the card reads as frosted glass with just a subtle accent.
+ *  - An EXPLICIT "Glass / Clear" class → a faint neutral so the card reads as
+ *    frosted glass with just a subtle accent.
+ *  - No color set yet → a vivid palette gradient by index (colorful default).
  */
 export function classGradient(cls, index = 0) {
   if (cls == null) return GRADIENTS[index % GRADIENTS.length];
@@ -285,12 +291,15 @@ export function classGradient(cls, index = 0) {
     const c = cls.color.startsWith('#') ? cls.color : `#${cls.color}`;
     return `linear-gradient(135deg, ${c} 0%, ${lighten(c, 0.28)} 100%)`;
   }
-  return GLASS_GRADIENT;
+  if (isGlassColor(cls.color)) return GLASS_GRADIENT; // explicit Glass / Clear
+  return GRADIENTS[index % GRADIENTS.length];          // untouched → vivid default
 }
 
 export function classColor(cls, index = 0) {
-  if (isGlassColor(cls?.color)) return cls == null ? PALETTE[index % PALETTE.length] : null;
-  return cls.color;
+  if (cls == null) return PALETTE[index % PALETTE.length];
+  if (isGlassColor(cls.color)) return null;                 // explicit Glass
+  if (cls.color) return cls.color;                          // hex
+  return PALETTE[index % PALETTE.length];                   // untouched → palette
 }
 
 /**

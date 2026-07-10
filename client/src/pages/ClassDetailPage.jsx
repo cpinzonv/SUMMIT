@@ -1482,9 +1482,9 @@ function ColorPicker({ value, onChange }) {
             not an empty/gray state. */}
         <button
           type="button"
-          onClick={() => onChange('')}
-          aria-label="Glass (clear, Summit default)"
-          title="Glass — the signature Summit look"
+          onClick={() => onChange('glass')}
+          aria-label="Glass (clear, frosted look)"
+          title="Glass — frosted, no solid color"
           className={`h-7 w-7 rounded-full shadow-[0_2px_10px_-2px_rgba(255,120,80,0.6)] ring-offset-1 transition ${
             glassSelected ? 'ring-2 ring-ink' : 'ring-1 ring-white/70 hover:ring-ink/40'
           }`}
