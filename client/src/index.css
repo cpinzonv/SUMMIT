@@ -36,8 +36,8 @@
   /* Glass-card glare endpoints — the theme's VISUAL primary → secondary (the ends
      of --grad-teal-purple), so the shine matches the ambient look rather than the
      brand scale. Overridden per color scheme below. Default = coral → blue. */
-  --glare-1: #ff8a4c;
-  --glare-2: #4f9fd6;
+  --glare-1: #ffa078;
+  --glare-2: #5aa9d6;
 
   /* Notes editor palette — warm white surface, teal accent, soft shadow. */
   --note-bg: #fafaf8;
@@ -178,14 +178,14 @@
     color: #fff;
     background-image: var(--grad-teal-purple);
     box-shadow:
-      0 12px 28px -8px rgba(255, 120, 80, 0.55),
+      0 12px 28px -8px color-mix(in srgb, var(--glare-1), transparent 45%),
       inset 0 1px 0 rgba(255, 255, 255, 0.35);
   }
   .btn-primary:hover:not(:disabled) {
     transform: translateY(-1px);
     filter: brightness(1.05) saturate(1.08);
     box-shadow:
-      0 18px 36px -8px rgba(255, 120, 80, 0.6),
+      0 18px 36px -8px color-mix(in srgb, var(--glare-1), transparent 40%),
       inset 0 1px 0 rgba(255, 255, 255, 0.4);
   }
   .btn-primary:disabled {
