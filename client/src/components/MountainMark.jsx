@@ -1,16 +1,19 @@
 /**
  * Summit logomark — a minimal mountain-range peak.
  *
- * Default style is a gradient stroke (coral → teal), the most premium / on-brand
- * option. To switch styles, change `variant`:
- *   - "stroke"   (default) thin gradient outline
- *   - "coral"    thin coral line
- *   - "filled"   solid coral→teal gradient fill
+ * One smooth, continuous gradient stroke (coral → teal) with softly rounded
+ * corners at every peak and valley. Geometry is the brand source of truth —
+ * see docs/brand/summit-brand-kit.html. To switch styles, change `variant`:
+ *   - "stroke" (default)  thin gradient outline
+ *   - "coral"             thin coral line
+ *   - "filled"            solid coral→teal gradient fill
  */
 export function MountainMark({ size = 64, variant = 'stroke', className = '' }) {
   const gid = 'summit-mark-grad';
-  // Two-peak range silhouette: a taller summit (right) and a shoulder (left).
-  const ridge = 'M6 51 L25 23 L34 34 L45 15 L58 51';
+  // Two-peak ridge drawn as a single continuous line, corners rounded with
+  // quadratic curves so the stroke flows instead of snapping at each vertex.
+  const ridge =
+    'M6 51 L23.54 25.15 Q25 23 26.65 25.01 L32.35 31.99 Q34 34 35.3 31.75 L43.7 17.25 Q45 15 45.88 17.45 L58 51';
 
   const stroke =
     variant === 'coral' ? '#ff7a52' : variant === 'stroke' ? `url(#${gid})` : 'none';
@@ -37,24 +40,13 @@ export function MountainMark({ size = 64, variant = 'stroke', className = '' }) 
         // Solid filled range, closed along an implied horizon.
         <path d={`${ridge} Z`} fill={`url(#${gid})`} />
       ) : (
-        <>
-          <path
-            d={ridge}
-            stroke={stroke}
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {/* A faint snow-line on the main summit for a touch of depth. */}
-          <path
-            d="M40 22 L45 15 L50 22"
-            stroke={stroke}
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity="0.5"
-          />
-        </>
+        <path
+          d={ridge}
+          stroke={stroke}
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       )}
     </svg>
   );
