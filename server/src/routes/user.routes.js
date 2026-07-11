@@ -28,6 +28,8 @@ router.patch(
 router.post('/2fa/setup', asyncHandler(user.twofaSetup));
 router.post('/2fa/confirm', sensitiveLimiter, validate(user.twofaConfirmSchema), asyncHandler(user.twofaConfirm));
 router.post('/2fa/disable', sensitiveLimiter, validate(user.twofaDisableSchema), asyncHandler(user.twofaDisable));
+// Regenerate backup codes (bcrypt-hashed). Password re-auth + throttled.
+router.post('/2fa/backup-codes', sensitiveLimiter, validate(user.twofaBackupCodesSchema), asyncHandler(user.twofaBackupCodes));
 
 // Trusted devices ("remember this device" for 2FA) — list + revoke.
 router.get('/trusted-devices', asyncHandler(user.listDevices));

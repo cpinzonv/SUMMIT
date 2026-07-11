@@ -13,10 +13,14 @@ import { hasPremiumAccess } from './featureGating.service.js';
 import { assertInstitutionActive } from './institution.service.js';
 import { issueCode, verifyCode } from './verification.service.js';
 import { assignFoundingOnSignup } from './billing.service.js';
-import { isDeviceTrusted, trustDevice } from './trustedDevice.service.js';
+import { isDeviceTrusted, trustDevice, revokeAllTrustedDevices } from './trustedDevice.service.js';
 import { sendEmail } from './messaging.service.js';
+import { logSecurityEvent } from './audit.service.js';
 
 const SALT_ROUNDS = 12;
+// Max concurrent active refresh tokens (sessions) per user; the oldest is
+// revoked when a new login would exceed it.
+const MAX_ACTIVE_SESSIONS = 5;
 
 /** Shape returned to clients — never includes password_hash or LMS tokens. */
 export function toPublicUser(row) {
@@ -80,16 +84,42 @@ export async function changePassword(userId, currentPassword, newPassword) {
 
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
   await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
+  // A password change logs out every device: revoke all refresh tokens and drop
+  // remembered 2FA devices, so other sessions can't linger on the old credential.
+  await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
+  await revokeAllTrustedDevices(userId);
 }
 
-async function issueTokens(userId) {
+/**
+ * Revoke the caller's oldest active refresh tokens beyond MAX_ACTIVE_SESSIONS,
+ * so a user can hold at most N concurrent sessions. Runs inside the caller's
+ * transaction/client.
+ */
+async function enforceSessionCap(client, userId) {
+  const { rows } = await client.query(
+    `SELECT id FROM refresh_tokens
+      WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+      ORDER BY created_at DESC
+      OFFSET $2`,
+    [userId, MAX_ACTIVE_SESSIONS],
+  );
+  if (rows.length) {
+    await client.query('UPDATE refresh_tokens SET revoked_at = now() WHERE id = ANY($1::uuid[])', [rows.map((r) => r.id)]);
+  }
+}
+
+async function issueTokens(userId, { userAgent = null, ip = null } = {}) {
   const accessToken = signAccessToken(userId);
   const { raw, hash, expiresAt } = generateRefreshToken();
-  await query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-     VALUES ($1, $2, $3)`,
-    [userId, hash, expiresAt],
-  );
+  await withTransaction(async (client) => {
+    // A fresh login starts a NEW rotation family (gen_random_uuid()).
+    await client.query(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id, user_agent, ip)
+       VALUES ($1, $2, $3, gen_random_uuid(), $4, $5)`,
+      [userId, hash, expiresAt, userAgent, ip],
+    );
+    await enforceSessionCap(client, userId);
+  });
   return { accessToken, refreshToken: raw };
 }
 
@@ -97,8 +127,13 @@ async function issueTokens(userId) {
  * Issue a fresh access + refresh token pair for an already-authenticated user.
  * Used by the OAuth flow, where the provider (not a password) proved identity.
  */
-export async function issueTokensForUser(userId) {
-  return issueTokens(userId);
+export async function issueTokensForUser(userId, context = {}) {
+  return issueTokens(userId, context);
+}
+
+/** Revoke ALL of a user's active refresh tokens ("sign out everywhere"). */
+export async function logoutAll(userId) {
+  await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
 }
 
 /** Signup attribution: count of users by referral_source (nulls grouped as 'unknown'). */
@@ -298,6 +333,9 @@ export async function resetPassword({ email, code, newPassword }) {
   await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, user.id]);
   // Invalidate all outstanding refresh tokens — every device must re-authenticate.
   await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [user.id]);
+  // A reset is a possible-compromise signal: also drop every remembered 2FA
+  // device so the next login must complete 2FA again.
+  await revokeAllTrustedDevices(user.id);
   return { ok: true };
 }
 
@@ -341,7 +379,7 @@ export async function login({ email, password, deviceToken, userAgent, ip }) {
     // fall through to issue tokens — device is trusted
   }
 
-  const tokens = await issueTokens(user.id);
+  const tokens = await issueTokens(user.id, { userAgent, ip });
   return { user: toPublicUser(user), ...tokens };
 }
 
@@ -369,7 +407,7 @@ export async function loginTwoFactor({ challengeToken, code, trustDevice: rememb
   const valid = await verifyLoginCode(user, code);
   if (!valid) throw AppError.unauthorized('Invalid authentication code.');
 
-  const tokens = await issueTokens(user.id);
+  const tokens = await issueTokens(user.id, { userAgent, ip });
   // Optionally remember this browser so it can skip 2FA next time (30 days).
   const deviceToken = remember ? await trustDevice(user.id, { userAgent, ip }) : undefined;
   return { user: toPublicUser(user), ...tokens, ...(deviceToken ? { deviceToken } : {}) };
@@ -379,40 +417,67 @@ export async function loginTwoFactor({ challengeToken, code, trustDevice: rememb
 export async function refresh({ refreshToken }) {
   const tokenHash = hashToken(refreshToken);
 
-  return withTransaction(async (client) => {
+  // The transaction returns an outcome instead of throwing, so a reuse-detection
+  // family revocation COMMITS before we reject (a throw here would roll it back).
+  const outcome = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `SELECT * FROM refresh_tokens WHERE token_hash = $1 FOR UPDATE`,
       [tokenHash],
     );
     const record = rows[0];
+    if (!record) return { status: 'invalid' };
 
-    if (
-      !record ||
-      record.revoked_at !== null ||
-      new Date(record.expires_at) <= new Date()
-    ) {
-      throw AppError.unauthorized('Invalid or expired refresh token');
+    // Reuse detection (L3): an ALREADY-revoked token is being presented — a
+    // replay, the signature of a stolen token. Revoke the ENTIRE rotation family
+    // (all live tokens descended from the same login) — committed with this tx —
+    // then signal reject.
+    if (record.revoked_at !== null) {
+      if (record.family_id) {
+        await client.query(
+          'UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND family_id = $2 AND revoked_at IS NULL',
+          [record.user_id, record.family_id],
+        );
+      }
+      return { status: 'reuse', userId: record.user_id, familyId: record.family_id ?? null };
     }
+
+    if (new Date(record.expires_at) <= new Date()) return { status: 'invalid' };
 
     // Hard block: refuse to refresh a revoked institution's session (so a hard
     // revoke takes effect within one access-token cycle).
     await assertInstitutionActive(record.user_id);
 
-    await client.query(
-      `UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1`,
-      [record.id],
-    );
-
+    // Rotate WITHIN the same family, carrying device context forward. Legacy
+    // tokens (pre-migration, no family) get a fresh family here.
     const accessToken = signAccessToken(record.user_id);
     const { raw, hash, expiresAt } = generateRefreshToken();
+    const { rows: inserted } = await client.query(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at, family_id, user_agent, ip)
+       VALUES ($1, $2, $3, COALESCE($4, gen_random_uuid()), $5, $6)
+       RETURNING id`,
+      [record.user_id, hash, expiresAt, record.family_id, record.user_agent, record.ip],
+    );
     await client.query(
-      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
-       VALUES ($1, $2, $3)`,
-      [record.user_id, hash, expiresAt],
+      'UPDATE refresh_tokens SET revoked_at = now(), replaced_by = $2 WHERE id = $1',
+      [record.id, inserted[0].id],
     );
 
-    return { accessToken, refreshToken: raw };
+    return { status: 'ok', accessToken, refreshToken: raw };
   });
+
+  if (outcome.status === 'reuse') {
+    logSecurityEvent({
+      action: 'refresh_token_reuse',
+      outcome: 'failure',
+      userId: outcome.userId,
+      detail: { family_id: outcome.familyId },
+    }).catch(() => {});
+    throw AppError.unauthorized('Invalid or expired refresh token');
+  }
+  if (outcome.status !== 'ok') {
+    throw AppError.unauthorized('Invalid or expired refresh token');
+  }
+  return { accessToken: outcome.accessToken, refreshToken: outcome.refreshToken };
 }
 
 /** Revoke a refresh token (logout). Idempotent. */
