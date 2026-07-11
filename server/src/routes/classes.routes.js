@@ -3,6 +3,7 @@ import multer from 'multer';
 import { AppError } from '../utils/AppError.js';
 import { requireAuth } from '../middleware/auth.js';
 import { enforceUsage, enforceTranscription } from '../middleware/enforceUsage.js';
+import { aiLimiter } from '../middleware/rateLimit.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as classes from '../controllers/classes.controller.js';
@@ -138,6 +139,8 @@ router.post(
   '/:id/notes-chatbot',
   validate(classes.classIdParam, 'params'),
   validate(notes.chatbotSchema),
+  aiLimiter, // paid Claude call — per-account burst + monthly quota
+  enforceUsage('ai_requests'),
   asyncHandler(notes.chatbot),
 );
 

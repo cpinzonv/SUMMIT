@@ -15,6 +15,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { requirePremium } from '../middleware/requirePremium.js';
 import { enforceUsage } from '../middleware/enforceUsage.js';
+import { aiLimiter } from '../middleware/rateLimit.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as learn from '../controllers/learn.controller.js';
@@ -109,6 +110,8 @@ router.post(
   requirePremium('quizzes'),
   validate(learn.classIdParam, 'params'),
   validate(learn.quizGenSchema),
+  aiLimiter,
+  enforceUsage('ai_requests'),
   asyncHandler(learn.genQuiz),
 );
 router.get('/classes/:classId/quizzes', validate(learn.classIdParam, 'params'), asyncHandler(learn.listQuizzes));
@@ -127,6 +130,8 @@ router.post(
   requirePremium('studyGuides'),
   validate(learn.classIdParam, 'params'),
   validate(learn.genSourceSchema),
+  aiLimiter,
+  enforceUsage('ai_requests'),
   asyncHandler(learn.genGuide),
 );
 router.get('/classes/:classId/guides', validate(learn.classIdParam, 'params'), asyncHandler(learn.listGuides));
@@ -145,6 +150,8 @@ router.post(
   requirePremium('mindMaps'),
   validate(learn.classIdParam, 'params'),
   validate(learn.genSourceSchema),
+  aiLimiter,
+  enforceUsage('ai_requests'),
   asyncHandler(learn.genMindMap),
 );
 router.get('/classes/:classId/mindmaps', validate(learn.classIdParam, 'params'), asyncHandler(learn.listMindMaps));
@@ -176,6 +183,8 @@ router.post(
   requirePremium('quizzes'),
   validate(learn.classIdParam, 'params'),
   validate(learn.genSourceSchema),
+  aiLimiter,
+  enforceUsage('ai_requests', { amount: 3 }),
   asyncHandler(learn.generateAll),
 );
 
