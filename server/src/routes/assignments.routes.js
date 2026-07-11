@@ -3,6 +3,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { documentUpload } from '../utils/uploads.js';
+import { enforceUsage } from '../middleware/enforceUsage.js';
+import { aiLimiter } from '../middleware/rateLimit.js';
 import * as assignments from '../controllers/assignments.controller.js';
 
 // Update/delete a single assignment by id (creation + listing are nested under
@@ -54,6 +56,8 @@ router.post(
   '/:assignmentId/estimate-time',
   validate(assignments.assignmentIdParam, 'params'),
   validate(assignments.estimateSchema),
+  aiLimiter, // paid Claude call — per-account burst + monthly quota
+  enforceUsage('ai_requests'),
   asyncHandler(assignments.estimateTime),
 );
 
