@@ -14,6 +14,7 @@ const ERROR_MESSAGES = {
   provider_unavailable: 'That sign-in option isn’t available right now.',
   invalid_state: 'Your sign-in session expired. Please try again.',
   no_email: 'Your account didn’t share an email address, which Summit needs.',
+  email_unverified: 'Your email isn’t verified with that provider, so we can’t sign you in.',
   oauth_failed: 'We couldn’t complete sign-in with that provider. Please try again.',
   token_error: 'Something went wrong finishing sign-in. Please try again.',
 };
@@ -35,6 +36,14 @@ export default function OAuthCallbackPage() {
     const errCode = params.get('error');
     if (errCode) {
       navigate('/login', { replace: true, state: { oauthError: ERROR_MESSAGES[errCode] || 'Sign-in failed.' } });
+      return;
+    }
+
+    // 2FA-enabled account: the backend sent a challenge instead of tokens. Hand
+    // off to the normal login 2FA prompt (same flow as password login).
+    const challengeToken = params.get('challengeToken');
+    if (params.get('twoFactorRequired') && challengeToken) {
+      navigate('/login', { replace: true, state: { twoFactor: { challengeToken } } });
       return;
     }
 

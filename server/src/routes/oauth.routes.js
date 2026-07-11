@@ -18,7 +18,7 @@
 import { Router } from 'express';
 import { passport } from '../config/passport.js';
 import { env, configuredOAuthProviders, isOAuthProviderConfigured } from '../config/env.js';
-import { signOAuthState, verifyOAuthState } from '../utils/jwt.js';
+import { signOAuthState, verifyOAuthState, signTwoFactorChallenge } from '../utils/jwt.js';
 import { issueTokensForUser } from '../services/auth.service.js';
 
 const router = Router();
@@ -50,6 +50,13 @@ function redirectSuccess(res, { accessToken, refreshToken }) {
   res.redirect(`${env.clientUrl}/auth/callback#${params.toString()}`);
 }
 
+/** 2FA-enabled account: bounce to the SPA with a short-lived challenge instead of
+ *  tokens, so the same TOTP step the password flow uses gates the session (M4). */
+function redirectTwoFactor(res, challengeToken) {
+  const params = new URLSearchParams({ twoFactorRequired: '1', challengeToken });
+  res.redirect(`${env.clientUrl}/auth/callback#${params.toString()}`);
+}
+
 for (const provider of PROVIDERS) {
   // --- Step 1: initiate -----------------------------------------------------
   router.get(`/${provider}`, (req, res, next) => {
@@ -77,14 +84,21 @@ for (const provider of PROVIDERS) {
     }
 
     passport.authenticate(provider, { session: false }, async (err, user) => {
-      // User denied consent, provider error, or no email to create an account.
+      // User denied consent, provider error, unverified email, or no email.
       if (err) {
-        const code = err.statusCode === 400 ? 'no_email' : 'oauth_failed';
+        let code = 'oauth_failed';
+        if (err.details?.code === 'oauth_email_unverified') code = 'email_unverified';
+        else if (err.statusCode === 400) code = 'no_email';
         return redirectError(res, code);
       }
       if (!user) return redirectError(res, 'access_denied');
       try {
-        const tokens = await issueTokensForUser(user.id);
+        // If the account has 2FA, do NOT issue tokens here — require the TOTP
+        // step first, exactly like password login (M4).
+        if (user.totp_enabled) {
+          return redirectTwoFactor(res, signTwoFactorChallenge(user.id));
+        }
+        const tokens = await issueTokensForUser(user.id, { userAgent: req.get('user-agent'), ip: req.ip });
         return redirectSuccess(res, tokens);
       } catch {
         return redirectError(res, 'token_error');

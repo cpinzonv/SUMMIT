@@ -51,6 +51,8 @@ export function initPassport() {
           provider: 'google',
           providerId: profile.id,
           email: profile.emails?.[0]?.value,
+          // Google returns an email_verified flag; only trust a verified address.
+          emailVerified: profile._json?.email_verified === true || profile.emails?.[0]?.verified === true,
           fullName: profile.displayName,
         })),
       ),
@@ -66,16 +68,23 @@ export function initPassport() {
           callbackURL: callbackUrl('github'),
           scope: ['user:email'],
         },
-        verify((_accessToken, _refreshToken, profile) => ({
-          provider: 'github',
-          providerId: String(profile.id),
-          // GitHub may return several emails; prefer the verified primary.
-          email:
-            profile.emails?.find((e) => e.primary && e.verified)?.value ||
-            profile.emails?.[0]?.value,
-          fullName: profile.displayName || profile.username,
-          handle: profile.username,
-        })),
+        verify((_accessToken, _refreshToken, profile) => {
+          // GitHub can return unverified emails. Trust ONLY a verified one (prefer
+          // the primary); never fall back to an unverified address — otherwise an
+          // attacker who lists a victim's email on their own GitHub account gets
+          // linked into the victim's Summit account (SECURITY_AUDIT_2 H1).
+          const verified =
+            profile.emails?.find((e) => e.primary && e.verified) ||
+            profile.emails?.find((e) => e.verified);
+          return {
+            provider: 'github',
+            providerId: String(profile.id),
+            email: verified?.value,
+            emailVerified: Boolean(verified),
+            fullName: profile.displayName || profile.username,
+            handle: profile.username,
+          };
+        }),
       ),
     );
   }
@@ -109,6 +118,8 @@ export function initPassport() {
             provider: 'apple',
             providerId: idToken.sub,
             email: idToken.email,
+            // Apple sends email_verified as a boolean or the string "true".
+            emailVerified: idToken.email_verified === true || idToken.email_verified === 'true',
             fullName: [firstName, lastName].filter(Boolean).join(' ') || undefined,
           };
         }),

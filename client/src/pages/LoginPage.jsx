@@ -23,7 +23,8 @@ export default function LoginPage() {
   // An OAuth attempt that failed bounces back to /login with a message in state.
   const [error, setError] = useState(location.state?.oauthError || '');
   const [submitting, setSubmitting] = useState(false);
-  const [twoFactor, setTwoFactor] = useState(null); // { challengeToken } when 2FA prompt is shown
+  // { challengeToken } when the 2FA prompt is shown — seeded from OAuth 2FA handoff too.
+  const [twoFactor, setTwoFactor] = useState(location.state?.twoFactor || null);
   const [trustDevice, setTrustDevice] = useState(false); // "trust this device for 30 days"
   const [verify, setVerify] = useState(null); // { email, devCode } when email-confirmation step is shown
   const [resent, setResent] = useState('');

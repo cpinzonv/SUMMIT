@@ -4,6 +4,16 @@ import * as twofa from '../services/twofa.service.js';
 import { logSecurityEvent } from '../services/audit.service.js';
 import * as trustedDevices from '../services/trustedDevice.service.js';
 import * as account from '../services/account.service.js';
+import { verifyReauth } from '../services/auth.service.js';
+
+// Re-auth fields for a sensitive account mutation (M3). Both optional at the
+// schema layer; verifyReauth() is the real gate — it REQUIRES the password when
+// the account has one, and a TOTP/backup code when 2FA is enabled, so a
+// passwordless-OAuth account (no password to check) still works.
+const reauthFields = {
+  password: z.string().optional(),
+  totpCode: z.string().optional(),
+};
 
 export const preferencesSchema = z
   .object({
@@ -109,9 +119,10 @@ export async function revokeAllDevices(req, res) {
 /* ---- Account security & recovery (phone, backup email, change email) --- */
 const codeSchema = z.object({ code: z.string().min(1, 'Enter the code we sent you') });
 
-export const phoneSchema = z.object({ phone: z.string().min(1, 'Enter a phone number') });
+export const phoneSchema = z.object({ phone: z.string().min(1, 'Enter a phone number'), ...reauthFields });
 export const phoneVerifySchema = codeSchema;
 export async function addPhone(req, res) {
+  await verifyReauth(req.user.id, { password: req.body.password, totpCode: req.body.totpCode });
   res.json(await account.addPhone(req.user.id, req.body.phone));
 }
 export async function verifyPhone(req, res) {
@@ -121,9 +132,10 @@ export async function removePhone(req, res) {
   res.json(await account.removePhone(req.user.id));
 }
 
-export const recoveryEmailSchema = z.object({ email: z.string().email('Enter a valid email').toLowerCase() });
+export const recoveryEmailSchema = z.object({ email: z.string().email('Enter a valid email').toLowerCase(), ...reauthFields });
 export const recoveryEmailVerifySchema = codeSchema;
 export async function addRecoveryEmail(req, res) {
+  await verifyReauth(req.user.id, { password: req.body.password, totpCode: req.body.totpCode });
   res.json(await account.addRecoveryEmail(req.user.id, req.body.email));
 }
 export async function verifyRecoveryEmail(req, res) {
@@ -133,9 +145,10 @@ export async function removeRecoveryEmail(req, res) {
   res.json(await account.removeRecoveryEmail(req.user.id));
 }
 
-export const emailChangeSchema = z.object({ email: z.string().email('Enter a valid email').toLowerCase() });
+export const emailChangeSchema = z.object({ email: z.string().email('Enter a valid email').toLowerCase(), ...reauthFields });
 export const emailChangeVerifySchema = codeSchema;
 export async function requestEmailChange(req, res) {
+  await verifyReauth(req.user.id, { password: req.body.password, totpCode: req.body.totpCode });
   res.json(await account.requestEmailChange(req.user.id, req.body.email));
 }
 export async function verifyEmailChange(req, res) {
