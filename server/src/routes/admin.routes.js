@@ -56,5 +56,6 @@ router.put('/registration/mode', validate(admin.registrationModeSchema), asyncHa
 router.get('/invite-codes', asyncHandler(admin.listInvites));
 router.post('/invite-codes', validate(admin.inviteCreateSchema), asyncHandler(admin.createInvite));
 router.post('/invite-codes/revoke', validate(admin.inviteRevokeSchema), asyncHandler(admin.revokeInvite));
+router.post('/invite-codes/delete', validate(admin.inviteRevokeSchema), asyncHandler(admin.deleteInvite));
 
 export default router;

@@ -7,14 +7,24 @@ const fmtDate = (d) =>
 
 function InviteLink({ code }) {
   const url = `${window.location.origin}/register?invite=${encodeURIComponent(code)}`;
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard?.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked (e.g. non-secure context) — leave the label as-is */
+    }
+  };
   return (
     <button
       type="button"
-      onClick={() => navigator.clipboard?.writeText(url)}
-      className="font-mono text-xs text-brand-600 hover:underline"
-      title="Copy invite link"
+      onClick={copy}
+      className="font-mono text-xs font-semibold text-brand-600 hover:underline"
+      title={url}
     >
-      copy link
+      {copied ? 'copied' : 'copy link'}
     </button>
   );
 }
@@ -27,6 +37,7 @@ export default function RegistrationAdmin() {
   const [toast, setToast] = useState(null);
   const [savingMode, setSavingMode] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false); // confirm dialog before opening registration
+  const [confirmDelete, setConfirmDelete] = useState(null); // code pending delete confirmation
   const [form, setForm] = useState({ maxUses: '1', prefix: 'FOUNDING', note: '', expiresAt: '' });
   const [creating, setCreating] = useState(false);
 
@@ -75,6 +86,18 @@ export default function RegistrationAdmin() {
     try {
       await api.post('/api/admin/invite-codes/revoke', { code });
       setToast({ type: 'success', msg: `Revoked ${code}` });
+      load();
+    } catch (err) {
+      setToast({ type: 'error', msg: errorMessage(err) });
+    }
+  };
+
+  // Hard-delete: removes the code from the list entirely. Confirmed first.
+  const deleteCode = async (code) => {
+    setConfirmDelete(null);
+    try {
+      await api.post('/api/admin/invite-codes/delete', { code });
+      setToast({ type: 'success', msg: `Deleted ${code}` });
       load();
     } catch (err) {
       setToast({ type: 'error', msg: errorMessage(err) });
@@ -153,6 +176,17 @@ export default function RegistrationAdmin() {
           confirmLabel="Open registration"
           onConfirm={() => applyMode('open')}
           onClose={() => setConfirmOpen(false)}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete invite code?"
+          message="This removes the code permanently. Anyone who already has its link will no longer be able to use it."
+          detail={confirmDelete}
+          confirmLabel="Delete code"
+          onConfirm={() => deleteCode(confirmDelete)}
+          onClose={() => setConfirmDelete(null)}
         />
       )}
 
@@ -247,11 +281,18 @@ export default function RegistrationAdmin() {
                         </span>
                       </td>
                       <td className="py-2 text-right">
-                        {!revoked && (
-                          <button type="button" onClick={() => revoke(c.code)} className="text-sm font-semibold text-rose-600 hover:underline">
-                            Revoke
+                        <div className="flex items-center justify-end gap-3">
+                          {/* Revoke keeps the code as an invalidated record; only shown while active. */}
+                          {active && (
+                            <button type="button" onClick={() => revoke(c.code)} className="text-sm font-semibold text-amber-700 hover:underline">
+                              Revoke
+                            </button>
+                          )}
+                          {/* Delete removes it from the list entirely. */}
+                          <button type="button" onClick={() => setConfirmDelete(c.code)} className="text-sm font-semibold text-rose-600 hover:underline">
+                            Delete
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   );

@@ -20,7 +20,9 @@ export default function LoginPage() {
   // 'open' | 'invite_only' | null (unknown → treated as closed; fail closed).
   const [registrationMode, setRegistrationMode] = useState(null);
 
-  const [mode, setMode] = useState(invite ? 'register' : 'login'); // 'login' | 'register'
+  // Open in register mode from an invite link or the /register path; else login.
+  const wantsRegister = Boolean(invite) || location.pathname === '/register';
+  const [mode, setMode] = useState(wantsRegister ? 'register' : 'login'); // 'login' | 'register'
   const [form, setForm] = useState({
     email: '',
     password: '',

@@ -166,6 +166,16 @@ test('invite code: consume spends uses, exhausts, and revoke invalidates', async
   assert.equal(await reg.findValidInviteCode(c2.code), null); // revoked → invalid
 });
 
+test('invite code: delete removes the row entirely', async (t) => {
+  if (!dbReady) return t.skip('no DB');
+  const c = await mkCode({ maxUses: 1 });
+  assert.equal(await reg.deleteInviteCode(c.code), true);
+  assert.equal(await reg.findValidInviteCode(c.code), null);
+  const { rows } = await query('SELECT 1 FROM invite_codes WHERE code = $1', [c.code]);
+  assert.equal(rows.length, 0); // gone, not just revoked
+  assert.equal(await reg.deleteInviteCode(c.code), false); // idempotent — nothing left to delete
+});
+
 // ---- waitlist dedupe --------------------------------------------------------
 
 test('waitlist: duplicate email upserts silently (one row, case-insensitive)', async (t) => {

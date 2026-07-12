@@ -167,6 +167,15 @@ export async function revokeInviteCode(code) {
   return rowCount > 0;
 }
 
+/**
+ * Hard-delete an invite code (removes the row entirely, unlike revoke which
+ * keeps it as an invalidated record). Returns true if a row was deleted.
+ */
+export async function deleteInviteCode(code) {
+  const { rowCount } = await query('DELETE FROM invite_codes WHERE code = $1', [normalizeCode(code)]);
+  return rowCount > 0;
+}
+
 // ---- Waitlist ---------------------------------------------------------------
 
 /**
