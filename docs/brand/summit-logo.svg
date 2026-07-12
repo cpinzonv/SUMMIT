@@ -1,0 +1,11 @@
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="summit-mark-grad" x1="6" y1="51" x2="58" y2="15" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff7a52"/>
+      <stop offset="0.5" stop-color="#ff6f73"/>
+      <stop offset="1" stop-color="#3fb8c0"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 51 L23.54 25.15 Q25 23 26.65 25.01 L32.35 31.99 Q34 34 35.3 31.75 L43.7 17.25 Q45 15 45.88 17.45 L58 51"
+        stroke="url(#summit-mark-grad)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

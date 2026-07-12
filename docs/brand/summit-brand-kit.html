@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Summit — Brand Kit</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+:root{
+  /* ---- core palette (extracted from learnsummit.app, Jul 2026) ---- */
+  --coral:#ff7a52;        /* logo gradient start */
+  --sunset:#ff6f73;       /* logo + hero gradient mid */
+  --logo-teal:#3fb8c0;    /* logo gradient end */
+  --hero-orange:#ff8a4c;  /* hero/wordmark gradient start */
+  --sky:#4f9fd6;          /* hero/wordmark gradient end */
+  --brand-50:#eaf6f6; --brand-100:#cdebec; --brand-400:#3fb1b8;
+  --brand-500:#2f9fa8; --brand-600:#2a868f; --brand-700:#246e76;
+  --cream:#f1e9e1;        /* page background */
+  --ink:#1f2933;
+  /* ---- gradients ---- */
+  --grad-hero:linear-gradient(135deg,#ff8a4c 0%,#ff6f73 45%,#4f9fd6 100%);
+  --grad-warm:linear-gradient(135deg,#ff7e79 0%,#ffc59e 100%);
+  --grad-logo:linear-gradient(125deg,#ff7a52 0%,#ff6f73 50%,#3fb8c0 100%);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:'Plus Jakarta Sans',ui-sans-serif,system-ui,sans-serif;
+  color:var(--ink);background-color:var(--cream);
+  background-image:
+    radial-gradient(46rem 46rem at 4% -8%, rgba(255,150,70,.22), transparent 70%),
+    radial-gradient(48rem 48rem at 96% 4%, rgba(74,150,214,.20), transparent 70%),
+    radial-gradient(52rem 52rem at 78% 92%, rgba(255,110,110,.18), transparent 70%),
+    radial-gradient(46rem 46rem at 10% 96%, rgba(58,190,184,.18), transparent 70%);
+  background-attachment:fixed;
+  line-height:1.55;padding:56px 24px 96px;
+}
+main{max-width:960px;margin:0 auto}
+h1,h2{font-family:'Space Grotesk','Plus Jakarta Sans',sans-serif;font-weight:700;letter-spacing:-0.025em}
+h1{font-size:44px;line-height:1.1}
+h2{font-size:24px;margin:0 0 4px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-600);margin-bottom:10px}
+.grad-text{background:var(--grad-hero);-webkit-background-clip:text;background-clip:text;color:transparent}
+section.card{
+  background:linear-gradient(140deg,rgba(255,255,255,.95),rgba(255,255,255,.55));
+  border:1px solid rgba(255,255,255,.9);
+  border-radius:24px;padding:32px 36px;margin-top:28px;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  box-shadow:0 18px 40px -24px rgba(31,41,51,.25);
+}
+.lede{font-size:16px;color:#4b5763;max-width:640px;margin-top:12px}
+.hdr{display:flex;align-items:center;gap:18px;margin-bottom:8px}
+.hdr svg{filter:drop-shadow(0 8px 18px rgba(255,120,80,.35))}
+/* swatches */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;margin-top:18px}
+.sw{border-radius:16px;overflow:hidden;border:1px solid rgba(31,41,51,.08);background:#fff}
+.sw .chip{height:74px}
+.sw .meta{padding:10px 12px;font-size:12.5px}
+.sw .meta b{display:block;font-weight:600}
+.sw .meta code{color:#5a6672;font-size:12px}
+/* gradient rows */
+.gradrow{border-radius:16px;height:84px;border:1px solid rgba(31,41,51,.08);margin-top:14px;position:relative}
+.gradrow span{position:absolute;left:14px;bottom:10px;font-size:12px;font-weight:600;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.35)}
+pre{background:#20262d;color:#e8edf2;font-size:12.5px;border-radius:12px;padding:14px 16px;overflow-x:auto;margin-top:10px;line-height:1.5}
+code.inline{background:rgba(31,41,51,.07);border-radius:6px;padding:1px 6px;font-size:.92em}
+/* typography samples */
+.type-sample{border-top:1px solid rgba(31,41,51,.08);padding:16px 0}
+.type-sample:first-of-type{border-top:none}
+.type-label{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#7a8794;margin-bottom:6px}
+/* tables */
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:13.5px}
+th{text-align:left;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#7a8794;padding:8px 10px;border-bottom:1px solid rgba(31,41,51,.12)}
+td{padding:9px 10px;border-bottom:1px solid rgba(31,41,51,.06);vertical-align:top}
+/* do / don't */
+.dd{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:16px}
+.dd .col{border-radius:16px;padding:18px 20px;font-size:14px}
+.dd .yes{background:rgba(47,159,168,.10);border:1px solid rgba(47,159,168,.25)}
+.dd .no{background:rgba(255,111,115,.10);border:1px solid rgba(255,111,115,.3)}
+.dd h3{font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.dd p{margin:7px 0;padding-left:2px}
+.logo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:18px}
+.logo-tile{border-radius:16px;border:1px solid rgba(31,41,51,.08);display:flex;align-items:center;justify-content:center;height:150px}
+.logo-tile.dark{background:#121a24}
+.logo-tile.grad{background:var(--grad-hero)}
+.logo-tile.light{background:#fff}
+.footer-note{margin-top:36px;font-size:12.5px;color:#7a8794;text-align:center}
+@media(max-width:640px){.dd{grid-template-columns:1fr}h1{font-size:34px}section.card{padding:24px 20px}}
+</style>
+</head>
+<body>
+<main>
+
+<div class="hdr">
+  <svg width="72" height="72" viewBox="0 0 64 64" fill="none">
+    <defs><linearGradient id="g0" x1="6" y1="51" x2="58" y2="15" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff7a52"/><stop offset=".5" stop-color="#ff6f73"/><stop offset="1" stop-color="#3fb8c0"/>
+    </linearGradient></defs>
+    <path d="M6 51 L23.54 25.15 Q25 23 26.65 25.01 L32.35 31.99 Q34 34 35.3 31.75 L43.7 17.25 Q45 15 45.88 17.45 L58 51" stroke="url(#g0)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    
+  </svg>
+  <h1><span class="grad-text">Summit</span> Brand Kit</h1>
+</div>
+<p class="lede">The single source of truth for how Summit looks, sounds, and shows up — in the product, on social, in decks, and in every Claude Code prompt. All values extracted from the live app at learnsummit.app.</p>
+
+<!-- ================= LOGO ================= -->
+<section class="card">
+  <div class="eyebrow">01 · Logo</div>
+  <h2>The ridge mark</h2>
+  <p>A mountain ridge drawn as one smooth, continuous gradient stroke — coral to sunset to teal — with softly rounded corners at every peak and valley. It is a single line, not a filled shape. Never rebuild it; use <code class="inline">summit-logo.svg</code>.</p>
+
+  <div class="logo-grid">
+    <div class="logo-tile light">
+      <svg width="96" height="96" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="g1" x1="6" y1="51" x2="58" y2="15" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ff7a52"/><stop offset=".5" stop-color="#ff6f73"/><stop offset="1" stop-color="#3fb8c0"/></linearGradient></defs><path d="M6 51 L23.54 25.15 Q25 23 26.65 25.01 L32.35 31.99 Q34 34 35.3 31.75 L43.7 17.25 Q45 15 45.88 17.45 L58 51" stroke="url(#g1)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="logo-tile dark">
+      <svg width="96" height="96" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="g2" x1="6" y1="51" x2="58" y2="15" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ff7a52"/><stop offset=".5" stop-color="#ff6f73"/><stop offset="1" stop-color="#3fb8c0"/></linearGradient></defs><path d="M6 51 L23.54 25.15 Q25 23 26.65 25.01 L32.35 31.99 Q34 34 35.3 31.75 L43.7 17.25 Q45 15 45.88 17.45 L58 51" stroke="url(#g2)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="logo-tile grad">
+      <svg width="96" height="96" viewBox="0 0 64 64" fill="none"><path d="M6 51 L23.54 25.15 Q25 23 26.65 25.01 L32.35 31.99 Q34 34 35.3 31.75 L43.7 17.25 Q45 15 45.88 17.45 L58 51" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Rule</th><th>Value</th></tr>
+    <tr><td>Gradient stroke version</td><td>Default. Use on cream, white, and dark backgrounds.</td></tr>
+    <tr><td>White stroke version</td><td>Only on gradient or photo backgrounds where the gradient stroke would lose contrast.</td></tr>
+    <tr><td>Drop shadow (product UI)</td><td><code class="inline">drop-shadow(0 8px 18px rgba(255,120,80,.35))</code></td></tr>
+    <tr><td>Clear space</td><td>Keep a margin of at least ½ the mark's height on all sides.</td></tr>
+    <tr><td>Minimum size</td><td>24 px height on screen — below that the rounded corners blur together.</td></tr>
+    <tr><td>Wordmark lockup</td><td>Mark + "Summit" in Space Grotesk 700, letter-spacing −0.025em, filled with the hero gradient (see Typography).</td></tr>
+  </table>
+
+  <div class="dd">
+    <div class="col yes"><h3>Do</h3>
+      <p>Scale it proportionally — stroke weight is part of the identity.</p>
+      <p>Place on cream, white, dark ink, or the hero gradient.</p>
+      <p>Use the standalone mark as avatar / favicon / app icon.</p>
+    </div>
+    <div class="col no"><h3>Don't</h3>
+      <p>Fill the shape, outline it in a flat color, or change the gradient stops.</p>
+      <p>Rotate, stretch, add extra peaks, or redraw the path.</p>
+      <p>Put the gradient stroke on a busy photo — switch to the white version.</p>
+    </div>
+  </div>
+
+  <h2 style="margin-top:30px">The wordmark</h2>
+  <p>"Summit" set in Space Grotesk 700 with tight tracking, filled with the hero gradient. Sentence case always — never SUMMIT, never summit. The gradient runs 135° so the S starts warm and the final letters cool to sky.</p>
+
+  <div class="logo-grid">
+    <div class="logo-tile light" style="background:#f7ede2">
+      <span class="grad-text" style="font-family:'Space Grotesk';font-weight:700;font-size:42px;letter-spacing:-.025em">Summit</span>
+    </div>
+    <div class="logo-tile dark">
+      <span class="grad-text" style="font-family:'Space Grotesk';font-weight:700;font-size:42px;letter-spacing:-.025em">Summit</span>
+    </div>
+    <div class="logo-tile light">
+      <span style="display:flex;align-items:center;gap:12px">
+        <svg width="44" height="44" viewBox="0 0 64 64" fill="none"><defs><linearGradient id="g3" x1="6" y1="51" x2="58" y2="15" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ff7a52"/><stop offset=".5" stop-color="#ff6f73"/><stop offset="1" stop-color="#3fb8c0"/></linearGradient></defs><path d="M6 51 L23.54 25.15 Q25 23 26.65 25.01 L32.35 31.99 Q34 34 35.3 31.75 L43.7 17.25 Q45 15 45.88 17.45 L58 51" stroke="url(#g3)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="grad-text" style="font-family:'Space Grotesk';font-weight:700;font-size:34px;letter-spacing:-.025em">Summit</span>
+      </span>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Rule</th><th>Value</th></tr>
+    <tr><td>Typeface</td><td>Space Grotesk, weight 700 — no substitutes, no faux-bold.</td></tr>
+    <tr><td>Tracking</td><td>−0.025em (the site renders −0.9px at 36px).</td></tr>
+    <tr><td>Fill</td><td>Hero gradient, 135°: <code class="inline">#ff8a4c → #ff6f73 (45%) → #4f9fd6</code>. Solid Ink <code class="inline">#1f2933</code> is the fallback where gradient text isn't possible.</td></tr>
+    <tr><td>Case</td><td>Sentence case: <b>Summit</b>.</td></tr>
+    <tr><td>Lockup</td><td>Mark left of wordmark, gap ≈ ⅓ of the mark's width, optically centered on the x-height. Mark height ≈ 1.3× the cap height.</td></tr>
+    <tr><td>Stacked lockup</td><td>Mark centered above wordmark (as on the auth screen) — for square/vertical spaces.</td></tr>
+    <tr><td>Backgrounds</td><td>Cream, white, or dark ink. On the hero gradient or photos, use solid white text instead — gradient-on-gradient disappears.</td></tr>
+  </table>
+  <pre>font-family:'Space Grotesk',sans-serif; font-weight:700; letter-spacing:-0.025em;
+background:linear-gradient(135deg,#ff8a4c 0%,#ff6f73 45%,#4f9fd6 100%);
+-webkit-background-clip:text; background-clip:text; color:transparent;</pre>
+</section>
+
+<!-- ================= COLOR ================= -->
+<section class="card">
+  <div class="eyebrow">02 · Color</div>
+  <h2>Palette</h2>
+  <p>Warm coral/orange meets cool teal/sky. Warm tones lead (energy, motivation); teal grounds them (calm, trust). Cream — not white — is the canvas.</p>
+
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:#ff7a52"></div><div class="meta"><b>Coral</b><code>#ff7a52</code></div></div>
+    <div class="sw"><div class="chip" style="background:#ff6f73"></div><div class="meta"><b>Sunset</b><code>#ff6f73</code></div></div>
+    <div class="sw"><div class="chip" style="background:#ff8a4c"></div><div class="meta"><b>Hero Orange</b><code>#ff8a4c</code></div></div>
+    <div class="sw"><div class="chip" style="background:#4f9fd6"></div><div class="meta"><b>Sky</b><code>#4f9fd6</code></div></div>
+    <div class="sw"><div class="chip" style="background:#3fb8c0"></div><div class="meta"><b>Logo Teal</b><code>#3fb8c0</code></div></div>
+    <div class="sw"><div class="chip" style="background:#3fb1b8"></div><div class="meta"><b>Brand 400</b><code>#3fb1b8</code></div></div>
+    <div class="sw"><div class="chip" style="background:#2f9fa8"></div><div class="meta"><b>Brand 500</b><code>#2f9fa8</code></div></div>
+    <div class="sw"><div class="chip" style="background:#2a868f"></div><div class="meta"><b>Brand 600 · link/action</b><code>#2a868f</code></div></div>
+    <div class="sw"><div class="chip" style="background:#246e76"></div><div class="meta"><b>Brand 700</b><code>#246e76</code></div></div>
+    <div class="sw"><div class="chip" style="background:#cdebec"></div><div class="meta"><b>Brand 100</b><code>#cdebec</code></div></div>
+    <div class="sw"><div class="chip" style="background:#eaf6f6"></div><div class="meta"><b>Brand 50</b><code>#eaf6f6</code></div></div>
+    <div class="sw"><div class="chip" style="background:#f1e9e1"></div><div class="meta"><b>Cream · canvas</b><code>#f1e9e1</code></div></div>
+    <div class="sw"><div class="chip" style="background:#1f2933"></div><div class="meta"><b>Ink · text</b><code>#1f2933</code></div></div>
+  </div>
+
+  <table>
+    <tr><th>Role</th><th>Assignment</th></tr>
+    <tr><td>Backgrounds</td><td>Cream <code class="inline">#f1e9e1</code> + the four ambient glows (below). Cards are translucent white over it.</td></tr>
+    <tr><td>Primary actions / links</td><td>Brand 600 <code class="inline">#2a868f</code> text, or hero-gradient fills for hero CTAs.</td></tr>
+    <tr><td>Emphasis / highlights</td><td>Coral and Sunset — sparingly. Warm = attention.</td></tr>
+    <tr><td>Success / progress</td><td>Brand 400–500 teals.</td></tr>
+    <tr><td>Body text</td><td>Ink <code class="inline">#1f2933</code>; secondary text ~60% opacity ink.</td></tr>
+  </table>
+</section>
+
+<!-- ================= GRADIENTS ================= -->
+<section class="card">
+  <div class="eyebrow">03 · Gradients</div>
+  <h2>The three gradients</h2>
+
+  <div class="gradrow" style="background:linear-gradient(135deg,#ff8a4c 0%,#ff6f73 45%,#4f9fd6 100%)"><span>Hero — headlines, wordmark, hero CTAs, social backgrounds</span></div>
+  <pre>background: linear-gradient(135deg, #ff8a4c 0%, #ff6f73 45%, #4f9fd6 100%);</pre>
+
+  <div class="gradrow" style="background:linear-gradient(125deg,#ff7a52 0%,#ff6f73 50%,#3fb8c0 100%)"><span>Logo — reserved for the mark's stroke only</span></div>
+  <pre>/* SVG stops */ #ff7a52 → #ff6f73 (50%) → #3fb8c0</pre>
+
+  <div class="gradrow" style="background:linear-gradient(135deg,#ff7e79 0%,#ffc59e 100%)"><span>Warm — secondary accents, badges, small fills</span></div>
+  <pre>background: linear-gradient(135deg, #ff7e79 0%, #ffc59e 100%);</pre>
+
+  <h2 style="margin-top:26px">Ambient glow background</h2>
+  <p>The signature page atmosphere: cream base with four soft radial glows in the corners. This exact recipe is the app's background — reuse it for decks, social frames, and the site.</p>
+  <pre>background-color:#f1e9e1;
+background-image:
+  radial-gradient(46rem 46rem at 4% -8%,  rgba(255,150,70,.22), transparent 70%),
+  radial-gradient(48rem 48rem at 96% 4%,  rgba(74,150,214,.20), transparent 70%),
+  radial-gradient(52rem 52rem at 78% 92%, rgba(255,110,110,.18), transparent 70%),
+  radial-gradient(46rem 46rem at 10% 96%, rgba(58,190,184,.18), transparent 70%);</pre>
+  <p style="margin-top:8px;font-size:13px;color:#5a6672">Higher-intensity variant (auth screens): same stops at alpha .5 / .42 / .40 / .38 plus a center glow <code class="inline">radial-gradient(40rem 40rem at 48% 46%, rgba(255,200,160,.3), transparent)</code>.</p>
+</section>
+
+<!-- ================= TYPOGRAPHY ================= -->
+<section class="card">
+  <div class="eyebrow">04 · Typography</div>
+  <h2>Type system</h2>
+
+  <div class="type-sample">
+    <div class="type-label">Display — Space Grotesk 700 · letter-spacing −0.025em</div>
+    <div style="font-family:'Space Grotesk';font-weight:700;font-size:36px;letter-spacing:-.025em">Your whole semester, handled.</div>
+  </div>
+  <div class="type-sample">
+    <div class="type-label">Display gradient — wordmark &amp; hero lines only</div>
+    <div class="grad-text" style="font-family:'Space Grotesk';font-weight:700;font-size:36px;letter-spacing:-.025em">Summit</div>
+  </div>
+  <div class="type-sample">
+    <div class="type-label">Body — Plus Jakarta Sans 400/500</div>
+    <div style="font-size:16px">Upload your syllabi and Summit builds your entire semester — every due date, exam, and grading rule, organized before your first class.</div>
+  </div>
+  <div class="type-sample">
+    <div class="type-label">UI / buttons — Plus Jakarta Sans 600</div>
+    <div style="font-weight:600;font-size:15px;color:#2a868f">Create your account →</div>
+  </div>
+
+  <pre>/* Display */ font-family:'Space Grotesk',sans-serif; font-weight:700; letter-spacing:-0.025em;
+/* Body    */ font-family:'Plus Jakarta Sans',sans-serif; font-weight:400–600;
+/* Gradient text */
+background:linear-gradient(135deg,#ff8a4c 0%,#ff6f73 45%,#4f9fd6 100%);
+-webkit-background-clip:text; background-clip:text; color:transparent;</pre>
+  <p style="margin-top:8px;font-size:13px;color:#5a6672">Google Fonts: Space Grotesk (500, 700) + Plus Jakarta Sans (400, 500, 600, 700). Gradient text is for the wordmark and one hero line per screen — never body copy.</p>
+</section>
+
+<!-- ================= COMPONENTS ================= -->
+<section class="card">
+  <div class="eyebrow">05 · Glass components</div>
+  <h2>The glass card</h2>
+  <p>Summit's surfaces are frosted glass over the ambient glow: a white gradient at partial opacity, an 18px blur, a 1px near-white border, generous radius, and a soft warm shadow. This very page is built from the recipe.</p>
+  <pre>background: linear-gradient(140deg, rgba(255,255,255,.95), rgba(255,255,255,.55));
+border: 1px solid rgba(255,255,255,.9);
+border-radius: 24px;
+backdrop-filter: blur(18px);
+box-shadow: 0 18px 40px -24px rgba(31,41,51,.25);</pre>
+  <table>
+    <tr><th>Element</th><th>Spec</th></tr>
+    <tr><td>Corner radius</td><td>24px cards · 16px tiles · 12px inputs &amp; code blocks</td></tr>
+    <tr><td>Borders</td><td>Always 1px. White-tinted on glass, <code class="inline">rgba(31,41,51,.08)</code> on white.</td></tr>
+    <tr><td>Hero CTA</td><td>Hero-gradient fill, white 600-weight label, pill or 12px radius, subtle warm shadow.</td></tr>
+    <tr><td>Destructive actions</td><td>Hidden behind 3-dot menus — never a red button in the open.</td></tr>
+    <tr><td>Motion</td><td>Smooth and brief (≈200ms ease). Auto-save quietly; no celebratory popups.</td></tr>
+    <tr><td>Emojis</td><td>Never in product UI. Allowed sparingly in social captions and WhatsApp.</td></tr>
+  </table>
+  <p style="margin-top:10px;font-size:13px;color:#5a6672">⚠ Email is the exception to everything above: no glassmorphism, no backdrop-filter — table layout and inline styles only (see templates.js).</p>
+</section>
+
+<!-- ================= VOICE ================= -->
+<section class="card">
+  <div class="eyebrow">06 · Voice &amp; messaging</div>
+  <h2>How Summit sounds</h2>
+  <table>
+    <tr><th>Asset</th><th>Locked copy</th></tr>
+    <tr><td>Tagline</td><td>Your whole semester, handled.</td></tr>
+    <tr><td>One-liner</td><td>Notion + Anki + Canvas fusion built for college students.</td></tr>
+    <tr><td>Feature hook</td><td>Upload a syllabus. Summit extracts every assignment, date, and grading rule — automatically.</td></tr>
+    <tr><td>Founder line</td><td>Built by a college student, for college students.</td></tr>
+    <tr><td>Fairness line</td><td>Semester pricing is one payment. It ends when the semester ends. Nothing to cancel.</td></tr>
+    <tr><td>Positioning</td><td>Opinionated, zero-setup — Summit decides so students don't have to. The anti-Notion.</td></tr>
+  </table>
+  <div class="dd">
+    <div class="col yes"><h3>Voice is</h3>
+      <p>Calm, concrete, benefit-first.</p>
+      <p>Confident without hype — show the feature, skip the adjectives.</p>
+      <p>Peer-to-peer: a student talking to students.</p>
+      <p>Fair and transparent — pricing plainly stated, "billed once" always visible.</p>
+    </div>
+    <div class="col no"><h3>Voice is never</h3>
+      <p>Exclamation points in product or paywall copy.</p>
+      <p>Guilt-trip dismissals, fake urgency, dark patterns.</p>
+      <p>Corporate buzzwords ("revolutionize", "supercharge", "unleash").</p>
+      <p>Promises about unbuilt features (nothing ships in copy before it ships in code).</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SOCIAL ================= -->
+<section class="card">
+  <div class="eyebrow">07 · Social kit</div>
+  <h2>Profiles &amp; formats</h2>
+  <table>
+    <tr><th>Item</th><th>Spec</th></tr>
+    <tr><td>Handle</td><td>@learnsummit everywhere; @learnsummit.app on Instagram. Display name: <b>Summit · college planner</b>.</td></tr>
+    <tr><td>Avatar</td><td><code class="inline">summit_pfp_real_2</code> (hero gradient + white ridge) for feeds — boldest at 40px. <code class="inline">real_1</code> (cream, site-faithful) is the softer alternative; <code class="inline">real_3</code> (dark) for dark contexts. Same avatar on every platform.</td></tr>
+    <tr><td>Bio</td><td>your whole semester, handled. · built by a college student, for college students · launching august — first 500 get Pro free 🏔️</td></tr>
+    <tr><td>Link</td><td>Founding-member page, never the bare homepage.</td></tr>
+    <tr><td>Reels / TikTok</td><td>1080×1920 · captions always on · post natively (no cross-platform watermarks).</td></tr>
+    <tr><td>Feed posts</td><td>1080×1350 portrait. Ambient-glow background + glass card + one message per slide.</td></tr>
+    <tr><td>Stories templates</td><td>Ambient glow bg, ridge mark top-center, Space Grotesk headline, one CTA.</td></tr>
+    <tr><td>Screenshot posts</td><td>Product screenshots framed on the ambient-glow background with a 24px-radius mask and soft shadow.</td></tr>
+  </table>
+  <p style="margin-top:10px;font-size:13px;color:#5a6672">Content pillars: ① syllabus-drop magic moment ② relatable chaos → fix ③ build-in-public founder story ④ features as pains solved. July sells the founder; August sells the product.</p>
+</section>
+
+<p class="footer-note">Summit Brand Kit · v1 · July 2026 · values extracted from learnsummit.app · pairs with summit-logo.svg + profile picture PNGs</p>
+
+</main>
+</body>
+</html>
