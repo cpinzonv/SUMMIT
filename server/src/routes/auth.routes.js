@@ -76,6 +76,15 @@ router.post(
   asyncHandler(authController.refresh),
 );
 
+// Restore a pending-deletion account. Public: authenticated by the short-lived
+// restore challenge token from login (a deactivated account holds no session).
+router.post(
+  '/restore',
+  sensitiveLimiter,
+  validate(authController.restoreSchema),
+  asyncHandler(authController.restore),
+);
+
 router.post(
   '/logout',
   refreshLimiter,

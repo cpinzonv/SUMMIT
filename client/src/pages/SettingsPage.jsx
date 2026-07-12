@@ -140,9 +140,152 @@ function AccountTab({ user }) {
         </button>
       </Section>
 
-      {/* Danger Zone (Delete account) lands here in a follow-up PR — it stays the
-          last block of the Account tab, below Session. */}
+      {/* Danger Zone stays the last block of the Account tab, below Session. */}
+      <DeleteAccountSection user={user} />
     </>
+  );
+}
+
+/* ---- Danger zone: delete account --------------------------------------- */
+
+/**
+ * Self-serve account deletion. Institution-managed accounts see the section but
+ * cannot delete (their school owns the account). Everyone else gets a
+ * high-friction confirm modal — current password, a 2FA code when enabled, and
+ * typing their email exactly — before the request is sent. All three are also
+ * enforced server-side; the client gates the button as a courtesy, not security.
+ * On success the account is soft-deleted (recoverable for 30 days) and every
+ * session is revoked, so we sign out and return to the login screen.
+ */
+function DeleteAccountSection({ user }) {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(null); // { scheduledFor } after a successful request
+
+  const institution = user?.institution;
+  const email = user?.email || '';
+  const emailMatches = confirmEmail.trim().toLowerCase() === email.toLowerCase() && email !== '';
+  const canDelete = emailMatches && (!user?.hasPassword || password.length > 0) && !busy;
+
+  const reset = () => {
+    setOpen(false); setPassword(''); setTotpCode(''); setConfirmEmail(''); setError('');
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!canDelete) return;
+    setBusy(true); setError('');
+    try {
+      const { data } = await api.post('/api/user/account/delete', {
+        confirmEmail: confirmEmail.trim(),
+        ...(user?.hasPassword ? { password } : {}),
+        ...(totpCode.trim() ? { totpCode: totpCode.trim() } : {}),
+      });
+      setDone({ scheduledFor: data.scheduledFor });
+    } catch (err) {
+      setError(errorMessage(err, 'Could not delete your account. Please try again.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finish = async () => {
+    // The session is already revoked server-side; clear it locally and leave.
+    await logout();
+    navigate('/login');
+  };
+
+  // Institution-managed: show the section, but deletion is not self-serve.
+  if (institution) {
+    return (
+      <Section title="Delete account" description="Permanently remove your account and all of your data.">
+        <div className="rounded-2xl border border-white/50 bg-white/40 p-4 text-sm text-muted">
+          Your account is managed by {institution.name || 'your institution'}. Contact your administrator to remove it.
+        </div>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Delete account" description="Permanently remove your account and all of your data.">
+      <p className="mb-4 text-sm text-muted">
+        Your account is deactivated right away and kept recoverable for 30 days. After that it
+        and everything in it — classes, assignments, notes, flashcards, files, and more — are
+        deleted for good.
+      </p>
+      <button type="button" onClick={() => setOpen(true)} className="btn btn-danger">
+        Delete account
+      </button>
+
+      {open && (
+        <Modal title={done ? 'Account scheduled for deletion' : 'Delete your account'} onClose={done ? finish : reset}>
+          {done ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted">
+                Your account is scheduled for deletion on{' '}
+                <span className="font-semibold text-ink">
+                  {new Date(done.scheduledFor).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                </span>
+                . We&rsquo;ve signed you out everywhere. Sign back in before then to restore it.
+              </p>
+              <div className="flex justify-end">
+                <button type="button" onClick={finish} className="btn btn-primary">Back to sign in</button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={submit} className="space-y-3">
+              <p className="text-sm text-muted">
+                This deactivates your account now and permanently deletes it and all of your data
+                after 30 days. You can restore it by signing in within that window.
+              </p>
+              <ErrorBanner message={error} />
+              {user?.hasPassword && (
+                <Field
+                  label="Current password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              )}
+              {user?.twoFactorEnabled && (
+                <Field
+                  label="Authentication code"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  placeholder="123456"
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  required
+                />
+              )}
+              <Field
+                label={`Type ${email} to confirm`}
+                type="email"
+                value={confirmEmail}
+                onChange={(e) => setConfirmEmail(e.target.value)}
+                placeholder={email}
+                autoComplete="off"
+                required
+              />
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" onClick={reset} className="btn btn-soft">Cancel</button>
+                <button type="submit" disabled={!canDelete} className="btn btn-danger">
+                  {busy ? 'Deleting…' : 'Delete account'}
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
+    </Section>
   );
 }
 

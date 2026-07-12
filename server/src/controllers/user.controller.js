@@ -4,6 +4,7 @@ import * as twofa from '../services/twofa.service.js';
 import { logSecurityEvent } from '../services/audit.service.js';
 import * as trustedDevices from '../services/trustedDevice.service.js';
 import * as account from '../services/account.service.js';
+import * as accountDeletion from '../services/accountDeletion.service.js';
 import { verifyReauth } from '../services/auth.service.js';
 
 // Re-auth fields for a sensitive account mutation (M3). Both optional at the
@@ -153,4 +154,31 @@ export async function requestEmailChange(req, res) {
 }
 export async function verifyEmailChange(req, res) {
   res.json(await account.verifyEmailChange(req.user.id, req.body.code));
+}
+
+/* ---- Account deletion (Danger Zone) ------------------------------------ */
+
+// High-friction, all enforced server-side by requestAccountDeletion:
+//   • current password (reauthFields.password), and a valid TOTP when 2FA is on
+//   • `confirmEmail` must exactly match the account email
+//   • institution-managed accounts are refused
+// On success the account is soft-deleted and every session is revoked.
+export const deleteAccountSchema = z.object({
+  confirmEmail: z.string().min(1, 'Type your email address to confirm'),
+  ...reauthFields,
+});
+export async function deleteAccount(req, res) {
+  let result;
+  try {
+    result = await accountDeletion.requestAccountDeletion(req.user.id, {
+      password: req.body.password,
+      totpCode: req.body.totpCode,
+      confirmEmail: req.body.confirmEmail,
+    });
+  } catch (err) {
+    await logSecurityEvent({ action: 'account_delete_request', outcome: 'failure', userId: req.user.id, ip: req.ip });
+    throw err;
+  }
+  await logSecurityEvent({ action: 'account_delete_request', outcome: 'success', userId: req.user.id, ip: req.ip });
+  res.json({ ok: true, scheduledFor: result.scheduledFor });
 }

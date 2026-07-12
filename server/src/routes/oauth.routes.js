@@ -18,7 +18,7 @@
 import { Router } from 'express';
 import { passport } from '../config/passport.js';
 import { env, configuredOAuthProviders, isOAuthProviderConfigured } from '../config/env.js';
-import { signOAuthState, verifyOAuthState, signTwoFactorChallenge } from '../utils/jwt.js';
+import { signOAuthState, verifyOAuthState, signTwoFactorChallenge, signRestoreChallenge } from '../utils/jwt.js';
 import { issueTokensForUser } from '../services/auth.service.js';
 import { getRegistrationMode } from '../services/registration.service.js';
 
@@ -64,6 +64,13 @@ function redirectTwoFactor(res, challengeToken) {
   res.redirect(`${env.clientUrl}/auth/callback#${params.toString()}`);
 }
 
+/** Soft-deleted account: bounce to the SPA with a restore challenge instead of
+ *  tokens, so it lands on the "scheduled for deletion — restore?" screen. */
+function redirectRestore(res, restoreToken) {
+  const params = new URLSearchParams({ pendingDeletion: '1', restoreToken });
+  res.redirect(`${env.clientUrl}/auth/callback#${params.toString()}`);
+}
+
 for (const provider of PROVIDERS) {
   // --- Step 1: initiate -----------------------------------------------------
   router.get(`/${provider}`, (req, res, next) => {
@@ -104,6 +111,10 @@ for (const provider of PROVIDERS) {
         // step first, exactly like password login (M4).
         if (user.totp_enabled) {
           return redirectTwoFactor(res, signTwoFactorChallenge(user.id));
+        }
+        // Soft-deleted account (no 2FA): route to Restore rather than a session.
+        if (user.deleted_at) {
+          return redirectRestore(res, signRestoreChallenge(user.id));
         }
         const tokens = await issueTokensForUser(user.id, { userAgent: req.get('user-agent'), ip: req.ip });
         return redirectSuccess(res, tokens);

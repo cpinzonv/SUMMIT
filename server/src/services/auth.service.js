@@ -7,6 +7,7 @@ import {
   hashToken,
   signTwoFactorChallenge,
   verifyTwoFactorChallenge,
+  signRestoreChallenge,
 } from '../utils/jwt.js';
 import { verifyLoginCode } from './twofa.service.js';
 import { hasPremiumAccess } from './featureGating.service.js';
@@ -71,6 +72,9 @@ export function toPublicUser(row) {
     institution: row.institution_id
       ? { name: row.institution_name ?? null, revoked: Boolean(row.institution_revoked_at) }
       : null,
+    // Soft-delete state: true while the account is in its 30-day recovery window.
+    // Drives the Restore screen; a normal (active) session never sees this true.
+    pendingDeletion: Boolean(row.deleted_at),
     createdAt: row.created_at,
   };
 }
@@ -372,6 +376,20 @@ export async function resetPassword({ email, code, newPassword }) {
   return { ok: true };
 }
 
+// A pending-deletion account passed full credentials (password, and 2FA when
+// enabled) but is deactivated: instead of a real session, hand back a short-lived
+// restore challenge so the client shows the "scheduled for deletion — restore?"
+// screen. It NEVER gets access/refresh tokens until it is explicitly restored.
+function pendingDeletionResponse(user) {
+  const scheduledFor = new Date(new Date(user.deleted_at).getTime() + 30 * 24 * 60 * 60 * 1000);
+  return {
+    pendingDeletion: true,
+    restoreToken: signRestoreChallenge(user.id),
+    deletionScheduledFor: scheduledFor,
+    email: user.email,
+  };
+}
+
 export async function login({ email, password, deviceToken, userAgent, ip }) {
   const { rows } = await query(
     `SELECT u.*, i.name AS institution_name, i.revoked_at AS institution_revoked_at
@@ -412,6 +430,10 @@ export async function login({ email, password, deviceToken, userAgent, ip }) {
     // fall through to issue tokens — device is trusted
   }
 
+  // Credentials are good, but a soft-deleted account can't get a normal session:
+  // route it to the Restore screen instead of silently resurrecting it.
+  if (user.deleted_at) return pendingDeletionResponse(user);
+
   const tokens = await issueTokens(user.id, { userAgent, ip });
   return { user: toPublicUser(user), ...tokens };
 }
@@ -439,6 +461,9 @@ export async function loginTwoFactor({ challengeToken, code, trustDevice: rememb
 
   const valid = await verifyLoginCode(user, code);
   if (!valid) throw AppError.unauthorized('Invalid authentication code.');
+
+  // Same guard as password login: a soft-deleted account gets the Restore screen.
+  if (user.deleted_at) return pendingDeletionResponse(user);
 
   const tokens = await issueTokens(user.id, { userAgent, ip });
   // Optionally remember this browser so it can skip 2FA next time (30 days).

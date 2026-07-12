@@ -52,6 +52,15 @@ function applyPreferences(prefs) {
   root.dataset.compact = prefs.compactMode ? 'true' : 'false';
 }
 
+// Normalize the "account is pending deletion" login response into a stable
+// shape the login/2FA screens hand to the Restore step.
+const pendingDeletionResult = (data) => ({
+  pendingDeletion: true,
+  restoreToken: data.restoreToken,
+  deletionScheduledFor: data.deletionScheduledFor,
+  email: data.email,
+});
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -107,6 +116,8 @@ export function AuthProvider({ children }) {
     if (data.twoFactorRequired) return { twoFactorRequired: true, challengeToken: data.challengeToken };
     // Unverified accounts must confirm the emailed code first.
     if (data.verificationRequired) return { verificationRequired: true, email: data.email, devCode: data.devCode };
+    // Soft-deleted account (within its 30-day grace): no session — show Restore.
+    if (data.pendingDeletion) return pendingDeletionResult(data);
     setTokens(data);
     setUser(data.user);
     return data.user;
@@ -115,7 +126,17 @@ export function AuthProvider({ children }) {
   /** Complete the 2FA login step with a TOTP or backup code; optionally remember this device. */
   const completeTwoFactor = useCallback(async (challengeToken, code, trustDevice = false) => {
     const { data } = await api.post('/api/auth/login/2fa', { challengeToken, code, trustDevice });
+    if (data.pendingDeletion) return pendingDeletionResult(data);
     if (data.deviceToken) setDeviceToken(data.deviceToken); // remember this browser for 30 days
+    setTokens(data);
+    setUser(data.user);
+    return data.user;
+  }, []);
+
+  /** Restore a pending-deletion account using the restore challenge token from
+   *  login; on success the server reactivates it and issues a fresh session. */
+  const restore = useCallback(async (restoreToken) => {
+    const { data } = await api.post('/api/auth/restore', { restoreToken });
     setTokens(data);
     setUser(data.user);
     return data.user;
@@ -195,7 +216,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, preferences, login, completeTwoFactor, loginWithTokens, register, verifyEmail, resendVerification, logout, savePreferences, refreshUser }}
+      value={{ user, loading, preferences, login, completeTwoFactor, loginWithTokens, restore, register, verifyEmail, resendVerification, logout, savePreferences, refreshUser }}
     >
       {children}
     </AuthContext.Provider>
