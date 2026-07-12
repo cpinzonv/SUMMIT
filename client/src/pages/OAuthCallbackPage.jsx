@@ -47,6 +47,14 @@ export default function OAuthCallbackPage() {
       return;
     }
 
+    // Pending-deletion account: the backend sent a restore challenge instead of
+    // tokens. Hand off to the login Restore prompt (same flow as password login).
+    const restoreToken = params.get('restoreToken');
+    if (params.get('pendingDeletion') && restoreToken) {
+      navigate('/login', { replace: true, state: { restore: { restoreToken } } });
+      return;
+    }
+
     const accessToken = params.get('accessToken');
     const refreshToken = params.get('refreshToken');
     if (!accessToken || !refreshToken) {

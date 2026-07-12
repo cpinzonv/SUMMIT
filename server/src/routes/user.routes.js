@@ -48,4 +48,8 @@ router.delete('/recovery-email', asyncHandler(user.removeRecoveryEmail));
 router.post('/email/change', validate(user.emailChangeSchema), asyncHandler(user.requestEmailChange));
 router.post('/email/change/verify', validate(user.emailChangeVerifySchema), asyncHandler(user.verifyEmailChange));
 
+// Danger Zone: soft-delete the account (30-day recovery grace, then purge).
+// Re-auth + email confirmation are enforced in the service; throttle it.
+router.post('/account/delete', sensitiveLimiter, validate(user.deleteAccountSchema), asyncHandler(user.deleteAccount));
+
 export default router;

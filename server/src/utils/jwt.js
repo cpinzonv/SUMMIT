@@ -32,6 +32,22 @@ export function verifyTwoFactorChallenge(token) {
 }
 
 /**
+ * Short-lived token issued when a pending-deletion account clears login
+ * (password + 2FA). It proves "identity verified" so the Restore step can
+ * reactivate the account WITHOUT ever handing a deactivated account a real
+ * session. Marked typ:'restore' so it can't be swapped for an access token.
+ */
+export function signRestoreChallenge(userId) {
+  return jwt.sign({ sub: userId, typ: 'restore' }, env.jwt.accessSecret, { expiresIn: '10m' });
+}
+
+export function verifyRestoreChallenge(token) {
+  const payload = jwt.verify(token, env.jwt.accessSecret, { algorithms: ['HS256'] });
+  if (payload.typ !== 'restore') throw new Error('Not a restore challenge token');
+  return payload;
+}
+
+/**
  * Signed CSRF `state` for the OAuth redirect flow. Because Summit is stateless
  * (no server session), the state itself is a short-lived signed token: we put it
  * in the provider's `state` param and verify the value round-tripped on the

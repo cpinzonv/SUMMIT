@@ -8,7 +8,7 @@ import { SocialAuthButtons } from '../components/SocialAuthButtons';
 import { WaitlistPanel } from '../components/WaitlistPanel';
 
 export default function LoginPage() {
-  const { user, login, completeTwoFactor, register, verifyEmail, resendVerification, loading } = useAuth();
+  const { user, login, completeTwoFactor, restore, register, verifyEmail, resendVerification, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
@@ -35,6 +35,9 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   // { challengeToken } when the 2FA prompt is shown — seeded from OAuth 2FA handoff too.
   const [twoFactor, setTwoFactor] = useState(location.state?.twoFactor || null);
+  // { restoreToken, deletionScheduledFor, email } for a pending-deletion account —
+  // seeded from the OAuth restore handoff too.
+  const [restoring, setRestoring] = useState(location.state?.restore || null);
   const [trustDevice, setTrustDevice] = useState(false); // "trust this device for 30 days"
   const [verify, setVerify] = useState(null); // { email, devCode } when email-confirmation step is shown
   const [resent, setResent] = useState('');
@@ -79,6 +82,11 @@ export default function LoginPage() {
           setCode('');
           setSubmitting(false);
           return; // account not yet confirmed — show the email code step
+        }
+        if (res?.pendingDeletion) {
+          setRestoring(res);
+          setSubmitting(false);
+          return; // scheduled for deletion — offer to restore instead of signing in
         }
       } else {
         const res = await register({
@@ -136,10 +144,29 @@ export default function LoginPage() {
     setError('');
     setSubmitting(true);
     try {
-      await completeTwoFactor(twoFactor.challengeToken, code.trim(), trustDevice);
+      const res = await completeTwoFactor(twoFactor.challengeToken, code.trim(), trustDevice);
+      if (res?.pendingDeletion) {
+        setTwoFactor(null);
+        setCode('');
+        setRestoring(res);
+        setSubmitting(false);
+        return; // scheduled for deletion — offer to restore
+      }
       navigate(from, { replace: true });
     } catch (err) {
       setError(errorMessage(err, 'Verification failed'));
+      setSubmitting(false);
+    }
+  };
+
+  const submitRestore = async () => {
+    setError('');
+    setSubmitting(true);
+    try {
+      await restore(restoring.restoreToken);
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(errorMessage(err, 'Could not restore your account. Please sign in again.'));
       setSubmitting(false);
     }
   };
@@ -183,7 +210,34 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {forgot ? (
+        {restoring ? (
+          <div className="glass-panel space-y-4 p-6">
+            <div>
+              <h2 className="text-lg font-bold text-ink">Restore your account?</h2>
+              <p className="mt-0.5 text-sm text-muted">
+                {restoring.email ? <>The account for <span className="font-semibold text-ink">{restoring.email}</span> is </> : 'This account is '}
+                scheduled for deletion
+                {restoring.deletionScheduledFor && (
+                  <> on <span className="font-semibold text-ink">
+                    {new Date(restoring.deletionScheduledFor).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </span></>
+                )}
+                . Restore it now to pick up right where you left off.
+              </p>
+            </div>
+            <ErrorBanner message={error} />
+            <button type="button" onClick={submitRestore} disabled={submitting} className="btn btn-primary w-full">
+              {submitting ? 'Restoring…' : 'Restore my account'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setRestoring(null); setForm((f) => ({ ...f, password: '' })); setError(''); }}
+              className="w-full text-center text-sm font-semibold text-muted hover:text-ink"
+            >
+              ← Back to sign in
+            </button>
+          </div>
+        ) : forgot ? (
           <ForgotPasswordPanel
             initialEmail={form.email}
             onBack={() => setForgot(false)}

@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { pool } from './config/db.js';
 import { startLmsSyncJob, stopLmsSyncJob } from './jobs/lmsSync.js';
+import { startAccountPurgeJob, stopAccountPurgeJob } from './jobs/accountPurge.js';
 
 const app = createApp();
 
@@ -31,10 +32,14 @@ const server = app.listen(env.port, () => {
 // Background LMS sync (assignments + grades) every few hours.
 startLmsSyncJob();
 
+// Daily purge of accounts past their 30-day deletion grace period.
+startAccountPurgeJob();
+
 /** Drain connections and close the pool so restarts/deploys are clean. */
 async function shutdown(signal) {
   console.log(`\n${signal} received, shutting down...`);
   stopLmsSyncJob();
+  stopAccountPurgeJob();
   server.close(async () => {
     await pool.end();
     process.exit(0);

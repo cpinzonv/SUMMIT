@@ -1397,3 +1397,17 @@ CREATE TABLE IF NOT EXISTS launch_waitlist (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_launch_waitlist_university ON launch_waitlist(university);
+
+-- ----------------------------------------------------------------------------
+-- Self-serve account deletion (soft-delete + 30-day recovery grace, then purge).
+-- `deleted_at` records WHEN the user requested deletion (NULL = active). During
+-- the grace window `account_status` = 'pending_deletion': the account is
+-- deactivated (all sessions revoked, login refused normally) but RECOVERABLE — a
+-- login within 30 days can restore it, which clears both columns. A daily cron
+-- (jobs/accountPurge.js) hard-deletes accounts whose deleted_at is > 30 days old.
+-- Both columns are nullable/defaulted, so existing rows are unaffected.
+-- ----------------------------------------------------------------------------
+ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at     TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active';  -- active | pending_deletion
+-- Purge job scans by deleted_at; a partial index keeps it cheap as users grows.
+CREATE INDEX IF NOT EXISTS idx_users_deleted_at ON users(deleted_at) WHERE deleted_at IS NOT NULL;

@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { logSecurityEvent } from '../services/audit.service.js';
 import * as authService from '../services/auth.service.js';
 import * as registrationService from '../services/registration.service.js';
+import { restoreAccount } from '../services/accountDeletion.service.js';
+import { verifyRestoreChallenge } from '../utils/jwt.js';
+import { AppError } from '../utils/AppError.js';
 
 // Allowed "How'd you hear about us?" values (kept in sync with the client form).
 export const REFERRAL_SOURCES = [
@@ -151,6 +154,24 @@ export async function loginTwoFactor(req, res) {
 export async function refresh(req, res) {
   const result = await authService.refresh(req.body);
   res.json(result);
+}
+
+// Restore a pending-deletion account. Auth is the short-lived restore challenge
+// token minted at login (proves password + 2FA already passed) — not a session,
+// since a deactivated account never holds one. On success we reactivate and log
+// the caller in with a fresh token pair.
+export const restoreSchema = z.object({ restoreToken: z.string().min(1, 'Missing restore token') });
+export async function restore(req, res) {
+  let payload;
+  try {
+    payload = verifyRestoreChallenge(req.body.restoreToken);
+  } catch {
+    throw AppError.unauthorized('Your restore session expired. Please sign in again.');
+  }
+  const { user } = await restoreAccount(payload.sub);
+  const tokens = await authService.issueTokensForUser(user.id, { userAgent: req.get('user-agent'), ip: req.ip });
+  await logSecurityEvent({ action: 'account_restore', outcome: 'success', userId: user.id, email: user.email, ip: req.ip });
+  res.json({ user, ...tokens });
 }
 
 export async function logout(req, res) {
