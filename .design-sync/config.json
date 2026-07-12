@@ -1,0 +1,46 @@
+{
+  "pkg": "@student-workflow/client",
+  "projectId": "59cc54db-27cd-4da4-adff-b34e149788ae",
+  "globalName": "SummitUI",
+  "shape": "package",
+  "entry": "client/.design-sync-entry.jsx",
+  "buildCmd": "npm run build --workspace=client",
+  "cssEntry": ".design-sync-styles.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "componentSrcMap": {
+    "KebabMenu": "src/components/ui.jsx",
+    "ConfirmModal": "src/components/ui.jsx",
+    "Modal": "src/components/ui.jsx",
+    "Toggle": "src/components/ui.jsx",
+    "Spinner": "src/components/ui.jsx",
+    "FullPageSpinner": "src/components/ui.jsx",
+    "ErrorBanner": "src/components/ui.jsx",
+    "Toast": "src/components/ui.jsx",
+    "LmsBadge": "src/components/ui.jsx",
+    "CanvasBadge": "src/components/ui.jsx",
+    "PriorityBadge": "src/components/ui.jsx",
+    "EmptyState": "src/components/ui.jsx",
+    "MountainMark": "src/components/MountainMark.jsx"
+  },
+  "dtsPropsFor": {
+    "KebabMenu": "/** Called when the Edit item is chosen; the Edit item only shows when this is set. */\n  onEdit?: () => void;\n  /** Called when the Delete item is chosen; the Delete item only shows when this is set. */\n  onDelete?: () => void;\n  /** Label for the edit item. @default 'Edit' */\n  editLabel?: string;\n  /** Label for the delete item. @default 'Delete' */\n  deleteLabel?: string;\n  className?: string;",
+    "ConfirmModal": "/** Heading. @default 'Delete?' */\n  title?: string;\n  /** Body message. @default \"This can't be undone.\" */\n  message?: string;\n  /** Optional item name/summary shown in a chip below the message. */\n  detail?: string;\n  /** Confirm button label. @default 'Delete' */\n  confirmLabel?: string;\n  /** Called when the confirm (danger) button is clicked. */\n  onConfirm?: () => void;\n  /** Called on cancel, backdrop click, or Escape. */\n  onClose?: () => void;",
+    "Modal": "/** Dialog heading. */\n  title?: React.ReactNode;\n  /** Called on close (backdrop click, the × button, or Escape). */\n  onClose: () => void;\n  /** Dialog body. */\n  children?: React.ReactNode;\n  /** Widen the dialog (max-w-2xl instead of max-w-md). @default false */\n  wide?: boolean;",
+    "Toggle": "/** Whether the switch is on. */\n  on?: boolean;\n  /** Called when the switch is toggled. */\n  onChange?: () => void;",
+    "Spinner": "/** Text shown beside the spinner. @default 'Loading…' */\n  label?: string;",
+    "FullPageSpinner": "",
+    "ErrorBanner": "/** Message to show. Renders nothing when empty. */\n  message?: string;",
+    "Toast": "/** The toast to show, or null/undefined to render nothing. */\n  toast?: {\n    /** Message text. */\n    msg: string;\n    /** Visual tone. @default 'success' */\n    type?: 'success' | 'error';\n    /** Show a spinner instead of the status glyph. */\n    loading?: boolean;\n  } | null;",
+    "LmsBadge": "/** LMS the item was synced from. Known: 'canvas' | 'blackboard' | 'google_classroom' | 'brightspace' | 'moodle' | 'sakai'; any other string renders with a default indigo accent. */\n  source: 'canvas' | 'blackboard' | 'google_classroom' | 'brightspace' | 'moodle' | 'sakai' | (string & {});\n  className?: string;",
+    "CanvasBadge": "/** Back-compat alias for <LmsBadge source=\"canvas\" />. */\n  className?: string;",
+    "PriorityBadge": "/** Assignment priority. Renders nothing for 'none' or an unknown value. */\n  priority: 'high' | 'medium' | 'low' | (string & {});\n  className?: string;",
+    "EmptyState": "/** Headline. */\n  title?: React.ReactNode;\n  /** Optional supporting copy below the headline. */\n  children?: React.ReactNode;"
+  },
+  "overrides": {
+    "Modal": { "cardMode": "single", "viewport": "480x320" },
+    "ConfirmModal": { "cardMode": "single", "viewport": "480x340" },
+    "FullPageSpinner": { "cardMode": "single", "viewport": "420x260" },
+    "Toast": { "cardMode": "single", "primaryStory": "Success", "viewport": "340x120" },
+    "KebabMenu": { "cardMode": "single", "viewport": "260x160" }
+  }
+}
