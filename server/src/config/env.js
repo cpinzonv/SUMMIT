@@ -45,6 +45,18 @@ export const env = {
   databaseUrl: required('DATABASE_URL'),
   databaseSsl: optional('DATABASE_SSL', 'false') === 'true',
 
+  // Gated registration. 'open' = anyone may sign up; 'invite_only' = signup
+  // requires a valid invite code or an allowlisted email (see the registration
+  // service + registrationGate). FAIL CLOSED: any value other than the literal
+  // 'open' — including unset — resolves to 'invite_only'.
+  registrationMode: optional('REGISTRATION_MODE', 'invite_only') === 'open' ? 'open' : 'invite_only',
+  // Simpler alternative to invite codes: emails that may register even while
+  // invite_only. Comma-separated, case-insensitive.
+  allowedEmails: optional('ALLOWED_EMAILS', '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+
   jwt: {
     accessSecret: required('JWT_ACCESS_SECRET'),
     refreshSecret: required('JWT_REFRESH_SECRET'),

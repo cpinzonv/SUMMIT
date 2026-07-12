@@ -7,6 +7,7 @@ import { query } from '../config/db.js';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
 import { logAudit } from '../services/audit.service.js';
+import * as registration from '../services/registration.service.js';
 
 export async function overview(req, res) {
   res.json(await analytics.overview());
@@ -155,6 +156,51 @@ export async function whitelistRemove(req, res) {
 
 export async function whitelistList(req, res) {
   res.json({ whitelisted: await gating.listWhitelist() });
+}
+
+/* ---- Gated registration (invite codes + waitlist) ----------------------- */
+
+// Current registration mode + waitlist rollup for the admin dashboard.
+export async function registrationStatus(req, res) {
+  res.json({
+    mode: registration.registrationMode(),
+    waitlist: {
+      total: await registration.waitlistCount(),
+      byUniversity: await registration.waitlistByUniversity(),
+    },
+  });
+}
+
+export const inviteCreateSchema = z.object({
+  maxUses: z.number().int().positive().max(100000).optional(),
+  expiresAt: z.string().datetime().optional(), // ISO 8601; omit for no expiry
+  note: z.string().max(200).optional(),
+  prefix: z.string().max(20).optional(), // single-word label, e.g. FOUNDING
+});
+
+export async function listInvites(req, res) {
+  res.json({ codes: await registration.listInviteCodes() });
+}
+
+export async function createInvite(req, res) {
+  const code = await registration.createInviteCode({
+    maxUses: req.body.maxUses,
+    expiresAt: req.body.expiresAt ?? null,
+    note: req.body.note ?? null,
+    prefix: req.body.prefix,
+    createdBy: req.user.id,
+  });
+  logAudit(req, { action: 'admin.invite_create', targetType: 'invite_code', targetId: code.code, metadata: { maxUses: code.max_uses } });
+  res.status(201).json({ code });
+}
+
+export const inviteRevokeSchema = z.object({ code: z.string().min(1) });
+
+export async function revokeInvite(req, res) {
+  const ok = await registration.revokeInviteCode(req.body.code);
+  if (!ok) throw AppError.notFound('Invite code not found or already revoked.');
+  logAudit(req, { action: 'admin.invite_revoke', targetType: 'invite_code', targetId: req.body.code });
+  res.json({ ok: true });
 }
 
 /**

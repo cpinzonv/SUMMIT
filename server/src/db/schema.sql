@@ -1356,3 +1356,33 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_invalidated_at TIMESTAMPTZ;
 ALTER TABLE usage_counters DROP CONSTRAINT IF EXISTS usage_counters_metric_check;
 ALTER TABLE usage_counters ADD CONSTRAINT usage_counters_metric_check
   CHECK (metric IN ('extraction','ai_cards','transcription_minutes','podcasts','ai_requests'));
+
+-- ----------------------------------------------------------------------------
+-- Gated registration + launch waitlist. invite_codes gate signup while the app
+-- is in invite_only mode (REGISTRATION_MODE); launch_waitlist collects
+-- interested students shown the "launching soon" panel (anonymous / logged-out,
+-- keyed by email — distinct from the paywall `waitlist` table above, which is
+-- for logged-in users, and from user_invites, the institution-admin flow).
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS invite_codes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code        TEXT NOT NULL UNIQUE,          -- single-word, human-readable, stored uppercased (e.g. FOUNDING-3K7Q)
+  max_uses    INTEGER NOT NULL DEFAULT 1 CHECK (max_uses > 0),
+  use_count   INTEGER NOT NULL DEFAULT 0 CHECK (use_count >= 0),
+  expires_at  TIMESTAMPTZ,                   -- null = never expires
+  created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+  note        TEXT,
+  revoked_at  TIMESTAMPTZ,                   -- null = active
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
+
+CREATE TABLE IF NOT EXISTS launch_waitlist (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email       TEXT NOT NULL UNIQUE,          -- stored lowercased; duplicates upsert silently
+  university  TEXT,
+  source      TEXT,                          -- attribution (e.g. 'register_page')
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_launch_waitlist_university ON launch_waitlist(university);

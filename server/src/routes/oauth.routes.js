@@ -34,9 +34,11 @@ const SCOPES = {
   apple: ['name', 'email'],
 };
 
-/** Tells the client which social buttons to show (only configured providers). */
+/** Tells the client which social buttons to show (only configured providers),
+ *  and whether public registration is open or invite_only (so the register page
+ *  can show the waitlist panel while closed). */
 router.get('/providers', (req, res) => {
-  res.json({ providers: configuredOAuthProviders() });
+  res.json({ providers: configuredOAuthProviders(), registrationMode: env.registrationMode });
 });
 
 /** Send the browser to the SPA login page with a short error code in the hash. */

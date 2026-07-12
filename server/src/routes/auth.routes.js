@@ -3,7 +3,8 @@ import * as authController from '../controllers/auth.controller.js';
 import * as lmsController from '../controllers/lms.controller.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
-import { authLimiter, sensitiveLimiter, refreshLimiter, accountActionLimiter } from '../middleware/rateLimit.js';
+import { authLimiter, sensitiveLimiter, refreshLimiter, accountActionLimiter, waitlistLimiter } from '../middleware/rateLimit.js';
+import { registrationGate } from '../middleware/registrationGate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
@@ -12,7 +13,19 @@ router.post(
   '/register',
   authLimiter,
   validate(authController.registerSchema),
+  // Server-side gate: in invite_only mode, reject signups without a valid
+  // invite code / allowlisted email (403 REGISTRATION_CLOSED). Runs regardless
+  // of what the client shows. Login/reset/existing-account flows are untouched.
+  asyncHandler(registrationGate),
   asyncHandler(authController.register),
+);
+
+// Public launch waitlist (shown while registration is invite_only).
+router.post(
+  '/waitlist',
+  waitlistLimiter,
+  validate(authController.waitlistSchema),
+  asyncHandler(authController.joinWaitlist),
 );
 
 router.post(

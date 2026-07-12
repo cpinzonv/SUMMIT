@@ -37,6 +37,15 @@ export const authLimiter = rateLimit({
   handler: json429('Too many attempts — please wait a few minutes and try again.'),
 });
 
+// Public waitlist signups (unauthenticated). Modest per-IP ceiling to blunt
+// spam while never bothering a real student: 10 / 10 min per IP.
+export const waitlistLimiter = rateLimit({
+  ...base,
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  handler: json429('Too many attempts — please wait a few minutes and try again.'),
+});
+
 // Credential checks, password reset, and 2FA — brute-force surface. 5 / min per IP.
 export const sensitiveLimiter = rateLimit({
   ...base,
