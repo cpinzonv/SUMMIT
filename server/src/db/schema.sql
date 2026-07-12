@@ -1348,3 +1348,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step BIGINT;       -- last 
 -- events take effect on the NEXT request instead of after the 15-min TTL.
 -- ----------------------------------------------------------------------------
 ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_invalidated_at TIMESTAMPTZ;
+
+-- ----------------------------------------------------------------------------
+-- Allow the shared paid-AI metric in usage_counters (SECURITY_AUDIT_2 H3/M5).
+-- Drop + recreate the metric CHECK to include 'ai_requests'. Idempotent.
+-- ----------------------------------------------------------------------------
+ALTER TABLE usage_counters DROP CONSTRAINT IF EXISTS usage_counters_metric_check;
+ALTER TABLE usage_counters ADD CONSTRAINT usage_counters_metric_check
+  CHECK (metric IN ('extraction','ai_cards','transcription_minutes','podcasts','ai_requests'));

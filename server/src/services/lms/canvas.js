@@ -14,6 +14,7 @@
  */
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
+import { assertSafeHost, ssrfSafeAgent } from '../../utils/ssrf.js';
 
 export const name = 'canvas';
 
@@ -39,11 +40,16 @@ function assertConfigured() {
 function baseUrl(domain) {
   // Accept "asu.instructure.com" or "https://asu.instructure.com" and normalize.
   const host = String(domain).trim().replace(/^https?:\/\//, '').replace(/\/+$/, '');
-  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) {
-    throw AppError.badRequest('Enter a valid Canvas domain, e.g. "school.instructure.com".');
-  }
+  // SSRF guard: reject IP literals, internal/reserved hosts, non-public FQDNs.
+  // (The actual private-IP resolution/rebinding block happens in ssrfSafeAgent at
+  // connect time — every fetch below uses it.)
+  assertSafeHost(host);
   return `https://${host}`;
 }
+
+// Every outbound Canvas fetch goes through the SSRF-safe dispatcher, which
+// validates the resolved IP is public and pins the connection to it.
+const canvasFetch = (url, opts = {}) => fetch(url, { ...opts, dispatcher: ssrfSafeAgent });
 
 /** Step 1: the URL we send the user to in order to grant access. */
 export function buildAuthUrl({ domain, redirectUri, state }) {
@@ -62,7 +68,7 @@ async function tokenRequest(domain, body) {
   assertConfigured();
   let res;
   try {
-    res = await fetch(`${baseUrl(domain)}/login/oauth2/token`, {
+    res = await canvasFetch(`${baseUrl(domain)}/login/oauth2/token`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
@@ -71,14 +77,14 @@ async function tokenRequest(domain, body) {
         ...body,
       }),
     });
-  } catch (err) {
-    throw new AppError(502, `Could not reach Canvas: ${err.message}`);
+  } catch {
+    // Don't reflect the raw connection error (would leak SSRF-probe signal).
+    throw new AppError(502, 'Could not reach Canvas. Check the instance URL and try again.');
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    // Canvas returns { error, error_description } on OAuth failures.
-    const msg = data.error_description || data.error || `Canvas token request failed (${res.status})`;
-    throw AppError.badRequest(`Canvas authorization failed: ${msg}`);
+    // Generic — do not reflect the upstream error body back to the caller.
+    throw AppError.badRequest('Canvas authorization failed. Check your instance URL and try again.');
   }
   return {
     accessToken: data.access_token,
@@ -144,11 +150,18 @@ async function canvasGet(domain, accessToken, path) {
   const results = [];
   let url = `${baseUrl(domain)}${path}`;
   for (let page = 0; page < 20 && url; page++) {
+    // Re-validate every URL — including pagination targets from Canvas's Link
+    // header — so a malicious upstream can't redirect us to an internal host.
+    try {
+      assertSafeHost(new URL(url).hostname);
+    } catch {
+      throw new AppError(502, 'Canvas returned an invalid pagination URL.');
+    }
     let res;
     try {
-      res = await fetch(url, { headers: { authorization: `Bearer ${accessToken}` } });
-    } catch (err) {
-      throw new AppError(502, `Could not reach Canvas: ${err.message}`);
+      res = await canvasFetch(url, { headers: { authorization: `Bearer ${accessToken}` } });
+    } catch {
+      throw new AppError(502, 'Could not reach Canvas. Check the instance URL and try again.');
     }
 
     if (res.status === 401) {

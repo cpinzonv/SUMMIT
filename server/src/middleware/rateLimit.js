@@ -64,3 +64,14 @@ export const accountActionLimiter = rateLimit({
   keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip),
   handler: json429('Too many attempts — please wait and try again.'),
 });
+
+// Paid-AI endpoints (chatbot, transcribe/summarize, time-estimate, generation) —
+// a per-ACCOUNT burst limiter on top of the monthly usage quota, so rotating IPs
+// can't be used to loop them. 15 / min per account.
+export const aiLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 1000,
+  max: 15,
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip),
+  handler: json429('Too many AI requests — please wait a moment and try again.'),
+});

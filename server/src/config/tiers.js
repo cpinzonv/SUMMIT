@@ -21,6 +21,10 @@ export const TIER_LIMITS = {
     transcription_minutes: { limit: 180, period: 'semester', maxPerRecording: 90, maxRecordings: 2 },
     // 1 podcast lifetime, standard voice only
     podcasts: { limit: 1, period: 'lifetime', premiumVoice: false },
+    // Ad-hoc paid AI calls (chatbot, re-transcribe, summarize, time-estimate,
+    // quiz/guide/mindmap generation) share one monthly per-account budget so a
+    // single account can't loop them to run up the Claude/Whisper bill.
+    ai_requests: { limit: 40, period: 'month' },
     lms_sync: false,
   },
   pro: {
@@ -28,6 +32,7 @@ export const TIER_LIMITS = {
     ai_cards: { limit: null, period: 'lifetime' },
     transcription_minutes: { limit: 480, period: 'month' },
     podcasts: { limit: 3, period: 'month', premiumVoice: false },
+    ai_requests: { limit: 400, period: 'month' },
     lms_sync: true,
   },
   max: {
@@ -35,6 +40,8 @@ export const TIER_LIMITS = {
     ai_cards: { limit: null, period: 'lifetime' },
     transcription_minutes: { limit: 1800, period: 'month' },
     podcasts: { limit: 10, period: 'month', premiumVoice: true },
+    // Even Max (and admin/demo, which resolve to Max) is capped, not unlimited.
+    ai_requests: { limit: 2000, period: 'month' },
     lms_sync: true,
   },
 };
@@ -45,6 +52,7 @@ export const METRIC_GATE = {
   ai_cards: 'ai_cards',
   transcription_minutes: 'transcription',
   podcasts: 'podcasts',
+  ai_requests: 'ai_requests',
 };
 
 /**
@@ -58,6 +66,7 @@ export const GATE_REQUIRED_TIER = {
   ai_cards: 'pro',
   transcription: 'pro',
   podcasts: 'pro',
+  ai_requests: 'pro',
   premium_voice: 'max',
 };
 
