@@ -71,6 +71,29 @@ function Row({ label, hint, children }) {
   );
 }
 
+/**
+ * A progressive-disclosure account row: label + current state on the left, a
+ * right-aligned button that expands the row's form inline. Collapsed by default;
+ * only one row is open at a time (coordinated by the parent). Presentation only —
+ * the expanded `children` are the existing forms with their handlers unchanged.
+ */
+function DisclosureRow({ label, state, action, open, onToggle, children }) {
+  return (
+    <div className="border-b border-white/40 last:border-0">
+      <div className="flex items-center justify-between gap-4 py-4">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-ink">{label}</div>
+          {state != null && <div className="mt-0.5 truncate text-sm text-muted">{state}</div>}
+        </div>
+        <button type="button" onClick={onToggle} className="btn btn-soft shrink-0">
+          {open ? 'Cancel' : action}
+        </button>
+      </div>
+      {open && <div className="pb-5">{children}</div>}
+    </div>
+  );
+}
+
 /* ---- Account ----------------------------------------------------------- */
 function AccountTab({ user }) {
   const navigate = useNavigate();
@@ -89,20 +112,25 @@ function AccountTab({ user }) {
     navigate('/login');
   };
 
+  // Progressive disclosure: at most one action row is expanded at a time.
+  const [openRow, setOpenRow] = useState(null);
+  const rowProps = (id) => ({
+    open: openRow === id,
+    onToggle: () => setOpenRow((cur) => (cur === id ? null : id)),
+    onClose: () => setOpenRow(null),
+  });
+
   return (
     <>
-      <Section title="Account">
-        <Row label="Email">{<span className="text-sm text-muted">{user?.email}</span>}</Row>
-        <Row label="Member since">{<span className="text-sm text-muted">{created}</span>}</Row>
+      <Section title="Account" description="How you sign in and recover your account.">
+        <div className="-mb-3">
+          <ChangeEmailSection user={user} {...rowProps('email')} />
+          <ChangePassword {...rowProps('password')} />
+          <RecoverySection user={user} phoneRow={rowProps('phone')} emailRow={rowProps('recoveryEmail')} />
+          <TwoFactorSection user={user} onOpenFlow={() => setOpenRow(null)} />
+          <Row label="Member since">{<span className="text-sm text-muted">{created}</span>}</Row>
+        </div>
       </Section>
-
-      <ChangeEmailSection user={user} />
-
-      <ChangePassword />
-
-      <RecoverySection user={user} />
-
-      <TwoFactorSection user={user} />
 
       {user?.twoFactorEnabled && <TrustedDevicesSection />}
 
@@ -111,6 +139,9 @@ function AccountTab({ user }) {
           Log out
         </button>
       </Section>
+
+      {/* Danger Zone (Delete account) lands here in a follow-up PR — it stays the
+          last block of the Account tab, below Session. */}
     </>
   );
 }
@@ -190,6 +221,7 @@ function TrustedDevicesSection() {
 function VerifiableContact({
   title, description, inputLabel, inputType, placeholder, autoComplete,
   value, verified, addUrl, verifyUrl, removeUrl, buildBody, sentHint, twoFactorEnabled,
+  open, onToggle,
 }) {
   const { refreshUser } = useAuth();
   const [stage, setStage] = useState(value && !verified ? 'code' : 'idle');
@@ -248,15 +280,21 @@ function VerifiableContact({
     finally { setBusy(false); }
   };
 
+  const rowState = verified
+    ? <span>{value} <span className="ml-1 font-semibold text-emerald-600">Verified</span></span>
+    : stage === 'code' ? 'Awaiting confirmation' : 'Not set';
+  const rowAction = verified ? 'Change' : stage === 'code' ? 'Continue' : 'Add';
+
   return (
-    <Section title={title} description={description}>
+    <DisclosureRow label={title} state={rowState} action={rowAction} open={open} onToggle={onToggle}>
       <Toast toast={toast} />
+      {description && <p className="mb-3 text-sm text-muted">{description}</p>}
 
       {verified ? (
         <div className="flex items-center justify-between gap-4">
           <span className="inline-flex items-center gap-2 text-sm">
             <span className="font-semibold text-ink">{value}</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-600">✓ Verified</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-600">Verified</span>
           </span>
           <button onClick={remove} disabled={busy} className="btn btn-soft">Remove</button>
         </div>
@@ -288,15 +326,16 @@ function VerifiableContact({
           <button type="submit" disabled={busy || !input.trim()} className="btn btn-primary">{busy ? 'Sending…' : 'Send code'}</button>
         </form>
       )}
-    </Section>
+    </DisclosureRow>
   );
 }
 
 /** Phone (SMS) + backup recovery email — both used to recover a locked-out account. */
-function RecoverySection({ user }) {
+function RecoverySection({ user, phoneRow, emailRow }) {
   return (
     <>
       <VerifiableContact
+        {...phoneRow}
         title="Recovery phone"
         description="Add a mobile number so you can reset your password by text. Optional, but recommended."
         inputLabel="Phone number"
@@ -313,6 +352,7 @@ function RecoverySection({ user }) {
         twoFactorEnabled={user?.twoFactorEnabled}
       />
       <VerifiableContact
+        {...emailRow}
         title="Recovery email"
         description="A backup email we can use if you ever lose access to your primary address."
         inputLabel="Backup email"
@@ -333,7 +373,7 @@ function RecoverySection({ user }) {
 }
 
 /** Change the primary email: confirm a code sent to the NEW address; the old one gets a heads-up. */
-function ChangeEmailSection({ user }) {
+function ChangeEmailSection({ user, open, onToggle }) {
   const { refreshUser } = useAuth();
   const [stage, setStage] = useState('idle'); // idle | code
   const [newEmail, setNewEmail] = useState('');
@@ -378,12 +418,11 @@ function ChangeEmailSection({ user }) {
   };
 
   return (
-    <Section
-      title="Change email"
-      description="Move your account to a new email. We'll send a code to the new address to confirm it, and notify your current one."
-    >
+    <DisclosureRow label="Email" state={user?.email} action="Change" open={open} onToggle={onToggle}>
       <Toast toast={toast} />
-      <Row label="Current email"><span className="text-sm text-muted">{user?.email}</span></Row>
+      <p className="mb-3 text-sm text-muted">
+        Move your account to a new email. We'll send a code to the new address to confirm it, and notify your current one.
+      </p>
 
       {stage === 'code' ? (
         <form onSubmit={confirm} className="mt-4 space-y-3">
@@ -412,35 +451,33 @@ function ChangeEmailSection({ user }) {
           <button type="submit" disabled={busy || !newEmail.trim()} className="btn btn-primary">{busy ? 'Sending…' : 'Send code'}</button>
         </form>
       )}
-    </Section>
+    </DisclosureRow>
   );
 }
 
 /* ---- Two-factor authentication ----------------------------------------- */
-function TwoFactorSection({ user }) {
+function TwoFactorSection({ user, onOpenFlow }) {
   const { refreshUser } = useAuth();
   const [flow, setFlow] = useState(null); // 'enable' | 'disable'
   const enabled = Boolean(user?.twoFactorEnabled);
   const done = async () => { setFlow(null); await refreshUser(); };
+  // Opening the setup/disable flow collapses any expanded inline row first.
+  const start = (f) => { onOpenFlow?.(); setFlow(f); };
 
   return (
-    <Section
-      title="Two-factor authentication"
-      description="Add a second step at login with an authenticator app (TOTP), like GitHub or Google."
-    >
-      {enabled ? (
-        <div className="flex items-center justify-between gap-4">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-600">
-            ✓ Enabled
-          </span>
-          <button onClick={() => setFlow('disable')} className="btn btn-soft">Disable</button>
+    <div className="border-b border-white/40 last:border-0">
+      <div className="flex items-center justify-between gap-4 py-4">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-ink">Two-factor authentication</div>
+          <div className="mt-0.5 text-sm text-muted">{enabled ? 'On' : 'Off'}</div>
         </div>
-      ) : (
-        <button onClick={() => setFlow('enable')} className="btn btn-primary">Enable 2FA</button>
-      )}
+        <button onClick={() => start(enabled ? 'disable' : 'enable')} className="btn btn-soft shrink-0">
+          {enabled ? 'Disable' : 'Enable'}
+        </button>
+      </div>
       {flow === 'enable' && <Enable2FAModal onClose={() => setFlow(null)} onDone={done} />}
       {flow === 'disable' && <Disable2FAModal onClose={() => setFlow(null)} onDone={done} />}
-    </Section>
+    </div>
   );
 }
 
@@ -569,7 +606,7 @@ function Disable2FAModal({ onClose, onDone }) {
   );
 }
 
-function ChangePassword() {
+function ChangePassword({ open, onToggle }) {
   const [form, setForm] = useState({ current: '', next: '', confirm: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -599,7 +636,13 @@ function ChangePassword() {
   };
 
   return (
-    <Section title="Change password">
+    <DisclosureRow
+      label="Password"
+      state={<span className="tracking-[0.2em]">••••••••</span>}
+      action="Change"
+      open={open}
+      onToggle={onToggle}
+    >
       <form onSubmit={submit} className="space-y-3">
         {error && <ErrorBanner message={error} />}
         {success && (
@@ -614,7 +657,7 @@ function ChangePassword() {
           {saving ? 'Updating…' : 'Update password'}
         </button>
       </form>
-    </Section>
+    </DisclosureRow>
   );
 }
 
