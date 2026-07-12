@@ -1342,6 +1342,14 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id
 ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_last_step BIGINT;       -- last consumed TOTP step (single-use per step)
 
 -- ----------------------------------------------------------------------------
+-- Access-token fast revocation (SECURITY_AUDIT_2 M1). A "sessions invalidated
+-- at" watermark: any access token whose iat predates this instant is rejected by
+-- requireAuth. Set on logout-all / password change / password reset so those
+-- events take effect on the NEXT request instead of after the 15-min TTL.
+-- ----------------------------------------------------------------------------
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_invalidated_at TIMESTAMPTZ;
+
+-- ----------------------------------------------------------------------------
 -- Allow the shared paid-AI metric in usage_counters (SECURITY_AUDIT_2 H3/M5).
 -- Drop + recreate the metric CHECK to include 'ai_requests'. Idempotent.
 -- ----------------------------------------------------------------------------

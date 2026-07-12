@@ -33,7 +33,7 @@ const PROVIDERS = {
  * @param {string} [profile.handle]    e.g. GitHub username (stored as github_username)
  * @returns {Promise<object>} the user row
  */
-export async function findOrCreateOAuthUser({ provider, providerId, email, fullName, handle }) {
+export async function findOrCreateOAuthUser({ provider, providerId, email, emailVerified, fullName, handle }) {
   const cfg = PROVIDERS[provider];
   if (!cfg) throw AppError.badRequest(`Unknown OAuth provider: ${provider}`);
   if (!providerId) throw AppError.badRequest('OAuth profile is missing an id.');
@@ -41,15 +41,31 @@ export async function findOrCreateOAuthUser({ provider, providerId, email, fullN
   const normalizedEmail = email ? String(email).toLowerCase() : null;
 
   return withTransaction(async (client) => {
-    // 1) Already linked to this provider id → just log in.
+    // 1) Already linked to this provider id → just log in. The provider
+    // authenticated this stable identity; email isn't the key here.
     const byProvider = await client.query(
       `SELECT * FROM users WHERE ${cfg.idCol} = $1`,
       [providerId],
     );
     if (byProvider.rows[0]) return byProvider.rows[0];
 
-    // 2) An account with this email exists → link the provider to it.
-    if (normalizedEmail) {
+    // Beyond here we LINK-by-email or CREATE — both key on the email, so it MUST
+    // be provider-verified. Never link or create on an unverified address
+    // (SECURITY_AUDIT_2 H1): that would let an attacker who lists a victim's
+    // email on their own provider account take over the victim's Summit account.
+    if (!normalizedEmail) {
+      throw AppError.badRequest(
+        'Your account did not share an email address, which Summit needs to create an account.',
+      );
+    }
+    if (!emailVerified) {
+      throw new AppError(400, 'We could not verify your email with that provider, so we can’t sign you in.', {
+        code: 'oauth_email_unverified',
+      });
+    }
+
+    // 2) An account with this (verified) email exists → link the provider to it.
+    {
       const byEmail = await client.query('SELECT * FROM users WHERE email = $1', [normalizedEmail]);
       const existing = byEmail.rows[0];
       if (existing) {
@@ -65,15 +81,7 @@ export async function findOrCreateOAuthUser({ provider, providerId, email, fullN
       }
     }
 
-    // 3) Brand-new account. OAuth accounts need an email; if the provider didn't
-    // share one (e.g. Apple "Hide My Email" relays still send one, but a GitHub
-    // user with no public/verified email might not) we can't create the account.
-    if (!normalizedEmail) {
-      throw AppError.badRequest(
-        'Your account did not share an email address, which Summit needs to create an account.',
-      );
-    }
-
+    // 3) Brand-new account (email is present and provider-verified, checked above).
     const { rows } = await client.query(
       `INSERT INTO users (email, full_name, auth_method, ${cfg.idCol}, ${cfg.handleCol}, email_verified)
        VALUES ($1, $2, $3, $4, $5, true)

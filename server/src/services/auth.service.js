@@ -84,10 +84,12 @@ export async function changePassword(userId, currentPassword, newPassword) {
 
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
   await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
-  // A password change logs out every device: revoke all refresh tokens and drop
-  // remembered 2FA devices, so other sessions can't linger on the old credential.
+  // A password change logs out every device: revoke all refresh tokens, drop
+  // remembered 2FA devices, and invalidate outstanding access tokens (M1) so no
+  // session lingers on the old credential.
   await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
   await revokeAllTrustedDevices(userId);
+  await query('UPDATE users SET sessions_invalidated_at = now() WHERE id = $1', [userId]);
 }
 
 /**
@@ -131,9 +133,32 @@ export async function issueTokensForUser(userId, context = {}) {
   return issueTokens(userId, context);
 }
 
-/** Revoke ALL of a user's active refresh tokens ("sign out everywhere"). */
+/** Revoke ALL of a user's active refresh tokens ("sign out everywhere") AND
+ *  invalidate every access token issued before now (M1). */
 export async function logoutAll(userId) {
   await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
+  await query('UPDATE users SET sessions_invalidated_at = now() WHERE id = $1', [userId]);
+}
+
+/**
+ * Re-authenticate the current user before a sensitive account mutation (M3):
+ * the current password (when the account has one) AND, if 2FA is enabled, a
+ * current TOTP/backup code. Throws on failure. A passwordless account with no
+ * 2FA has no second factor to re-check — the authenticated session is the only
+ * proof (documented residual).
+ */
+export async function verifyReauth(userId, { password, totpCode } = {}) {
+  const { rows } = await query('SELECT * FROM users WHERE id = $1', [userId]);
+  const user = rows[0];
+  if (!user) throw AppError.notFound('User not found');
+  if (user.password_hash) {
+    const ok = await bcrypt.compare(password || '', user.password_hash);
+    if (!ok) throw AppError.badRequest('Your current password is incorrect.');
+  }
+  if (user.totp_enabled) {
+    const valid = await verifyLoginCode(user, totpCode);
+    if (!valid) throw AppError.badRequest('Enter a valid authentication code.');
+  }
 }
 
 /** Signup attribution: count of users by referral_source (nulls grouped as 'unknown'). */
@@ -334,8 +359,10 @@ export async function resetPassword({ email, code, newPassword }) {
   // Invalidate all outstanding refresh tokens — every device must re-authenticate.
   await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [user.id]);
   // A reset is a possible-compromise signal: also drop every remembered 2FA
-  // device so the next login must complete 2FA again.
+  // device so the next login must complete 2FA again, and invalidate any
+  // outstanding access token immediately (M1).
   await revokeAllTrustedDevices(user.id);
+  await query('UPDATE users SET sessions_invalidated_at = now() WHERE id = $1', [user.id]);
   return { ok: true };
 }
 

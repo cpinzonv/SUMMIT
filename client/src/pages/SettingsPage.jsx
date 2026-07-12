@@ -189,11 +189,14 @@ function TrustedDevicesSection() {
  */
 function VerifiableContact({
   title, description, inputLabel, inputType, placeholder, autoComplete,
-  value, verified, addUrl, verifyUrl, removeUrl, buildBody, sentHint,
+  value, verified, addUrl, verifyUrl, removeUrl, buildBody, sentHint, twoFactorEnabled,
 }) {
   const { refreshUser } = useAuth();
   const [stage, setStage] = useState(value && !verified ? 'code' : 'idle');
   const [input, setInput] = useState('');
+  const [password, setPassword] = useState(''); // re-auth for this sensitive change (M3)
+  const [totpCode, setTotpCode] = useState('');
+  const reauth = () => ({ password, ...(totpCode.trim() ? { totpCode: totpCode.trim() } : {}) });
   const [code, setCode] = useState('');
   const [devCode, setDevCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -209,7 +212,7 @@ function VerifiableContact({
     e.preventDefault();
     setBusy(true); setError('');
     try {
-      const { data } = await api.post(addUrl, buildBody(input.trim()));
+      const { data } = await api.post(addUrl, { ...buildBody(input.trim()), ...reauth() });
       setDevCode(data.devCode || '');
       setStage('code');
     } catch (err) {
@@ -232,7 +235,7 @@ function VerifiableContact({
   const resend = async () => {
     setError('');
     try {
-      const { data } = await api.post(addUrl, buildBody(value));
+      const { data } = await api.post(addUrl, { ...buildBody(value), ...reauth() });
       setDevCode(data.devCode || '');
       setToast({ type: 'success', msg: 'A new code is on its way.' });
     } catch (err) { setError(errorMessage(err, 'Could not resend the code.')); }
@@ -277,6 +280,11 @@ function VerifiableContact({
         <form onSubmit={startAdd} className="space-y-3">
           <ErrorBanner message={error} />
           <Field label={inputLabel} type={inputType} value={input} onChange={(e) => setInput(e.target.value)} placeholder={placeholder} autoComplete={autoComplete} required />
+          {/* Re-auth: sensitive account changes require the current password (+ 2FA code). */}
+          <Field label="Current password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          {twoFactorEnabled && (
+            <Field label="Authentication code" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} placeholder="123456" autoComplete="one-time-code" inputMode="numeric" />
+          )}
           <button type="submit" disabled={busy || !input.trim()} className="btn btn-primary">{busy ? 'Sending…' : 'Send code'}</button>
         </form>
       )}
@@ -302,6 +310,7 @@ function RecoverySection({ user }) {
         removeUrl="/api/user/phone"
         buildBody={(phone) => ({ phone })}
         sentHint={(to) => `We texted a 6-digit code to ${to}. Enter it below to confirm your number.`}
+        twoFactorEnabled={user?.twoFactorEnabled}
       />
       <VerifiableContact
         title="Recovery email"
@@ -317,6 +326,7 @@ function RecoverySection({ user }) {
         removeUrl="/api/user/recovery-email"
         buildBody={(email) => ({ email })}
         sentHint={(to) => `We emailed a 6-digit code to ${to}. Enter it below to confirm.`}
+        twoFactorEnabled={user?.twoFactorEnabled}
       />
     </>
   );
@@ -327,6 +337,8 @@ function ChangeEmailSection({ user }) {
   const { refreshUser } = useAuth();
   const [stage, setStage] = useState('idle'); // idle | code
   const [newEmail, setNewEmail] = useState('');
+  const [password, setPassword] = useState(''); // re-auth for this sensitive change (M3)
+  const [totpCode, setTotpCode] = useState('');
   const [code, setCode] = useState('');
   const [devCode, setDevCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -342,7 +354,11 @@ function ChangeEmailSection({ user }) {
     e.preventDefault();
     setBusy(true); setError('');
     try {
-      const { data } = await api.post('/api/user/email/change', { email: newEmail.trim() });
+      const { data } = await api.post('/api/user/email/change', {
+        email: newEmail.trim(),
+        password,
+        ...(totpCode.trim() ? { totpCode: totpCode.trim() } : {}),
+      });
       setDevCode(data.devCode || '');
       setStage('code');
     } catch (err) { setError(errorMessage(err, 'Could not start the change.')); }
@@ -388,6 +404,11 @@ function ChangeEmailSection({ user }) {
         <form onSubmit={request} className="mt-4 space-y-3">
           <ErrorBanner message={error} />
           <Field label="New email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="you@newschool.edu" autoComplete="email" required />
+          {/* Re-auth: changing the primary email requires the current password (+ 2FA code). */}
+          <Field label="Current password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          {user?.twoFactorEnabled && (
+            <Field label="Authentication code" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} placeholder="123456" autoComplete="one-time-code" inputMode="numeric" />
+          )}
           <button type="submit" disabled={busy || !newEmail.trim()} className="btn btn-primary">{busy ? 'Sending…' : 'Send code'}</button>
         </form>
       )}
