@@ -14,7 +14,7 @@
  */
 import dns from 'node:dns';
 import net from 'node:net';
-import { Agent } from 'undici';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { AppError } from './AppError.js';
 
 // Hostnames / suffixes that must never be reached, regardless of resolution.
@@ -80,3 +80,13 @@ function validatingLookup(hostname, options, callback) {
 
 /** Shared dispatcher: pass as `{ dispatcher: ssrfSafeAgent }` to guarded fetches. */
 export const ssrfSafeAgent = new Agent({ connect: { lookup: validatingLookup } });
+
+/**
+ * fetch() bound to the SSRF-safe dispatcher. Uses undici's OWN fetch — NOT the
+ * global fetch — so the dispatcher and the fetch implementation are the same
+ * undici version. The global fetch is Node's *bundled* undici, whose dispatcher
+ * interface can differ from a userland Agent (mismatch → "invalid onError
+ * method"). undici is pinned in package.json to a major that both imports on the
+ * deploy's Node runtime and matches this Agent (see that pin before bumping it).
+ */
+export const safeFetch = (url, opts = {}) => undiciFetch(url, { ...opts, dispatcher: ssrfSafeAgent });
