@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../../api/client';
-import { Spinner, ErrorBanner, Toast, Toggle } from '../ui';
+import { Spinner, ErrorBanner, Toast, ConfirmModal } from '../ui';
 
 const fmtDate = (d) =>
   d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -25,7 +25,8 @@ export default function RegistrationAdmin() {
   const [codes, setCodes] = useState(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
-  const [showMode, setShowMode] = useState(false);
+  const [savingMode, setSavingMode] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false); // confirm dialog before opening registration
   const [form, setForm] = useState({ maxUses: '1', prefix: 'FOUNDING', note: '', expiresAt: '' });
   const [creating, setCreating] = useState(false);
 
@@ -80,6 +81,28 @@ export default function RegistrationAdmin() {
     }
   };
 
+  // Persist a new registration mode. Opening is confirmed first (see below);
+  // closing back to invite_only applies immediately.
+  const applyMode = async (mode) => {
+    setSavingMode(true);
+    setConfirmOpen(false);
+    try {
+      await api.put('/api/admin/registration/mode', { mode });
+      setStatus((s) => ({ ...s, mode }));
+      setToast({ type: 'success', msg: mode === 'open' ? 'Registration is now open' : 'Registration is now invite only' });
+    } catch (err) {
+      setToast({ type: 'error', msg: errorMessage(err) });
+    } finally {
+      setSavingMode(false);
+    }
+  };
+
+  const requestMode = (mode) => {
+    if (mode === status.mode || savingMode) return;
+    if (mode === 'open') setConfirmOpen(true); // flipping open needs confirmation
+    else applyMode(mode); // flipping back to invite_only is immediate
+  };
+
   if (error && !status) return <ErrorBanner message={error} />;
   if (!status || !codes) return <Spinner label="Loading registration…" />;
 
@@ -91,31 +114,47 @@ export default function RegistrationAdmin() {
       {toast && <Toast toast={toast} />}
       <ErrorBanner message={error} />
 
-      {/* Registration mode — toggle-visible display of the current REGISTRATION_MODE. */}
+      {/* Registration mode — live admin control. */}
       <div className="glass-panel p-6">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-ink">Registration mode</h2>
             <p className="text-sm text-muted">
-              Set by the REGISTRATION_MODE environment variable. Toggle to reveal the current value.
+              Controls whether the public can create accounts. Currently{' '}
+              <span className={`font-semibold ${mode === 'open' ? 'text-emerald-700' : 'text-amber-800'}`}>
+                {mode === 'open' ? 'open to everyone' : 'invite only'}
+              </span>
+              .
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Toggle on={showMode} onChange={() => setShowMode((v) => !v)} />
-            {showMode ? (
-              <span
-                className={`rounded-full px-3 py-1 text-sm font-semibold ${
-                  mode === 'open' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'
-                }`}
+          <div className="inline-flex rounded-full bg-white/50 p-1" role="group" aria-label="Registration mode">
+            {[['invite_only', 'Invite only'], ['open', 'Open']].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => requestMode(value)}
+                disabled={savingMode}
+                aria-pressed={mode === value}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold transition ${
+                  mode === value ? 'bg-white text-brand-700 shadow-sm' : 'text-muted hover:text-ink'
+                } ${savingMode ? 'opacity-60' : ''}`}
               >
-                {mode === 'open' ? 'Open' : 'Invite only'}
-              </span>
-            ) : (
-              <span className="text-sm font-medium text-muted">Hidden</span>
-            )}
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
+
+      {confirmOpen && (
+        <ConfirmModal
+          title="Open registration?"
+          message="This opens public registration immediately. Anyone will be able to create an account."
+          confirmLabel="Open registration"
+          onConfirm={() => applyMode('open')}
+          onClose={() => setConfirmOpen(false)}
+        />
+      )}
 
       {/* Waitlist */}
       <div className="glass-panel p-6">

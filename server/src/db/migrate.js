@@ -52,11 +52,27 @@ async function waitForDb() {
   }
 }
 
+// Seed registration_mode ONCE from the REGISTRATION_MODE env var (first boot
+// only). After this, the setting is admin-controlled via app_settings, so the
+// env var is just the initial value. ON CONFLICT DO NOTHING means a later admin
+// change is never overwritten by a redeploy. Fail closed: anything other than
+// the literal 'open' seeds 'invite_only'.
+async function seedRegistrationMode() {
+  const seed = process.env.REGISTRATION_MODE === 'open' ? 'open' : 'invite_only';
+  await pool.query(
+    `INSERT INTO app_settings (key, value) VALUES ('registration_mode', $1)
+     ON CONFLICT (key) DO NOTHING`,
+    [seed],
+  );
+  console.log(`registration_mode seeded (first boot only) → default '${seed}'.`);
+}
+
 async function main() {
   await waitForDb();
   const sql = await readFile(join(__dirname, 'schema.sql'), 'utf8');
   console.log('Applying schema.sql...');
   await pool.query(sql);
+  await seedRegistrationMode();
   console.log('Schema applied successfully.');
 }
 

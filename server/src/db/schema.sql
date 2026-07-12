@@ -1364,6 +1364,17 @@ ALTER TABLE usage_counters ADD CONSTRAINT usage_counters_metric_check
 -- keyed by email — distinct from the paywall `waitlist` table above, which is
 -- for logged-in users, and from user_invites, the institution-admin flow).
 -- ----------------------------------------------------------------------------
+-- Generic key/value app settings, admin-editable at runtime. Holds
+-- 'registration_mode' ('open' | 'invite_only'), seeded once from the
+-- REGISTRATION_MODE env var on first boot (see db/migrate.js) and thereafter
+-- controlled by admins via /api/admin/registration/mode.
+CREATE TABLE IF NOT EXISTS app_settings (
+  key         TEXT PRIMARY KEY,
+  value       TEXT,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by  UUID REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS invite_codes (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   code        TEXT NOT NULL UNIQUE,          -- single-word, human-readable, stored uppercased (e.g. FOUNDING-3K7Q)

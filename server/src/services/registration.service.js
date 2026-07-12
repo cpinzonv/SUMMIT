@@ -1,8 +1,10 @@
 /**
  * Gated registration: invite codes, the email allowlist, and the launch
- * waitlist. Signup is open or invite_only per REGISTRATION_MODE (env, fail
- * closed). In invite_only mode a signup needs a valid invite code OR an
- * allowlisted email — enforced server-side in middleware/registrationGate.js.
+ * waitlist. Signup is open or invite_only per the ADMIN-CONTROLLED
+ * registration_mode setting (app_settings; seeded once from REGISTRATION_MODE),
+ * cached here and read by middleware/registrationGate.js — fails closed to
+ * invite_only. In invite_only mode a signup needs a valid invite code OR an
+ * allowlisted email.
  *
  * Distinct from the institution-admin onboarding flow (user_invites / the
  * /auth/invite/:token routes).
@@ -10,13 +12,62 @@
 import { randomBytes } from 'node:crypto';
 import { query } from '../config/db.js';
 import { env } from '../config/env.js';
+import { AppError } from '../utils/AppError.js';
 
-export function registrationMode() {
-  return env.registrationMode;
+const MODES = ['open', 'invite_only'];
+const REGISTRATION_MODE_KEY = 'registration_mode';
+
+// The mode is admin-controlled (app_settings) and read on every register
+// request, so cache it in memory with a short TTL to avoid a DB hit per signup.
+// Writes (setRegistrationMode) refresh the cache immediately, so a change takes
+// effect at once for THIS process; other processes pick it up within the TTL.
+const MODE_TTL_MS = 30_000;
+let modeCache = { value: null, expires: 0 };
+
+/** Test/ops hook: drop the cached mode so the next read hits the DB. */
+export function clearRegistrationModeCache() {
+  modeCache = { value: null, expires: 0 };
 }
 
-export function isRegistrationOpen() {
-  return env.registrationMode === 'open';
+/**
+ * Current registration mode from app_settings, cached. Fails CLOSED: a missing
+ * row, an unknown value, or a DB error all resolve to 'invite_only'. A read
+ * failure is never cached (so recovery is immediate once the DB is back).
+ */
+export async function getRegistrationMode() {
+  const now = Date.now();
+  if (modeCache.value && now < modeCache.expires) return modeCache.value;
+  try {
+    const { rows } = await query('SELECT value FROM app_settings WHERE key = $1', [REGISTRATION_MODE_KEY]);
+    const value = rows[0]?.value === 'open' ? 'open' : 'invite_only';
+    modeCache = { value, expires: now + MODE_TTL_MS };
+    return value;
+  } catch {
+    return 'invite_only';
+  }
+}
+
+export async function isRegistrationOpen() {
+  return (await getRegistrationMode()) === 'open';
+}
+
+/**
+ * Set the registration mode (admin action). Validates strictly, records the
+ * acting admin in updated_by, and refreshes the cache so the change is live now.
+ */
+export async function setRegistrationMode(mode, updatedBy = null) {
+  if (!MODES.includes(mode)) {
+    throw AppError.badRequest("mode must be 'open' or 'invite_only'");
+  }
+  await query(
+    `INSERT INTO app_settings (key, value, updated_by, updated_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (key) DO UPDATE
+       SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    [REGISTRATION_MODE_KEY, mode, updatedBy],
+  );
+  modeCache = { value: mode, expires: Date.now() + MODE_TTL_MS };
+  return mode;
 }
 
 /** True when `email` is on the ALLOWED_EMAILS allowlist (case-insensitive). */

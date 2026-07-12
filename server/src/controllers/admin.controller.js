@@ -163,12 +163,27 @@ export async function whitelistList(req, res) {
 // Current registration mode + waitlist rollup for the admin dashboard.
 export async function registrationStatus(req, res) {
   res.json({
-    mode: registration.registrationMode(),
+    mode: await registration.getRegistrationMode(),
     waitlist: {
       total: await registration.waitlistCount(),
       byUniversity: await registration.waitlistByUniversity(),
     },
   });
+}
+
+// Admin sets the registration mode. Strictly validated to the two allowed
+// values; the acting admin is recorded (updated_by + audit log).
+export const registrationModeSchema = z.object({ mode: z.enum(['open', 'invite_only']) });
+
+export async function setRegistrationMode(req, res) {
+  const mode = await registration.setRegistrationMode(req.body.mode, req.user.id);
+  logAudit(req, {
+    action: 'admin.registration_mode_set',
+    targetType: 'app_setting',
+    targetId: 'registration_mode',
+    metadata: { mode },
+  });
+  res.json({ mode });
 }
 
 export const inviteCreateSchema = z.object({
