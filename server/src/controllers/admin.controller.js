@@ -218,6 +218,13 @@ export async function revokeInvite(req, res) {
   res.json({ ok: true });
 }
 
+export async function deleteInvite(req, res) {
+  const ok = await registration.deleteInviteCode(req.body.code);
+  if (!ok) throw AppError.notFound('Invite code not found.');
+  logAudit(req, { action: 'admin.invite_delete', targetType: 'invite_code', targetId: req.body.code });
+  res.json({ ok: true });
+}
+
 /**
  * First-admin bootstrap. NOT behind auth — it's how the very first admin is
  * created. Guarded by the SETUP_TOKEN env (disabled if unset) and self-disables
