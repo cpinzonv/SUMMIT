@@ -19,6 +19,7 @@ import {
 } from '../components/ui';
 import { EmptyHero, AssignmentsIllustration } from '../components/EmptyHero';
 import { buildMeetingTimes, scheduleFromClass } from '../lib/classSchedule';
+import { dateOnlyToInput, inputToDateOnly } from '../lib/dateOnly';
 import { lmsApi, lmsStatusAll, lmsLabel, summarizeSync } from '../lib/lms';
 import { dueStatus, isDone, countdownTone } from '../lib/dueDate';
 import { suggestHours } from '../lib/workload';
@@ -764,8 +765,10 @@ function ClassEditModal({ cls, onClose, onSaved }) {
     term: cls?.term ?? '',
     description: cls?.description ?? '',
     color: cls?.color ?? '',
-    startDate: toDateInput(cls?.startDate),
-    endDate: toDateInput(cls?.endDate),
+    // DATE-only fields: read the calendar date verbatim (no UTC shift). Using the
+    // datetime toDateInput here would render a day early in negative-offset zones.
+    startDate: dateOnlyToInput(cls?.startDate),
+    endDate: dateOnlyToInput(cls?.endDate),
   });
   const [days, setDays] = useState(initialSchedule.days);
   const [startTime, setStartTime] = useState(initialSchedule.start);
@@ -795,8 +798,10 @@ function ClassEditModal({ cls, onClose, onSaved }) {
         term: form.term.trim() || null,
         description: form.description.trim() || null,
         color: form.color.trim() || null,
-        startDate: form.startDate ? dateInputToISO(form.startDate) : null,
-        endDate: form.endDate ? dateInputToISO(form.endDate) : null,
+        // DATE-only fields: persist the bare calendar date so the server stores
+        // it verbatim — dateInputToISO would apply a local→UTC shift on write.
+        startDate: inputToDateOnly(form.startDate),
+        endDate: inputToDateOnly(form.endDate),
         // Rich schedule → server re-derives meeting_days for attendance.
         syllabus: {
           meetingTimes: buildMeetingTimes(days, startTime, endTime, location),
