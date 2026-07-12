@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
 import { ErrorBanner } from '../components/ui';
 import { MountainMark } from '../components/MountainMark';
 import { SocialAuthButtons } from '../components/SocialAuthButtons';
+import { WaitlistPanel } from '../components/WaitlistPanel';
 
 export default function LoginPage() {
   const { user, login, completeTwoFactor, register, verifyEmail, resendVerification, loading } = useAuth();
@@ -12,7 +13,14 @@ export default function LoginPage() {
   const location = useLocation();
   const from = location.state?.from?.pathname || '/';
 
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  // A valid invite link (?invite=CODE) opens the signup form with the code
+  // pre-applied; the server validates/consumes it (registrationGate).
+  const [searchParams] = useSearchParams();
+  const invite = (searchParams.get('invite') || '').trim();
+  // 'open' | 'invite_only' | null (unknown → treated as closed; fail closed).
+  const [registrationMode, setRegistrationMode] = useState(null);
+
+  const [mode, setMode] = useState(invite ? 'register' : 'login'); // 'login' | 'register'
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -30,6 +38,21 @@ export default function LoginPage() {
   const [resent, setResent] = useState('');
   const [code, setCode] = useState('');
   const [forgot, setForgot] = useState(false); // show the forgot-password panel
+
+  // Learn whether public registration is open. Failure or unknown → invite_only
+  // so the register view fails closed to the waitlist, matching the server.
+  useEffect(() => {
+    let alive = true;
+    api
+      .get('/api/auth/providers')
+      .then((res) => alive && setRegistrationMode(res.data.registrationMode || 'invite_only'))
+      .catch(() => alive && setRegistrationMode('invite_only'));
+    return () => { alive = false; };
+  }, []);
+
+  // Register is gated to the waitlist when signup is closed and no invite link
+  // is present. Login and all existing-account flows are never gated.
+  const showWaitlist = mode === 'register' && !invite && registrationMode !== 'open';
 
   // Already authenticated → skip the form.
   if (!loading && user) return <Navigate to={from} replace />;
@@ -60,6 +83,7 @@ export default function LoginPage() {
           email: form.email,
           password: form.password,
           fullName: form.fullName,
+          ...(invite ? { inviteCode: invite } : {}),
           ...(form.referralSource ? { referralSource: form.referralSource } : {}),
           ...(form.referralSource === 'other' && form.referralSourceDetail
             ? { referralSourceDetail: form.referralSourceDetail }
@@ -149,7 +173,11 @@ export default function LoginPage() {
             Reach your summit, one semester at a time
           </p>
           <p className="mt-3 text-sm text-muted">
-            {mode === 'login' ? 'Welcome back — sign in to keep climbing' : 'Create your account and start the climb'}
+            {mode === 'login'
+              ? 'Welcome back — sign in to keep climbing'
+              : showWaitlist
+                ? 'We open to everyone soon — grab your spot'
+                : 'Create your account and start the climb'}
           </p>
         </div>
 
@@ -237,11 +265,34 @@ export default function LoginPage() {
               ← Back to sign in
             </button>
           </form>
+        ) : showWaitlist ? (
+          <>
+            <WaitlistPanel />
+            <p className="mt-4 text-center text-sm text-muted">
+              Already have an account?{' '}
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError(''); }}
+                className="font-semibold text-brand-600 hover:underline"
+              >
+                Sign in
+              </button>
+            </p>
+          </>
         ) : (
         <form onSubmit={handleSubmit} className="glass-panel space-y-4 p-6">
           <ErrorBanner message={error} />
 
           <SocialAuthButtons />
+
+          {mode === 'register' && invite && (
+            <div className="flex justify-center">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundImage: 'var(--grad-teal-purple)' }} />
+                Invited — code applied
+              </span>
+            </div>
+          )}
 
           {mode === 'register' && (
             <Field label="Full name" value={form.fullName} onChange={update('fullName')} required />

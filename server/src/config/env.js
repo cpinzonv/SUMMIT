@@ -45,6 +45,16 @@ export const env = {
   databaseUrl: required('DATABASE_URL'),
   databaseSsl: optional('DATABASE_SSL', 'false') === 'true',
 
+  // Gated registration. The mode is ADMIN-CONTROLLED at runtime (app_settings,
+  // read via registration.service); REGISTRATION_MODE is only the first-boot
+  // seed (see db/migrate.js) and is intentionally NOT read here at request time.
+  // ALLOWED_EMAILS is a simpler alternative to invite codes: emails that may
+  // register even while invite_only. Comma-separated, case-insensitive.
+  allowedEmails: optional('ALLOWED_EMAILS', '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+
   jwt: {
     accessSecret: required('JWT_ACCESS_SECRET'),
     refreshSecret: required('JWT_REFRESH_SECRET'),

@@ -20,6 +20,7 @@ import { passport } from '../config/passport.js';
 import { env, configuredOAuthProviders, isOAuthProviderConfigured } from '../config/env.js';
 import { signOAuthState, verifyOAuthState, signTwoFactorChallenge } from '../utils/jwt.js';
 import { issueTokensForUser } from '../services/auth.service.js';
+import { getRegistrationMode } from '../services/registration.service.js';
 
 const router = Router();
 
@@ -34,9 +35,15 @@ const SCOPES = {
   apple: ['name', 'email'],
 };
 
-/** Tells the client which social buttons to show (only configured providers). */
-router.get('/providers', (req, res) => {
-  res.json({ providers: configuredOAuthProviders() });
+/** Tells the client which social buttons to show (only configured providers),
+ *  and whether public registration is open or invite_only (so the register page
+ *  can show the waitlist panel while closed). The mode is admin-controlled. */
+router.get('/providers', async (req, res, next) => {
+  try {
+    res.json({ providers: configuredOAuthProviders(), registrationMode: await getRegistrationMode() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 /** Send the browser to the SPA login page with a short error code in the hash. */

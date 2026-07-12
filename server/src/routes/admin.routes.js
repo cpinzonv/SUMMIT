@@ -50,4 +50,11 @@ router.get('/whitelist', asyncHandler(admin.whitelistList));
 router.post('/whitelist/add', validate(admin.whitelistAddSchema), asyncHandler(admin.whitelistAdd));
 router.post('/whitelist/remove', validate(admin.whitelistRemoveSchema), asyncHandler(admin.whitelistRemove));
 
+// Gated registration — mode + waitlist rollup, and invite-code management.
+router.get('/registration', asyncHandler(admin.registrationStatus));
+router.put('/registration/mode', validate(admin.registrationModeSchema), asyncHandler(admin.setRegistrationMode));
+router.get('/invite-codes', asyncHandler(admin.listInvites));
+router.post('/invite-codes', validate(admin.inviteCreateSchema), asyncHandler(admin.createInvite));
+router.post('/invite-codes/revoke', validate(admin.inviteRevokeSchema), asyncHandler(admin.revokeInvite));
+
 export default router;

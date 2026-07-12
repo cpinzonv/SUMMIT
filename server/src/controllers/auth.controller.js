@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { logSecurityEvent } from '../services/audit.service.js';
 import * as authService from '../services/auth.service.js';
+import * as registrationService from '../services/registration.service.js';
 
 // Allowed "How'd you hear about us?" values (kept in sync with the client form).
 export const REFERRAL_SOURCES = [
@@ -31,6 +32,16 @@ export const registerSchema = z.object({
   timezone: z.string().optional(),
   referralSource: z.enum(REFERRAL_SOURCES).optional(),
   referralSourceDetail: z.string().max(200).optional(),
+  // Gated registration (invite_only mode): an invite code from the signup form
+  // or the ?invite= link. Validated by registrationGate, consumed on success.
+  inviteCode: z.string().trim().max(64).optional(),
+});
+
+// Public waitlist signup (shown while registration is invite_only).
+export const waitlistSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  university: z.string().trim().max(200).optional(),
+  source: z.string().trim().max(60).optional(),
 });
 
 export const loginSchema = z.object({
@@ -83,6 +94,16 @@ export async function referralAnalytics(req, res) {
 export async function register(req, res) {
   const result = await authService.register(req.body);
   res.status(201).json(result);
+}
+
+/** Join the launch waitlist. Duplicate emails upsert silently (see service). */
+export async function joinWaitlist(req, res) {
+  await registrationService.addToWaitlist({
+    email: req.body.email,
+    university: req.body.university,
+    source: req.body.source || 'register_page',
+  });
+  res.status(201).json({ ok: true });
 }
 
 export async function verifyEmail(req, res) {

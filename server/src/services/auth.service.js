@@ -13,6 +13,7 @@ import { hasPremiumAccess } from './featureGating.service.js';
 import { assertInstitutionActive } from './institution.service.js';
 import { issueCode, verifyCode } from './verification.service.js';
 import { assignFoundingOnSignup } from './billing.service.js';
+import { consumeInviteCode } from './registration.service.js';
 import { isDeviceTrusted, trustDevice, revokeAllTrustedDevices } from './trustedDevice.service.js';
 import { sendEmail } from './messaging.service.js';
 import { logSecurityEvent } from './audit.service.js';
@@ -178,6 +179,7 @@ export async function register({
   timezone,
   referralSource,
   referralSourceDetail,
+  inviteCode,
 }) {
   // Hash first so BOTH branches below pay the bcrypt cost — response timing must
   // not reveal whether the email is already registered.
@@ -229,6 +231,10 @@ export async function register({
   // Founding-member assignment: grab a slot if any remain (race-safe, best-effort
   // — never blocks signup). Existing users are covered by the backfill migration.
   await assignFoundingOnSignup(user.id);
+
+  // Spend the invite code now that an account actually exists (best-effort — the
+  // gate already authorized this signup; a spent-out race must not fail it).
+  if (inviteCode) await consumeInviteCode(inviteCode).catch(() => {});
 
   return { verificationRequired: true, email: user.email, ...(result.devCode ? { devCode: result.devCode } : {}) };
 }
