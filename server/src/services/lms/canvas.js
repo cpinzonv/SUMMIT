@@ -14,7 +14,7 @@
  */
 import { env } from '../../config/env.js';
 import { AppError } from '../../utils/AppError.js';
-import { assertSafeHost, ssrfSafeAgent } from '../../utils/ssrf.js';
+import { assertSafeHost, safeFetch } from '../../utils/ssrf.js';
 
 export const name = 'canvas';
 
@@ -47,9 +47,10 @@ function baseUrl(domain) {
   return `https://${host}`;
 }
 
-// Every outbound Canvas fetch goes through the SSRF-safe dispatcher, which
-// validates the resolved IP is public and pins the connection to it.
-const canvasFetch = (url, opts = {}) => fetch(url, { ...opts, dispatcher: ssrfSafeAgent });
+// Every outbound Canvas fetch goes through the SSRF-safe fetch (undici's own
+// fetch bound to the validating dispatcher — resolves the host, checks the IP is
+// public, and pins the connection to it).
+const canvasFetch = (url, opts = {}) => safeFetch(url, opts);
 
 /** Step 1: the URL we send the user to in order to grant access. */
 export function buildAuthUrl({ domain, redirectUri, state }) {
