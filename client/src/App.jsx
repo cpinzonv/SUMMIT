@@ -22,6 +22,9 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Same page as /login; opens in register mode. Used by invite links
+          (/register?invite=CODE) and by anyone typing /register directly. */}
+      <Route path="/register" element={<LoginPage />} />
       <Route path="/auth/callback" element={<OAuthCallbackPage />} />
       <Route path="/set-password" element={<SetPasswordPage />} />
 
