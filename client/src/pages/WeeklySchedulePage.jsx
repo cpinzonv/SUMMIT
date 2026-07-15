@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
-import { Spinner, ErrorBanner, classGradient, isGlassColor } from '../components/ui';
+import { Spinner, ErrorBanner, ConfirmModal, classGradient, isGlassColor } from '../components/ui';
 import { generateClassSessions, normalizedMeetings } from '../lib/classMeetings';
-import { dayLoads, hoursLabel } from '../lib/scheduleLoad';
+import { dayLoads, hoursLabel, effectiveDate } from '../lib/scheduleLoad';
+import { suggestPlacements } from '../lib/schedulePlacement';
 import { ScheduleDayView } from '../components/ScheduleDayView';
 
 // 'YYYY-MM-DD' → local Date at midnight.
@@ -86,10 +88,13 @@ function packDay(sessions) {
 }
 
 export default function WeeklySchedulePage() {
+  const { preferences } = useAuth();
+  const placementDefault = preferences?.schedulePlacement || 'suggest';
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [cards, setCards] = useState([]); // To-Do feed (assignments + tasks) for workload chips
+  const [weekPlan, setWeekPlan] = useState(null); // { total, days:[{date, placements}] } awaiting confirm
   // The visible week is identified by the Monday it starts on.
   const [weekStart, setWeekStart] = useState(() => startOfWeekMon(new Date()));
   const [openDayKey, setOpenDayKey] = useState(null); // 'YYYY-MM-DD' when the interactive day view is open
@@ -169,6 +174,55 @@ export default function WeeklySchedulePage() {
   const goPrev = () => setWeekStart((w) => addDays(w, -7));
   const goNext = () => setWeekStart((w) => addDays(w, 7));
 
+  // Week-level "Suggest": run the placement engine day-by-day for the visible
+  // week, then open a summary confirm. Same rules as the day view — nothing is
+  // saved until the user confirms.
+  const durMin = (c) => Math.round((c.estimatedHours != null ? c.estimatedHours : 1) * 60);
+  const runWeekSuggest = () => {
+    const activeClassIds = new Set(activeClasses.map((c) => c.id));
+    const plan = days
+      .map((d) => {
+        const key = dateKey(d);
+        const obstacles = (byDay.get(key) || []).map((s) => ({ startMin: s.startMin, endMin: s.endMin ?? s.startMin + 60, isClass: true }));
+        const items = [];
+        for (const c of cards) {
+          if (c.source !== 'assignment' || !activeClassIds.has(c.contextId) || c.done || c.boardStage === 'done') continue;
+          if (c.scheduledTime) {
+            const sd = new Date(c.scheduledTime);
+            if (dateKey(sd) === key) obstacles.push({ startMin: sd.getHours() * 60 + sd.getMinutes(), endMin: sd.getHours() * 60 + sd.getMinutes() + durMin(c), isClass: false });
+            continue;
+          }
+          if (c.estimatedHours == null) continue;
+          const ed = effectiveDate(c);
+          if (ed && dateKey(ed) === key) items.push({ id: c.id, durationMin: durMin(c) });
+        }
+        const { placements } = suggestPlacements(items, obstacles);
+        return { date: d, placements };
+      })
+      .filter((p) => p.placements.length > 0);
+    const total = plan.reduce((s, p) => s + p.placements.length, 0);
+    if (total === 0) { setError('Nothing left to auto-schedule this week.'); return; }
+    setError('');
+    setWeekPlan({ total, days: plan });
+  };
+
+  const confirmWeekPlan = () => {
+    const saves = [];
+    for (const p of weekPlan.days) {
+      for (const pl of p.placements) {
+        const iso = new Date(p.date.getFullYear(), p.date.getMonth(), p.date.getDate(), Math.floor(pl.startMin / 60), pl.startMin % 60).toISOString();
+        saves.push({ cardId: pl.id, iso });
+      }
+    }
+    setWeekPlan(null);
+    const prev = new Map(saves.map((s) => [s.cardId, cards.find((c) => c.id === s.cardId)?.scheduledTime ?? null]));
+    setCards((cs) => cs.map((c) => { const s = saves.find((x) => x.cardId === c.id); return s ? { ...c, scheduledTime: s.iso } : c; }));
+    Promise.all(saves.map((s) => api.patch(`/api/assignments/${s.cardId}`, { scheduledTime: s.iso }))).catch(() => {
+      setCards((cs) => cs.map((c) => (prev.has(c.id) ? { ...c, scheduledTime: prev.get(c.id) } : c)));
+      setError('Could not save the suggested schedule — please try again.');
+    });
+  };
+
   if (loading) return <Spinner label="Loading your schedule…" />;
 
   return (
@@ -181,7 +235,8 @@ export default function WeeklySchedulePage() {
           </p>
         </div>
         {hasAnyMeetings && !openDayKey && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={runWeekSuggest} className="btn btn-soft !py-1.5">Suggest week</button>
             <button type="button" onClick={goToday} className="btn btn-soft !py-1.5">Today</button>
             <div className="flex items-center gap-2">
               <button type="button" onClick={goPrev} aria-label="Previous week" className="btn btn-soft !px-3 !py-1.5">←</button>
@@ -203,6 +258,7 @@ export default function WeeklySchedulePage() {
           cards={cards}
           setCards={setCards}
           onBack={() => setOpenDayKey(null)}
+          placementDefault={placementDefault}
         />
       ) : (
         <div className="glass-card overflow-hidden p-0">
@@ -321,6 +377,17 @@ export default function WeeklySchedulePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {weekPlan && (
+        <ConfirmModal
+          title="Suggest this week&rsquo;s schedule?"
+          message={`Place ${weekPlan.total} ${weekPlan.total === 1 ? 'assignment' : 'assignments'} across ${weekPlan.days.length} ${weekPlan.days.length === 1 ? 'day' : 'days'} into open time slots. Nothing is saved until you confirm, and you can adjust any block afterward.`}
+          detail={weekPlan.days.map((p) => `${DOW[(p.date.getDay() + 6) % 7]} ${p.date.getDate()}: ${p.placements.length}`).join('   ·   ')}
+          confirmLabel="Place them"
+          onConfirm={confirmWeekPlan}
+          onClose={() => setWeekPlan(null)}
+        />
       )}
     </div>
   );

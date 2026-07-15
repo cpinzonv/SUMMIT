@@ -1061,6 +1061,12 @@ function PreferencesTab({ prefs, set }) {
         <Row label="Hide Planner tab" hint="Remove Planner from the navigation.">
           <Toggle on={!!prefs.hidePlanner} onChange={() => set('hidePlanner')(!prefs.hidePlanner)} />
         </Row>
+        <Row label="Schedule planning" hint="On the Schedule day view: auto-suggest block times, or place assignments yourself.">
+          <select value={prefs.schedulePlacement} onChange={(e) => set('schedulePlacement')(e.target.value)} className="field !w-auto">
+            <option value="suggest">Suggest times automatically</option>
+            <option value="manual">I&rsquo;ll place assignments myself</option>
+          </select>
+        </Row>
       </Section>
 
       <PodcastVoicesSection prefs={prefs} set={set} />

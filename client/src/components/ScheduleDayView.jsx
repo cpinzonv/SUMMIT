@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { Toast, classGradient, classAccent, isGlassColor } from './ui';
 import { generateClassSessions } from '../lib/classMeetings';
 import { effectiveDate, hoursLabel } from '../lib/scheduleLoad';
+import { suggestPlacements } from '../lib/schedulePlacement';
 
 /**
  * Schedule — interactive single-day view (Stage 3). Drag assignments from the
@@ -39,12 +40,16 @@ const rangeLabel = (start, dur) => `${fmtClock(start)}–${fmtClock(start + dur)
 const minutesOf = (iso) => { const d = new Date(iso); return d.getHours() * 60 + d.getMinutes(); };
 const overlaps = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
 
-export function ScheduleDayView({ date, activeClasses, cards, setCards, onBack }) {
+export function ScheduleDayView({ date, activeClasses, cards, setCards, onBack, placementDefault = 'manual' }) {
   const dayKey = dateKey(date);
   const timelineRef = useRef(null);
   const [drag, setDrag] = useState(null); // { cardId, durationMin, grabOffsetMin, source }
   const [dropMin, setDropMin] = useState(null); // snapped top of the drop preview
   const [toast, setToast] = useState(null);
+  // AI suggestions await confirmation as GHOST blocks; nothing is saved until
+  // the user confirms. `unplaceable` are items that couldn't fit any gap.
+  const [ghosts, setGhosts] = useState([]); // { cardId, startMin, durationMin }
+  const [unplaceable, setUnplaceable] = useState(() => new Set());
 
   const activeClassIds = useMemo(() => new Set(activeClasses.map((c) => c.id)), [activeClasses]);
 
@@ -134,6 +139,55 @@ export function ScheduleDayView({ date, activeClasses, cards, setCards, onBack }
     });
   };
 
+  const isoFor = (min) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(min / 60), min % 60).toISOString();
+
+  // Run the deterministic placement engine over the current unscheduled items,
+  // using class meetings + already-scheduled blocks as obstacles. Proposals show
+  // as ghost blocks; nothing is saved until the user confirms.
+  const runSuggest = () => {
+    const obstacles = [
+      ...sessions.map((s) => ({ startMin: s.startMin, endMin: s.endMin ?? s.startMin + 60, isClass: true })),
+      ...blocks.map((b) => ({ startMin: b.startMin, endMin: b.startMin + b.durationMin, isClass: false })),
+    ];
+    const items = tray.map((c) => ({ id: c.id, durationMin: durationMin(c) }));
+    const { placements, unplaceable: un } = suggestPlacements(items, obstacles);
+    setGhosts(placements.map((p) => ({ cardId: p.id, startMin: p.startMin, durationMin: p.durationMin })));
+    setUnplaceable(new Set(un));
+  };
+
+  const dismissGhosts = () => {
+    setGhosts([]);
+    setUnplaceable(new Set());
+  };
+
+  // Persist every ghost's start time in one batch (optimistic; rollback all on
+  // any failure). Confirmed ghosts become real scheduled blocks.
+  const confirmGhosts = () => {
+    if (ghosts.length === 0) return;
+    const saves = ghosts.map((g) => ({ cardId: g.cardId, iso: isoFor(g.startMin) }));
+    const prev = new Map(saves.map((s) => [s.cardId, cards.find((c) => c.id === s.cardId)?.scheduledTime ?? null]));
+    setCards((cs) => cs.map((c) => { const s = saves.find((x) => x.cardId === c.id); return s ? { ...c, scheduledTime: s.iso } : c; }));
+    setGhosts([]);
+    setUnplaceable(new Set());
+    Promise.all(saves.map((s) => api.patch(`/api/assignments/${s.cardId}`, { scheduledTime: s.iso }))).catch(() => {
+      setCards((cs) => cs.map((c) => (prev.has(c.id) ? { ...c, scheduledTime: prev.get(c.id) } : c)));
+      setToast({ type: 'error', msg: 'Could not save all suggestions — try again.' });
+      setTimeout(() => setToast(null), 3500);
+    });
+  };
+
+  // On opening a day (or changing the placement default): clear any prior
+  // proposals, and when the default is "suggest" auto-run the engine so ghosts
+  // await confirmation. Never saves. Keyed on [dayKey, placementDefault] only —
+  // scheduling/dismissing within the day must NOT re-trigger a fresh suggestion.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setGhosts([]);
+    setUnplaceable(new Set());
+    if (placementDefault === 'suggest' && tray.length > 0) runSuggest();
+  }, [dayKey, placementDefault]);
+
   const cursorMin = (clientY) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect) return startMin;
@@ -155,8 +209,12 @@ export function ScheduleDayView({ date, activeClasses, cards, setCards, onBack }
     e.preventDefault();
     if (!drag) return;
     const top = snapTop(e.clientY);
-    const iso = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(top / 60), top % 60).toISOString();
-    persist(drag.cardId, iso);
+    if (drag.source === 'ghost') {
+      // Adjusting a proposal — local only, saved on Confirm.
+      setGhosts((gs) => gs.map((g) => (g.cardId === drag.cardId ? { ...g, startMin: top } : g)));
+    } else {
+      persist(drag.cardId, isoFor(top));
+    }
     setDrag(null);
     setDropMin(null);
   };
@@ -170,6 +228,8 @@ export function ScheduleDayView({ date, activeClasses, cards, setCards, onBack }
   const endDrag = () => { setDrag(null); setDropMin(null); };
 
   const weekday = date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  // Items proposed as ghosts are shown on the timeline, not in the tray.
+  const visibleTray = tray.filter((c) => !ghosts.some((g) => g.cardId === c.id));
 
   return (
     <div>
@@ -181,7 +241,19 @@ export function ScheduleDayView({ date, activeClasses, cards, setCards, onBack }
             {totalLabel && <p className="text-xs font-semibold text-brand-600">{totalLabel} estimated</p>}
           </div>
         </div>
-        <p className="text-xs text-muted">Drag a task onto the timeline to plan when you&rsquo;ll do it.</p>
+        <div className="flex items-center gap-2">
+          {ghosts.length > 0 ? (
+            <>
+              <span className="hidden text-xs font-semibold text-brand-600 sm:inline">{ghosts.length} suggested</span>
+              <button type="button" onClick={dismissGhosts} className="btn btn-soft !py-1.5">Dismiss</button>
+              <button type="button" onClick={confirmGhosts} className="btn btn-primary !py-1.5">Confirm schedule</button>
+            </>
+          ) : (
+            <button type="button" onClick={runSuggest} disabled={tray.length === 0} className="btn btn-soft !py-1.5">
+              Suggest times
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-start">
@@ -275,6 +347,41 @@ export function ScheduleDayView({ date, activeClasses, cards, setCards, onBack }
                     </div>
                   );
                 })}
+
+                {/* AI suggestions (ghosts) — dashed + translucent, draggable to adjust. */}
+                {ghosts.map((g) => {
+                  const card = cards.find((c) => c.id === g.cardId);
+                  if (!card) return null;
+                  const top = (g.startMin - startMin) * PX_PER_MIN;
+                  const h = Math.max(g.durationMin * PX_PER_MIN - 2, 22);
+                  const gEnd = g.startMin + g.durationMin;
+                  const conflict =
+                    sessions.some((s) => s.startMin != null && overlaps(g.startMin, gEnd, s.startMin, s.endMin ?? s.startMin + 60)) ||
+                    blocks.some((o) => overlaps(g.startMin, gEnd, o.startMin, o.startMin + o.durationMin)) ||
+                    ghosts.some((o) => o.cardId !== g.cardId && overlaps(g.startMin, gEnd, o.startMin, o.startMin + o.durationMin));
+                  return (
+                    <div
+                      key={`g-${g.cardId}`}
+                      draggable
+                      onDragStart={startDrag(card, 'ghost')}
+                      onDragEnd={endDrag}
+                      title={`Suggested: ${card.title} · ${rangeLabel(g.startMin, g.durationMin)} — drag to adjust`}
+                      className={`group absolute left-1 right-1 overflow-hidden rounded-lg border-2 border-dashed bg-white/55 p-1.5 text-left backdrop-blur transition ${
+                        drag?.cardId === g.cardId ? 'opacity-30' : 'cursor-grab active:cursor-grabbing'
+                      } ${conflict ? 'border-amber-400' : 'border-brand-400/90'}`}
+                      style={{ top: `${top}px`, height: `${h}px` }}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundImage: classAccent({ color: card.color }) }} />
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-slate-700">{card.title}</span>
+                      </div>
+                      <div className="truncate text-[10px] text-slate-500">
+                        {rangeLabel(g.startMin, g.durationMin)}
+                        {conflict ? <span className="font-semibold text-amber-600"> · overlaps</span> : <span className="text-brand-500"> · suggested</span>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -287,31 +394,36 @@ export function ScheduleDayView({ date, activeClasses, cards, setCards, onBack }
           onDrop={(e) => { if (drag?.source === 'block') { e.preventDefault(); persist(drag.cardId, null); endDrag(); } }}
         >
           <h3 className="text-sm font-bold text-ink">Unscheduled</h3>
-          <p className="mt-0.5 text-xs text-muted">Due or planned for this day. Drag onto the timeline.</p>
+          <p className="mt-0.5 text-xs text-muted">Due or planned for this day. Drag onto the timeline, or use Suggest times.</p>
           <div className="mt-3 space-y-2">
-            {tray.length === 0 ? (
+            {visibleTray.length === 0 ? (
               <p className="rounded-xl border border-dashed border-white/50 px-3 py-6 text-center text-xs text-muted/70">
-                {blocks.length ? 'Everything for today is scheduled.' : 'Nothing to schedule for this day.'}
+                {ghosts.length ? 'All suggestions are on the timeline — confirm above.' : blocks.length ? 'Everything for today is scheduled.' : 'Nothing to schedule for this day.'}
               </p>
             ) : (
-              tray.map((c) => (
-                <div
-                  key={c.id}
-                  draggable
-                  onDragStart={startDrag(c, 'tray')}
-                  onDragEnd={endDrag}
-                  className={`flex cursor-grab items-center gap-2 rounded-xl border border-white/50 bg-white/70 px-3 py-2 shadow-sm transition active:cursor-grabbing hover:-translate-y-0.5 hover:shadow-md ${
-                    drag?.cardId === c.id ? 'opacity-40' : ''
-                  }`}
-                >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundImage: classAccent({ color: c.color }) }} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-ink">{c.title}</span>
-                    <span className="block truncate text-[11px] text-muted">{c.contextName}</span>
-                  </span>
-                  <span className="shrink-0 text-xs font-semibold text-brand-600">{hoursLabel(c.estimatedHours)}</span>
-                </div>
-              ))
+              visibleTray.map((c) => {
+                const cantFit = unplaceable.has(c.id);
+                return (
+                  <div
+                    key={c.id}
+                    draggable
+                    onDragStart={startDrag(c, 'tray')}
+                    onDragEnd={endDrag}
+                    className={`flex cursor-grab items-center gap-2 rounded-xl border bg-white/70 px-3 py-2 shadow-sm transition active:cursor-grabbing hover:-translate-y-0.5 hover:shadow-md ${
+                      cantFit ? 'border-amber-400/70' : 'border-white/50'
+                    } ${drag?.cardId === c.id ? 'opacity-40' : ''}`}
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundImage: classAccent({ color: c.color }) }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-ink">{c.title}</span>
+                      <span className="block truncate text-[11px] text-muted">
+                        {cantFit ? <span className="font-semibold text-amber-600">No room — drag to place</span> : c.contextName}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs font-semibold text-brand-600">{hoursLabel(c.estimatedHours)}</span>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
