@@ -16,6 +16,7 @@ function toPublicAssignment(row) {
     category: row.category,
     dueDate: row.due_date,
     plannedDate: row.planned_date,
+    scheduledTime: row.scheduled_time ?? null, // time-blocking (Schedule tab); null until set
     pointValue: row.point_value == null ? null : Number(row.point_value),
     estimatedHours: row.estimated_hours == null ? null : Number(row.estimated_hours),
     status: row.status,
@@ -92,11 +93,11 @@ export async function createAssignment(userId, classId, input) {
   const { rows } = await query(
     `INSERT INTO assignments
        (class_id, title, description, category, due_date, planned_date,
-        point_value, status, priority, estimated_hours)
+        point_value, status, priority, estimated_hours, scheduled_time)
      VALUES ($1,$2,$3,$4,$5,$6,$7,
              COALESCE($8::assignment_status, 'not_started'),
              COALESCE($9::assignment_priority, 'none'),
-             $10)
+             $10,$11)
      RETURNING id`,
     [
       classId,
@@ -109,6 +110,7 @@ export async function createAssignment(userId, classId, input) {
       input.status ?? null,
       input.priority ?? null,
       input.estimatedHours ?? null,
+      input.scheduledTime ?? null,
     ],
   );
   return fetchPublicAssignment(rows[0].id);
@@ -123,6 +125,7 @@ const UPDATABLE = {
   category: 'category',
   dueDate: 'due_date',
   plannedDate: 'planned_date',
+  scheduledTime: 'scheduled_time',
   pointValue: 'point_value',
   status: 'status',
   priority: 'priority',

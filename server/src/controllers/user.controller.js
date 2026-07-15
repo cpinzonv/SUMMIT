@@ -30,6 +30,8 @@ export const preferencesSchema = z
     boardExtraColumns: z.boolean().optional(),
     // Hide the Planner tab from the primary nav.
     hidePlanner: z.boolean().optional(),
+    // Schedule day view: auto-suggest block times on open, or place manually.
+    schedulePlacement: z.enum(['suggest', 'manual']).optional(),
     // Podcast host voices (ElevenLabs voice ids); '' clears back to the default.
     podcastVoiceA: z.string().max(64).optional(),
     podcastVoiceB: z.string().max(64).optional(),

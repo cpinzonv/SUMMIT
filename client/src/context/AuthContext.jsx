@@ -34,6 +34,7 @@ const DEFAULT_PREFS = {
   showArchived: false,
   boardExtraColumns: false, // show Backlog + Planning columns on the Kanban boards
   hidePlanner: false, // hide the Planner tab from the nav
+  schedulePlacement: 'suggest', // Schedule day view: 'suggest' auto-proposes block times, 'manual' waits for you
 };
 
 /** Apply visual preferences (theme/font/compact) to the document root. */

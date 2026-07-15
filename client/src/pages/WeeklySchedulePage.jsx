@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { api, errorMessage } from '../api/client';
-import { Spinner, ErrorBanner, classGradient, isGlassColor } from '../components/ui';
+import { Spinner, ErrorBanner, ConfirmModal, classGradient, isGlassColor } from '../components/ui';
 import { generateClassSessions, normalizedMeetings } from '../lib/classMeetings';
+import { dayLoads, hoursLabel, effectiveDate } from '../lib/scheduleLoad';
+import { suggestPlacements } from '../lib/schedulePlacement';
+import { ScheduleDayView } from '../components/ScheduleDayView';
+
+// 'YYYY-MM-DD' → local Date at midnight.
+const parseKey = (key) => { const [y, m, d] = key.split('-').map(Number); return new Date(y, m - 1, d); };
 
 /**
  * Schedule — the student's ACTUAL current weekly schedule, derived automatically
@@ -81,18 +88,26 @@ function packDay(sessions) {
 }
 
 export default function WeeklySchedulePage() {
+  const { preferences } = useAuth();
+  const placementDefault = preferences?.schedulePlacement || 'suggest';
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cards, setCards] = useState([]); // To-Do feed (assignments + tasks) for workload chips
+  const [weekPlan, setWeekPlan] = useState(null); // { total, days:[{date, placements}] } awaiting confirm
   // The visible week is identified by the Monday it starts on.
   const [weekStart, setWeekStart] = useState(() => startOfWeekMon(new Date()));
+  const [openDayKey, setOpenDayKey] = useState(null); // 'YYYY-MM-DD' when the interactive day view is open
 
   useEffect(() => {
     let alive = true;
-    api
-      .get('/api/classes')
-      .then((res) => { if (alive) setClasses(res.data.classes || []); })
-      .catch((err) => { if (alive) setError(errorMessage(err, 'Could not load your classes.')); })
+    Promise.all([api.get('/api/classes'), api.get('/api/todo')])
+      .then(([clsRes, todoRes]) => {
+        if (!alive) return;
+        setClasses(clsRes.data.classes || []);
+        setCards(todoRes.data.cards || []);
+      })
+      .catch((err) => { if (alive) setError(errorMessage(err, 'Could not load your schedule.')); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
@@ -103,6 +118,13 @@ export default function WeeklySchedulePage() {
     () => activeClasses.some((c) => normalizedMeetings(c).length > 0),
     [activeClasses],
   );
+
+  // Per-day estimated workload (assignments only, done excluded, active classes),
+  // keyed by 'YYYY-MM-DD'. Effective day = scheduled_time ?? planned_date ?? due_date.
+  const loads = useMemo(() => {
+    const activeClassIds = new Set(activeClasses.map((c) => c.id));
+    return dayLoads(cards, { activeClassIds });
+  }, [cards, activeClasses]);
 
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -152,6 +174,55 @@ export default function WeeklySchedulePage() {
   const goPrev = () => setWeekStart((w) => addDays(w, -7));
   const goNext = () => setWeekStart((w) => addDays(w, 7));
 
+  // Week-level "Suggest": run the placement engine day-by-day for the visible
+  // week, then open a summary confirm. Same rules as the day view — nothing is
+  // saved until the user confirms.
+  const durMin = (c) => Math.round((c.estimatedHours != null ? c.estimatedHours : 1) * 60);
+  const runWeekSuggest = () => {
+    const activeClassIds = new Set(activeClasses.map((c) => c.id));
+    const plan = days
+      .map((d) => {
+        const key = dateKey(d);
+        const obstacles = (byDay.get(key) || []).map((s) => ({ startMin: s.startMin, endMin: s.endMin ?? s.startMin + 60, isClass: true }));
+        const items = [];
+        for (const c of cards) {
+          if (c.source !== 'assignment' || !activeClassIds.has(c.contextId) || c.done || c.boardStage === 'done') continue;
+          if (c.scheduledTime) {
+            const sd = new Date(c.scheduledTime);
+            if (dateKey(sd) === key) obstacles.push({ startMin: sd.getHours() * 60 + sd.getMinutes(), endMin: sd.getHours() * 60 + sd.getMinutes() + durMin(c), isClass: false });
+            continue;
+          }
+          if (c.estimatedHours == null) continue;
+          const ed = effectiveDate(c);
+          if (ed && dateKey(ed) === key) items.push({ id: c.id, durationMin: durMin(c) });
+        }
+        const { placements } = suggestPlacements(items, obstacles);
+        return { date: d, placements };
+      })
+      .filter((p) => p.placements.length > 0);
+    const total = plan.reduce((s, p) => s + p.placements.length, 0);
+    if (total === 0) { setError('Nothing left to auto-schedule this week.'); return; }
+    setError('');
+    setWeekPlan({ total, days: plan });
+  };
+
+  const confirmWeekPlan = () => {
+    const saves = [];
+    for (const p of weekPlan.days) {
+      for (const pl of p.placements) {
+        const iso = new Date(p.date.getFullYear(), p.date.getMonth(), p.date.getDate(), Math.floor(pl.startMin / 60), pl.startMin % 60).toISOString();
+        saves.push({ cardId: pl.id, iso });
+      }
+    }
+    setWeekPlan(null);
+    const prev = new Map(saves.map((s) => [s.cardId, cards.find((c) => c.id === s.cardId)?.scheduledTime ?? null]));
+    setCards((cs) => cs.map((c) => { const s = saves.find((x) => x.cardId === c.id); return s ? { ...c, scheduledTime: s.iso } : c; }));
+    Promise.all(saves.map((s) => api.patch(`/api/assignments/${s.cardId}`, { scheduledTime: s.iso }))).catch(() => {
+      setCards((cs) => cs.map((c) => (prev.has(c.id) ? { ...c, scheduledTime: prev.get(c.id) } : c)));
+      setError('Could not save the suggested schedule — please try again.');
+    });
+  };
+
   if (loading) return <Spinner label="Loading your schedule…" />;
 
   return (
@@ -163,8 +234,9 @@ export default function WeeklySchedulePage() {
             Your week, built from your classes&rsquo; meeting times.
           </p>
         </div>
-        {hasAnyMeetings && (
-          <div className="flex items-center gap-2">
+        {hasAnyMeetings && !openDayKey && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={runWeekSuggest} className="btn btn-soft !py-1.5">Suggest week</button>
             <button type="button" onClick={goToday} className="btn btn-soft !py-1.5">Today</button>
             <div className="flex items-center gap-2">
               <button type="button" onClick={goPrev} aria-label="Previous week" className="btn btn-soft !px-3 !py-1.5">←</button>
@@ -179,6 +251,15 @@ export default function WeeklySchedulePage() {
 
       {!hasAnyMeetings ? (
         <EmptyStateCard />
+      ) : openDayKey ? (
+        <ScheduleDayView
+          date={parseKey(openDayKey)}
+          activeClasses={activeClasses}
+          cards={cards}
+          setCards={setCards}
+          onBack={() => setOpenDayKey(null)}
+          placementDefault={placementDefault}
+        />
       ) : (
         <div className="glass-card overflow-hidden p-0">
           <div className="overflow-x-auto">
@@ -190,10 +271,20 @@ export default function WeeklySchedulePage() {
               >
                 <div />
                 {days.map((d) => {
-                  const isToday = dateKey(d) === todayKey;
+                  const key = dateKey(d);
+                  const dow = DOW[(d.getDay() + 6) % 7];
+                  const isToday = key === todayKey;
+                  const load = loads.get(key);
+                  // Clicking the header (or its load chip) opens the interactive day view.
                   return (
-                    <div key={dateKey(d)} className="border-l border-white/30 px-2 py-2 text-center">
-                      <div className="text-[11px] font-medium text-muted">{DOW[(d.getDay() + 6) % 7]}</div>
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setOpenDayKey(key)}
+                      title={`Open ${dow} ${d.getDate()} — plan your day`}
+                      className="group border-l border-white/30 px-2 py-2 text-center transition hover:bg-white/40"
+                    >
+                      <div className="text-[11px] font-medium text-muted">{dow}</div>
                       <div
                         className={`mx-auto mt-0.5 grid h-6 w-6 place-items-center text-sm font-bold ${
                           isToday ? 'rounded-full text-white' : 'text-ink'
@@ -202,7 +293,13 @@ export default function WeeklySchedulePage() {
                       >
                         {d.getDate()}
                       </div>
-                    </div>
+                      {/* Per-day estimated workload chip (omitted when 0). */}
+                      {load && load.hours > 0 && (
+                        <span className="mx-auto mt-1.5 inline-flex items-center rounded-full border border-white/50 bg-white/50 px-2 py-0.5 text-[11px] font-bold text-brand-700 transition group-hover:bg-white/80">
+                          {hoursLabel(load.hours)}
+                        </span>
+                      )}
+                    </button>
                   );
                 })}
               </div>
@@ -280,6 +377,17 @@ export default function WeeklySchedulePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {weekPlan && (
+        <ConfirmModal
+          title="Suggest this week&rsquo;s schedule?"
+          message={`Place ${weekPlan.total} ${weekPlan.total === 1 ? 'assignment' : 'assignments'} across ${weekPlan.days.length} ${weekPlan.days.length === 1 ? 'day' : 'days'} into open time slots. Nothing is saved until you confirm, and you can adjust any block afterward.`}
+          detail={weekPlan.days.map((p) => `${DOW[(p.date.getDay() + 6) % 7]} ${p.date.getDate()}: ${p.placements.length}`).join('   ·   ')}
+          confirmLabel="Place them"
+          onConfirm={confirmWeekPlan}
+          onClose={() => setWeekPlan(null)}
+        />
       )}
     </div>
   );
