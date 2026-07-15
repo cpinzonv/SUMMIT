@@ -35,6 +35,19 @@ router.patch('/plan/:planId/term', validate(pb.paramPlan, 'params'), validate(pb
 router.patch('/plan/:planId/course-pref', validate(pb.paramPlan, 'params'), validate(pb.courseReqSchema), asyncHandler(pb.setCourseRequirement));
 router.post('/plan/:planId/commit', validate(pb.paramPlan, 'params'), validate(pb.commitSchema), asyncHandler(pb.commitSchedule));
 
+// Stage C: save ranking preferences, and the single AI tradeoff-advisor call.
+// The cache-check runs BEFORE enforceUsage so a cached response never meters a
+// new AI event; only a genuine (candidates+prefs) miss reaches Claude.
+router.patch('/plan/:planId/preferences', validate(pb.paramPlan, 'params'), validate(pb.preferencesSchema), asyncHandler(pb.setPreferences));
+router.post(
+  '/plan/:planId/advise',
+  validate(pb.paramPlan, 'params'),
+  validate(pb.adviseSchema),
+  asyncHandler(pb.adviseCacheCheck),
+  enforceUsage('extraction'),
+  asyncHandler(pb.advise),
+);
+
 // Edit / remove a single saved section (owner-scoped).
 router.patch('/sections/:sectionId', validate(pb.paramSection, 'params'), validate(pb.updateSchema), asyncHandler(pb.updateSection));
 router.delete('/sections/:sectionId', validate(pb.paramSection, 'params'), asyncHandler(pb.deleteSection));

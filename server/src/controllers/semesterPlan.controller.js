@@ -67,3 +67,52 @@ export const commitSchema = z.object({ sectionIds: z.array(z.string().uuid()).mi
 export async function commitSchedule(req, res) {
   res.json(await svc.commitSchedule(req.user.id, req.params.planId, req.body.sectionIds));
 }
+
+/* --------------------------------------------- Stage C: preferences + advisor */
+
+const prefsSchema = z
+  .object({
+    earliestStart: z.string().max(10).nullable().optional(),
+    latestEnd: z.string().max(10).nullable().optional(),
+    daysFree: z.array(z.string().max(3)).max(7).optional(),
+    gapStyle: z.enum(['minimize', 'spread']).nullable().optional(),
+    fewerDays: z.boolean().optional(),
+    professors: z.record(z.enum(['prefer', 'avoid'])).optional(),
+  })
+  .nullable();
+
+export const preferencesSchema = z.object({ preferences: prefsSchema });
+export async function setPreferences(req, res) {
+  res.json({ preferences: await svc.setPreferences(req.user.id, req.params.planId, req.body.preferences) });
+}
+
+const adviseCandidate = z.object({
+  id: z.string().min(1).max(20),
+  label: z.string().max(80).optional(),
+  sectionIds: z.array(z.string().uuid()).min(1).max(20),
+  daysOnCampus: z.number().int().min(0).max(7).optional(),
+  earliest: z.string().max(10).nullable().optional(),
+  latest: z.string().max(10).nullable().optional(),
+  gapHours: z.number().min(0).max(200).optional(),
+  professors: z.array(z.string().max(120)).max(30).optional(),
+  perDay: z.record(z.string().max(400)).optional(),
+  compromises: z.array(z.string().max(120)).max(30).optional(),
+});
+export const adviseSchema = z.object({
+  candidates: z.array(adviseCandidate).min(1).max(3),
+  preferences: prefsSchema.optional(),
+});
+
+// Cache-check middleware: a hit returns the cached advice and ENDS the request,
+// so it never reaches enforceUsage — re-opening the advisor doesn't re-bill.
+export async function adviseCacheCheck(req, res, next) {
+  const hash = svc.hashAdvice(req.body.candidates, req.body.preferences || {});
+  req.adviceHash = hash;
+  const cached = await svc.getCachedAdvice(req.user.id, req.params.planId, hash);
+  if (cached) { res.json({ ...cached, cached: true }); return; }
+  next();
+}
+export async function advise(req, res) {
+  const result = await svc.adviseSchedules(req.user.id, req.params.planId, req.body, req.adviceHash);
+  res.json({ ...result, cached: false });
+}

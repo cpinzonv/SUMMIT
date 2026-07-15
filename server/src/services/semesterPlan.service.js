@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import Anthropic from '@anthropic-ai/sdk';
 import { query } from '../config/db.js';
 import { env } from '../config/env.js';
@@ -245,6 +246,7 @@ export async function getPlan(userId, term = null) {
     plan: { id: plan.id, term: plan.term },
     sections: await sectionsForPlan(plan.id),
     requirements: await requirementsForPlan(plan.id),
+    preferences: plan.preferences ?? null,
   };
 }
 
@@ -395,4 +397,148 @@ export async function commitSchedule(userId, planId, sectionIds = []) {
     created.push(rows[0]);
   }
   return { term: `${parsed.season} ${parsed.year}`, count: created.length, items: created };
+}
+
+/* ------------------------------------------ Stage C: preferences + AI advisor */
+
+/** Persist the student's ranking preferences on the draft plan (owner-scoped). */
+export async function setPreferences(userId, planId, preferences) {
+  await assertOwnedPlan(userId, planId);
+  await query('UPDATE draft_semester_plans SET preferences = $1::jsonb, updated_at = now() WHERE id = $2', [
+    JSON.stringify(preferences ?? null),
+    planId,
+  ]);
+  return preferences ?? null;
+}
+
+// Stable key over the top candidates (by section ids) + preferences, so re-opening
+// the advisor with the same state is a cache hit and prefs/pins changes miss.
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((o, k) => { o[k] = canonical(value[k]); return o; }, {});
+  }
+  return value;
+}
+export function hashAdvice(candidates = [], preferences = {}) {
+  const key = { c: candidates.map((c) => [...(c.sectionIds || [])].sort()), p: canonical(preferences || {}) };
+  return createHash('sha256').update(JSON.stringify(key)).digest('hex');
+}
+
+/** Cached advisor response for (plan, hash), owner-scoped. Null on miss. */
+export async function getCachedAdvice(userId, planId, hash) {
+  const { rows } = await query(
+    `SELECT pa.response FROM plan_advice pa
+       JOIN draft_semester_plans dp ON dp.id = pa.plan_id
+      WHERE pa.plan_id = $1 AND pa.hash = $2 AND dp.user_id = $3`,
+    [planId, hash, userId],
+  );
+  return rows[0]?.response ?? null;
+}
+
+const adviceSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    advice: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: { id: { type: 'string' }, text: { type: 'string' } },
+        required: ['id', 'text'],
+      },
+    },
+  },
+  required: ['advice'],
+};
+
+export const ADVISOR_PROMPT = `You are a warm, level-headed academic advisor helping a college student choose between a few conflict-free class schedules for an upcoming term. You are given the student's stated preferences and 2–3 candidate schedules, already ranked best-fit first.
+
+For EACH candidate, write 2–3 sentences in a calm, peer-to-peer voice that honestly compares its tradeoffs — what it gives the student and what it costs — against the other candidates and their preferences. Ground every point in the concrete facts provided (days off, earliest/latest times, gaps, professors, days on campus, listed tradeoffs). Compare candidates to each other where useful ("A frees your Fridays but stacks Tuesday; B is lighter but means five days on campus").
+
+Rules: never invent a detail that is not in the summaries. Do not tell the student which to pick — illuminate the tradeoffs and let them decide. No exclamation points. Keep each entry to 2–3 sentences.
+
+Return ONLY JSON of the form { "advice": [ { "id": "<candidate id>", "text": "<2-3 sentences>" } ] }, with exactly one entry per candidate id given.`;
+
+function prefsToText(p = {}) {
+  const parts = [];
+  if (p.earliestStart) parts.push(`no classes before ${p.earliestStart}`);
+  if (p.latestEnd) parts.push(`nothing after ${p.latestEnd}`);
+  if (Array.isArray(p.daysFree) && p.daysFree.length) parts.push(`wants ${p.daysFree.join('/')} free`);
+  if (p.gapStyle === 'minimize') parts.push('prefers minimal gaps between classes');
+  if (p.gapStyle === 'spread') parts.push('prefers classes spread out');
+  if (p.fewerDays) parts.push('prefers fewer days on campus');
+  if (p.professors) {
+    const pick = (flag) => Object.entries(p.professors).filter(([, v]) => v === flag).map(([k]) => k);
+    if (pick('prefer').length) parts.push(`prefers ${pick('prefer').join(', ')}`);
+    if (pick('avoid').length) parts.push(`wants to avoid ${pick('avoid').join(', ')}`);
+  }
+  return parts.length ? parts.join('; ') : 'no specific preferences';
+}
+
+function candidateToText(c) {
+  const perDay = c.perDay ? Object.entries(c.perDay).map(([d, v]) => `${d}: ${v}`).join(' | ') : '';
+  return [
+    `Candidate ${c.id}${c.label ? ` (${c.label})` : ''}:`,
+    `  Days on campus: ${c.daysOnCampus}`,
+    c.earliest != null && `  Earliest start ${c.earliest}, latest end ${c.latest}`,
+    c.gapHours != null && `  Total gap time between classes: ${c.gapHours}h`,
+    Array.isArray(c.professors) && c.professors.length && `  Professors: ${c.professors.join(', ')}`,
+    perDay && `  Weekly layout — ${perDay}`,
+    Array.isArray(c.compromises) && c.compromises.length && `  Known tradeoffs: ${c.compromises.join('; ')}`,
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * The single Stage C Claude call: explain the tradeoffs of the top ranked
+ * candidates. Server-side only, strict JSON, parsed defensively, and cached per
+ * (candidates+prefs) hash so re-opening doesn't re-bill. Throws 5xx on failure
+ * (usage is then refunded by enforceUsage) — the client keeps the ranking usable
+ * without advice.
+ */
+export async function adviseSchedules(userId, planId, { candidates = [], preferences = {} } = {}, hash) {
+  await assertOwnedPlan(userId, planId);
+  if (!candidates.length) throw AppError.badRequest('No schedules to explain yet.');
+
+  const prompt = [
+    ADVISOR_PROMPT,
+    `\nSTUDENT PREFERENCES: ${prefsToText(preferences)}`,
+    '\nCANDIDATES (ranked best-fit first):',
+    candidates.map(candidateToText).join('\n\n'),
+    '\nReturn ONLY the JSON described above — one advice entry per candidate id.',
+  ].join('\n');
+
+  let message;
+  try {
+    message = await getClient().messages.create({
+      model: env.anthropicModel,
+      max_tokens: 1500,
+      output_config: { format: { type: 'json_schema', schema: adviceSchema } },
+      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+    });
+  } catch (err) {
+    if (err instanceof AppError) throw err;
+    if (err?.status === 401) throw new AppError(503, 'Claude API key is invalid. Check ANTHROPIC_API_KEY.');
+    throw new AppError(502, `The advisor could not respond: ${err?.message || 'unknown error'}`);
+  }
+  if (message.stop_reason === 'refusal') throw new AppError(502, 'The advisor declined to respond.');
+
+  const rawText = message.content.find((b) => b.type === 'text')?.text ?? '';
+  let data;
+  try { data = JSON.parse(stripFences(rawText)); }
+  catch { throw new AppError(502, 'Could not read the advisor response.'); }
+
+  const advice = (Array.isArray(data?.advice) ? data.advice : [])
+    .filter((a) => a && a.id != null && a.text)
+    .map((a) => ({ id: String(a.id), text: String(a.text) }));
+  if (!advice.length) throw new AppError(502, 'The advisor returned nothing usable.');
+
+  const response = { advice };
+  await query(
+    `INSERT INTO plan_advice (plan_id, hash, response) VALUES ($1, $2, $3::jsonb)
+     ON CONFLICT (plan_id) DO UPDATE SET hash = EXCLUDED.hash, response = EXCLUDED.response, created_at = now()`,
+    [planId, hash, JSON.stringify(response)],
+  );
+  return response;
 }
