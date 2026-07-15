@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
-import { Spinner, ErrorBanner, classGradient, isGlassColor } from '../components/ui';
+import { Spinner, ErrorBanner, classGradient, classAccent, isGlassColor } from '../components/ui';
 import { generateClassSessions, normalizedMeetings } from '../lib/classMeetings';
+import { dayLoads, hoursLabel } from '../lib/scheduleLoad';
 
 /**
  * Schedule — the student's ACTUAL current weekly schedule, derived automatically
@@ -84,15 +85,20 @@ export default function WeeklySchedulePage() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cards, setCards] = useState([]); // To-Do feed (assignments + tasks) for workload chips
   // The visible week is identified by the Monday it starts on.
   const [weekStart, setWeekStart] = useState(() => startOfWeekMon(new Date()));
+  const [popoverDay, setPopoverDay] = useState(null); // { key, x, y } for the open day's load list
 
   useEffect(() => {
     let alive = true;
-    api
-      .get('/api/classes')
-      .then((res) => { if (alive) setClasses(res.data.classes || []); })
-      .catch((err) => { if (alive) setError(errorMessage(err, 'Could not load your classes.')); })
+    Promise.all([api.get('/api/classes'), api.get('/api/todo')])
+      .then(([clsRes, todoRes]) => {
+        if (!alive) return;
+        setClasses(clsRes.data.classes || []);
+        setCards(todoRes.data.cards || []);
+      })
+      .catch((err) => { if (alive) setError(errorMessage(err, 'Could not load your schedule.')); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, []);
@@ -103,6 +109,13 @@ export default function WeeklySchedulePage() {
     () => activeClasses.some((c) => normalizedMeetings(c).length > 0),
     [activeClasses],
   );
+
+  // Per-day estimated workload (assignments only, done excluded, active classes),
+  // keyed by 'YYYY-MM-DD'. Effective day = scheduled_time ?? planned_date ?? due_date.
+  const loads = useMemo(() => {
+    const activeClassIds = new Set(activeClasses.map((c) => c.id));
+    return dayLoads(cards, { activeClassIds });
+  }, [cards, activeClasses]);
 
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -190,9 +203,15 @@ export default function WeeklySchedulePage() {
               >
                 <div />
                 {days.map((d) => {
-                  const isToday = dateKey(d) === todayKey;
+                  const key = dateKey(d);
+                  const isToday = key === todayKey;
+                  const load = loads.get(key);
+                  const openLoad = (e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setPopoverDay((cur) => (cur?.key === key ? null : { key, x: r.left + r.width / 2, y: r.bottom + 6 }));
+                  };
                   return (
-                    <div key={dateKey(d)} className="border-l border-white/30 px-2 py-2 text-center">
+                    <div key={key} className="border-l border-white/30 px-2 py-2 text-center">
                       <div className="text-[11px] font-medium text-muted">{DOW[(d.getDay() + 6) % 7]}</div>
                       <div
                         className={`mx-auto mt-0.5 grid h-6 w-6 place-items-center text-sm font-bold ${
@@ -202,6 +221,23 @@ export default function WeeklySchedulePage() {
                       >
                         {d.getDate()}
                       </div>
+                      {/* Per-day estimated workload chip (omitted when 0). */}
+                      {load && load.hours > 0 && (
+                        <button
+                          type="button"
+                          onClick={openLoad}
+                          title={`${hoursLabel(load.hours)} of estimated work`}
+                          aria-label={`${hoursLabel(load.hours)} of estimated work on ${DOW[(d.getDay() + 6) % 7]}`}
+                          className={`mx-auto mt-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold transition ${
+                            popoverDay?.key === key
+                              ? 'border-transparent text-white shadow-sm'
+                              : 'border-white/50 bg-white/50 text-brand-700 hover:bg-white/75'
+                          }`}
+                          style={popoverDay?.key === key ? { backgroundImage: 'var(--grad-teal-purple)' } : undefined}
+                        >
+                          {hoursLabel(load.hours)}
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -281,7 +317,49 @@ export default function WeeklySchedulePage() {
           </div>
         </div>
       )}
+
+      {popoverDay && loads.get(popoverDay.key) && (
+        <LoadPopover anchor={popoverDay} load={loads.get(popoverDay.key)} onClose={() => setPopoverDay(null)} />
+      )}
     </div>
+  );
+}
+
+/** Read-only list of a day's estimated work: class color dot + title + hours.
+ *  Fixed-positioned near the clicked chip so the grid's overflow can't clip it. */
+function LoadPopover({ anchor, load, onClose }) {
+  const [y, m, d] = anchor.key.split('-').map(Number);
+  const label = new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  return (
+    <>
+      {/* Click-away backdrop. */}
+      <div className="fixed inset-0 z-40" onClick={onClose} aria-hidden />
+      <div
+        role="dialog"
+        aria-label={`Estimated work for ${label}`}
+        className="glass-card fixed z-50 w-64 max-w-[calc(100vw-1.5rem)] -translate-x-1/2 p-3.5"
+        style={{ top: `${anchor.y}px`, left: `${Math.min(Math.max(anchor.x, 140), window.innerWidth - 140)}px` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-baseline justify-between gap-2">
+          <span className="text-sm font-bold text-ink">{label}</span>
+          <span className="text-xs font-semibold text-brand-600">{hoursLabel(load.hours)}</span>
+        </div>
+        <ul className="space-y-1.5">
+          {load.items.map((item) => (
+            <li key={item.id} className="flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundImage: classAccent({ color: item.color }) }}
+              />
+              <span className="min-w-0 flex-1 truncate text-sm text-ink">{item.title}</span>
+              <span className="shrink-0 text-xs font-medium text-muted">{hoursLabel(item.estimatedHours)}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2.5 border-t border-white/40 pt-2 text-[11px] text-muted">Time-blocking coming soon.</p>
+      </div>
+    </>
   );
 }
 

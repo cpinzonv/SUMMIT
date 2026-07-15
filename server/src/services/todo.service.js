@@ -20,6 +20,7 @@ function toCard(row) {
     title: row.title,
     dueDate: row.due_date,
     plannedDate: row.planned_date,
+    scheduledTime: row.scheduled_time ?? null, // time-blocking (Schedule tab); assignments only
     boardStage: row.board_stage,
     done: row.board_stage === 'done',
     priority: row.priority ?? 'none',
@@ -34,6 +35,7 @@ function toCard(row) {
 export async function listTodo(userId) {
   const { rows } = await query(
     `SELECT a.id, 'assignment' AS source, a.title, a.due_date, a.planned_date,
+            a.scheduled_time,
             a.board_stage, a.priority::text AS priority, a.estimated_hours,
             a.class_id AS context_id, c.name AS context_name, c.color
        FROM assignments a
@@ -41,6 +43,7 @@ export async function listTodo(userId) {
       WHERE c.user_id = $1
      UNION ALL
      SELECT t.id, 'task' AS source, t.title, t.due_date, t.planned_date,
+            NULL AS scheduled_time,
             t.board_stage, 'none' AS priority, NULL AS estimated_hours,
             act.id AS context_id, act.name AS context_name, act.color
        FROM activity_tasks t
