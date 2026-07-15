@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, classGradient } from '../components/ui';
 import { EmptyHero, ScheduleIllustration } from '../components/EmptyHero';
+import { WeekGrid } from '../components/WeekGrid';
 import { normalizedMeetings } from '../lib/classMeetings';
 
 /**
@@ -15,7 +16,6 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const DAY_INDEX = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
 const START_HOUR = 8;
 const END_HOUR = 18;
-const HOUR_PX = 52;
 
 function dayToIndex(day) {
   if (day == null) return -1;
@@ -109,10 +109,22 @@ export function ScheduleView() {
   }, [classes]);
 
   const hasConflicts = blocks.some((b) => b.conflict);
-  const totalMins = (END_HOUR - START_HOUR) * 60;
-  const gridHeight = (END_HOUR - START_HOUR) * HOUR_PX;
-  const hours = [];
-  for (let h = START_HOUR; h <= END_HOUR; h++) hours.push(h);
+
+  // Adapt this view's blocks to the shared WeekGrid's block shape. Same fixed
+  // 8am–6pm, Mon–Fri frame the timetable has always used.
+  const gridBlocks = blocks.map((b, k) => ({
+    key: k,
+    dayIdx: b.day,
+    startMin: b.start,
+    endMin: b.end,
+    title: b.cls.name,
+    subtitle: `${fmtMinutes(b.start)}–${fmtMinutes(b.end)}`,
+    detail: b.location || null,
+    gradient: b.gradient,
+    conflict: b.conflict,
+    hoverTitle: `${b.cls.name} · ${fmtMinutes(b.start)}–${fmtMinutes(b.end)}${b.location ? ` · ${b.location}` : ''}`,
+    onClick: () => navigate(`/classes/${b.cls.id}`),
+  }));
 
   if (loading) return <Spinner label="Loading schedule…" />;
 
@@ -134,89 +146,7 @@ export function ScheduleView() {
           onCta={() => navigate('/')}
         />
       ) : (
-        <div className="glass-card overflow-x-auto p-4">
-          {/* Desktop / wide: time-grid. Hidden on small screens. */}
-          <div className="hidden min-w-[640px] sm:block">
-            <div className="grid" style={{ gridTemplateColumns: '56px repeat(5, 1fr)' }}>
-              <div />
-              {DAYS.map((d) => (
-                <div key={d} className="pb-2 text-center text-sm font-bold text-ink">{d}</div>
-              ))}
-            </div>
-            <div className="grid" style={{ gridTemplateColumns: '56px repeat(5, 1fr)' }}>
-              {/* Hour labels */}
-              <div className="relative" style={{ height: gridHeight }}>
-                {hours.map((h, i) => (
-                  <div key={h} className="absolute right-1 -translate-y-1/2 text-[10px] font-semibold text-muted" style={{ top: i * HOUR_PX }}>
-                    {fmtMinutes(h * 60)}
-                  </div>
-                ))}
-              </div>
-              {/* Day columns */}
-              {DAYS.map((d, di) => (
-                <div key={d} className="relative border-l border-white/40" style={{ height: gridHeight }}>
-                  {hours.map((h, i) => (
-                    <div key={h} className="absolute inset-x-0 border-t border-white/30" style={{ top: i * HOUR_PX }} />
-                  ))}
-                  {blocks
-                    .filter((b) => b.day === di)
-                    .map((b, k) => {
-                      const top = ((b.start - START_HOUR * 60) / totalMins) * gridHeight;
-                      const height = Math.max(22, ((b.end - b.start) / totalMins) * gridHeight);
-                      return (
-                        <button
-                          key={k}
-                          type="button"
-                          onClick={() => navigate(`/classes/${b.cls.id}`)}
-                          className={`absolute inset-x-1 overflow-hidden rounded-lg px-2 py-1 text-left text-white shadow-sm transition hover:brightness-105 ${b.conflict ? 'ring-2 ring-rose-500' : ''}`}
-                          style={{ top, height, backgroundImage: b.gradient }}
-                          title={`${b.cls.name} · ${fmtMinutes(b.start)}–${fmtMinutes(b.end)}${b.location ? ` · ${b.location}` : ''}`}
-                        >
-                          <div className="truncate text-[11px] font-bold leading-tight">{b.cls.name}</div>
-                          <div className="truncate text-[9px] opacity-90">{fmtMinutes(b.start)}–{fmtMinutes(b.end)}</div>
-                          {b.location && height > 40 && <div className="truncate text-[9px] opacity-80">{b.location}</div>}
-                        </button>
-                      );
-                    })}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Mobile: stack days vertically as lists. */}
-          <div className="space-y-4 sm:hidden">
-            {DAYS.map((d, di) => {
-              const dayBlocks = blocks.filter((b) => b.day === di).sort((a, b) => a.start - b.start);
-              return (
-                <div key={d}>
-                  <div className="mb-1.5 text-sm font-bold text-ink">{d}</div>
-                  {dayBlocks.length === 0 ? (
-                    <p className="text-xs text-muted">No classes</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {dayBlocks.map((b, k) => (
-                        <button
-                          key={k}
-                          type="button"
-                          onClick={() => navigate(`/classes/${b.cls.id}`)}
-                          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-white ${b.conflict ? 'ring-2 ring-rose-500' : ''}`}
-                          style={{ backgroundImage: b.gradient }}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-bold">{b.cls.name}</div>
-                            <div className="truncate text-[11px] opacity-90">
-                              {fmtMinutes(b.start)}–{fmtMinutes(b.end)}{b.location ? ` · ${b.location}` : ''}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <WeekGrid blocks={gridBlocks} days={DAYS} startHour={START_HOUR} endHour={END_HOUR} />
       )}
     </div>
   );

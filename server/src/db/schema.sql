@@ -1439,3 +1439,41 @@ CREATE TABLE IF NOT EXISTS plan_sections (
 );
 CREATE INDEX IF NOT EXISTS idx_plan_sections_plan ON plan_sections(plan_id);
 CREATE INDEX IF NOT EXISTS idx_plan_sections_course ON plan_sections(plan_id, course_code);
+
+-- ----------------------------------------------------------------------------
+-- Semester Schedule Builder — Stage B (Planner). The client-side solver turns
+-- the saved sections above into every conflict-free schedule. Three additions:
+--
+--  * plan_sections.pinned — the student can lock a section; the solver then
+--    considers only pinned sections for that course. Persisted so pins survive
+--    reload.
+--  * plan_course_prefs — per-course Required/Optional flag (Required courses
+--    must contribute exactly one section; Optional may be skipped to fit).
+--    Cascades from the draft plan, so it's covered by the account-deletion
+--    purge (#77) exactly like plan_sections.
+--  * plan_items.section_meta / source_plan_id — when a student CHOOSES a
+--    schedule, each chosen section is written into the 4-year roadmap
+--    (plan_items) for the plan's term. section_meta carries the meeting
+--    details along; source_plan_id tags the write-in so re-choosing replaces
+--    this plan's prior items without touching manually-added roadmap courses.
+--    Both are nullable and ignored by existing roadmap logic.
+-- ----------------------------------------------------------------------------
+ALTER TABLE plan_sections
+  ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS plan_course_prefs (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id     UUID NOT NULL REFERENCES draft_semester_plans(id) ON DELETE CASCADE,
+  course_code TEXT NOT NULL,
+  required    BOOLEAN NOT NULL DEFAULT true,          -- Required (default) vs Optional
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (plan_id, course_code)
+);
+CREATE INDEX IF NOT EXISTS idx_plan_course_prefs_plan ON plan_course_prefs(plan_id);
+
+ALTER TABLE plan_items
+  ADD COLUMN IF NOT EXISTS section_meta JSONB;         -- chosen section's meeting details
+ALTER TABLE plan_items
+  ADD COLUMN IF NOT EXISTS source_plan_id UUID REFERENCES draft_semester_plans(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_plan_items_source_plan ON plan_items(source_plan_id);

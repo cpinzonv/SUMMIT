@@ -26,6 +26,7 @@ const sectionInput = z.object({
   professor: z.string().max(300).nullable().optional(),
   location: z.string().max(300).nullable().optional(),
   term: z.string().max(100).nullable().optional(),
+  pinned: z.boolean().optional(), // Stage B: lock a section for the solver
 });
 
 export const paramPlan = z.object({ planId: z.string().uuid('Invalid plan id') });
@@ -49,4 +50,20 @@ export async function deleteSection(req, res) {
 export const termSchema = z.object({ term: z.string().max(100).nullable() });
 export async function setTerm(req, res) {
   res.json(await svc.setPlanTerm(req.user.id, req.params.planId, req.body.term));
+}
+
+/* ------------------------------------------------- Stage B: requirements + commit */
+
+export const courseReqSchema = z.object({
+  courseCode: z.string().min(1).max(300),
+  required: z.boolean(),
+});
+export async function setCourseRequirement(req, res) {
+  const { courseCode, required } = req.body;
+  res.json({ requirements: await svc.setCourseRequirement(req.user.id, req.params.planId, courseCode, required) });
+}
+
+export const commitSchema = z.object({ sectionIds: z.array(z.string().uuid()).min(1, 'Pick a schedule first').max(50) });
+export async function commitSchedule(req, res) {
+  res.json(await svc.commitSchedule(req.user.id, req.params.planId, req.body.sectionIds));
 }
