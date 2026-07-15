@@ -12,6 +12,7 @@ import {
 } from '../components/ui';
 import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { ScheduleView } from './SchedulePage';
+import { SemesterPlanBuilder } from '../components/SemesterPlanBuilder';
 
 const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
 const STATUS_BADGE = {
@@ -40,9 +41,10 @@ export default function PlannerPage() {
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
   const [params, setParams] = useSearchParams();
-  // Primary view: the class roadmap ("classes") or the weekly timetable ("schedule").
-  const view = params.get('view') === 'schedule' ? 'schedule' : 'classes';
-  const setView = (v) => setParams(v === 'schedule' ? { view: 'schedule' } : {}, { replace: true });
+  // Primary view: the class roadmap ("classes"), the candidate-schedule preview
+  // ("schedule"), or the Semester Schedule Builder ("builder").
+  const view = ['schedule', 'builder'].includes(params.get('view')) ? params.get('view') : 'classes';
+  const setView = (v) => setParams(v === 'classes' ? {} : { view: v }, { replace: true });
   // Secondary tab under Classes: planning vs archived courses.
   const tab = params.get('tab') === 'archived' ? 'archived' : 'planning';
   const setTab = (t) => setParams(t === 'archived' ? { tab: 'archived' } : {}, { replace: true });
@@ -124,8 +126,10 @@ export default function PlannerPage() {
           <h1 className="text-3xl font-extrabold tracking-tight">Academic plan</h1>
           <p className="mt-1 text-sm text-muted">
             {view === 'schedule'
-              ? 'Your weekly class timetable'
-              : 'Chart your climb to graduation, semester by semester'}
+              ? 'See where candidate classes would sit before you register — a future-semester preview, not your live week'
+              : view === 'builder'
+                ? 'Paste your school’s available sections and Summit will organize them'
+                : 'Chart your climb to graduation, semester by semester'}
           </p>
         </div>
         {view === 'classes' && tab === 'planning' && (
@@ -139,7 +143,8 @@ export default function PlannerPage() {
       <div className="mb-6 flex gap-1.5">
         {[
           { key: 'classes', label: 'Planning' },
-          { key: 'schedule', label: 'Schedule' },
+          { key: 'builder', label: 'Plan next semester' },
+          { key: 'schedule', label: 'Schedule preview' },
         ].map((v) => (
           <button
             key={v.key}
@@ -155,6 +160,8 @@ export default function PlannerPage() {
 
       {view === 'schedule' ? (
         <ScheduleView />
+      ) : view === 'builder' ? (
+        <SemesterPlanBuilder />
       ) : (
       <>
       {/* Planning sub-tabs: active vs. archived courses */}

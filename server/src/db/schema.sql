@@ -1397,3 +1397,45 @@ CREATE TABLE IF NOT EXISTS launch_waitlist (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_launch_waitlist_university ON launch_waitlist(university);
+
+-- ----------------------------------------------------------------------------
+-- Semester Schedule Builder (Planner, Stage A). A student pastes / screenshots
+-- their school's available-course-sections listing; AI extracts the sections;
+-- the student reviews and corrects them; sections persist to a DRAFT semester
+-- plan. Stage A is extraction + review + persistence only — no schedule solver.
+--
+-- Meeting times follow the class convention (days Mon..Sun, start/end as
+-- wall-clock 'HH:MM', never UTC-converted). All section fields are nullable — we
+-- extract what's present and never invent.
+--
+-- Account-deletion purge (PR #77): both tables cascade from users(id) — draft
+-- plans directly, sections via their plan — so the purge's `DELETE FROM users`
+-- removes them automatically with no orphaned rows.
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS draft_semester_plans (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  term       TEXT,                                    -- e.g. 'Fall 2026'; nullable while a draft
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, term)                              -- one draft per user+term
+);
+CREATE INDEX IF NOT EXISTS idx_draft_semester_plans_user ON draft_semester_plans(user_id);
+
+CREATE TABLE IF NOT EXISTS plan_sections (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id        UUID NOT NULL REFERENCES draft_semester_plans(id) ON DELETE CASCADE,
+  course_code    TEXT,                                -- e.g. 'MATH 162'
+  course_title   TEXT,
+  section_number TEXT,                                -- e.g. '001'
+  days           JSONB NOT NULL DEFAULT '[]'::jsonb,  -- weekday tokens: Mon..Sun
+  start_time     TEXT,                                -- wall-clock 'HH:MM' (24h), no UTC
+  end_time       TEXT,
+  professor      TEXT,
+  location       TEXT,
+  term           TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_plan_sections_plan ON plan_sections(plan_id);
+CREATE INDEX IF NOT EXISTS idx_plan_sections_course ON plan_sections(plan_id, course_code);

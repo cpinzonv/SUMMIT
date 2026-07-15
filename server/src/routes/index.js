@@ -22,6 +22,7 @@ import billingRoutes from './billing.routes.js';
 import institutionAdminRoutes from './institutionAdmin.routes.js';
 import activityRoutes from './activity.routes.js';
 import todoRoutes from './todo.routes.js';
+import semesterPlanRoutes from './semesterPlan.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as lmsController from '../controllers/lms.controller.js';
@@ -70,5 +71,6 @@ router.use('/billing', billingRoutes); // fake-door paywall, founding members, t
 router.use('/institution', institutionAdminRoutes); // institution-admin: roster + overview (tenant-scoped)
 router.use('/activities', activityRoutes); // anti-procrastination projects (non-class work)
 router.use('/todo', todoRoutes); // unified calendar + Kanban feed (assignments + activity tasks)
+router.use('/plan-builder', semesterPlanRoutes); // Planner: Semester Schedule Builder (Stage A)
 
 export default router;
