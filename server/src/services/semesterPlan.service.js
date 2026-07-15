@@ -202,6 +202,7 @@ function toPublicSection(r) {
     professor: r.professor,
     location: r.location,
     term: r.term,
+    pinned: r.pinned ?? false,
   };
 }
 
@@ -227,10 +228,24 @@ async function sectionsForPlan(planId) {
   return rows.map(toPublicSection);
 }
 
-/** The user's draft plan + its sections (creates an empty draft if none). */
+/** Per-course Required/Optional flags for a plan (course_code → required). */
+async function requirementsForPlan(planId) {
+  const { rows } = await query('SELECT course_code, required FROM plan_course_prefs WHERE plan_id = $1', [planId]);
+  return rows.map((r) => ({ courseCode: r.course_code, required: r.required }));
+}
+
+/**
+ * The user's draft plan + its sections + course requirement flags (creates an
+ * empty draft if none). Courses without an explicit flag default to Required on
+ * the client (Stage B), so we only persist/return the ones the student set.
+ */
 export async function getPlan(userId, term = null) {
   const plan = await getOrCreateDraft(userId, term);
-  return { plan: { id: plan.id, term: plan.term }, sections: await sectionsForPlan(plan.id) };
+  return {
+    plan: { id: plan.id, term: plan.term },
+    sections: await sectionsForPlan(plan.id),
+    requirements: await requirementsForPlan(plan.id),
+  };
 }
 
 async function assertOwnedPlan(userId, planId) {
@@ -279,6 +294,7 @@ export async function updateSection(userId, sectionId, input = {}) {
     if (field in input) { sets.push(`${column} = $${i++}`); values.push(clean[field]); }
   }
   if ('days' in input) { sets.push(`days = $${i++}::jsonb`); values.push(JSON.stringify(clean.days)); }
+  if ('pinned' in input) { sets.push(`pinned = $${i++}`); values.push(!!input.pinned); }
   if (sets.length) {
     sets.push('updated_at = now()');
     values.push(sectionId);
@@ -300,4 +316,83 @@ export async function setPlanTerm(userId, planId, term) {
   const clean = term == null ? null : String(term).trim().slice(0, 100) || null;
   await query('UPDATE draft_semester_plans SET term = $1, updated_at = now() WHERE id = $2', [clean, planId]);
   return getPlan(userId, clean);
+}
+
+/* ---------------------------------------------- Stage B: requirements + commit */
+
+/** Mark a course Required or Optional within a plan (owner-scoped, upsert). */
+export async function setCourseRequirement(userId, planId, courseCode, required) {
+  await assertOwnedPlan(userId, planId);
+  const code = String(courseCode ?? '').trim();
+  if (!code) throw AppError.badRequest('A course code is required.');
+  await query(
+    `INSERT INTO plan_course_prefs (plan_id, course_code, required)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (plan_id, course_code) DO UPDATE SET required = EXCLUDED.required, updated_at = now()`,
+    [planId, code, !!required],
+  );
+  return requirementsForPlan(planId);
+}
+
+const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
+
+/** Parse a free-text term ("Spring 2027", "fall 2026") → { season, year } or null. */
+export function parseTerm(term) {
+  if (!term) return null;
+  const s = String(term).trim();
+  const season = SEASONS.find((se) => new RegExp(`\\b${se}\\b`, 'i').test(s));
+  const year = s.match(/\b(20\d{2})\b/);
+  return season && year ? { season, year: Number(year[1]) } : null;
+}
+
+/**
+ * Write a chosen schedule into the Planner's 4-year roadmap: one plan_item per
+ * chosen section for the plan's resolved term. The section's meeting details
+ * ride along in section_meta so the roadmap keeps them. Idempotent per plan —
+ * re-choosing replaces this plan's prior write-in (source_plan_id) but never
+ * touches manually-added roadmap courses. The draft plan/sections are left
+ * intact so the student can re-plan.
+ */
+export async function commitSchedule(userId, planId, sectionIds = []) {
+  await assertOwnedPlan(userId, planId);
+  if (!sectionIds.length) throw AppError.badRequest('Pick a schedule before adding it to your plan.');
+
+  const { rows: planRows } = await query('SELECT term FROM draft_semester_plans WHERE id = $1', [planId]);
+  const parsed = parseTerm(planRows[0]?.term);
+  if (!parsed) {
+    throw AppError.badRequest('Set a term like "Spring 2027" on this plan before adding a schedule to it.');
+  }
+
+  // Load the chosen sections, scoped to this owner + plan (ignore stray ids).
+  const { rows: secs } = await query(
+    `SELECT ps.* FROM plan_sections ps
+       JOIN draft_semester_plans dp ON dp.id = ps.plan_id
+      WHERE dp.user_id = $1 AND ps.plan_id = $2 AND ps.id = ANY($3::uuid[])
+      ORDER BY ps.course_code NULLS LAST, ps.section_number NULLS LAST`,
+    [userId, planId, sectionIds],
+  );
+  if (!secs.length) throw AppError.badRequest('None of those sections are in this plan.');
+
+  // Replace any prior write-in from THIS plan (re-choosing a different schedule).
+  await query('DELETE FROM plan_items WHERE user_id = $1 AND source_plan_id = $2', [userId, planId]);
+
+  const created = [];
+  for (const s of secs) {
+    const sectionMeta = {
+      sectionNumber: s.section_number,
+      days: s.days ?? [],
+      startTime: s.start_time,
+      endTime: s.end_time,
+      professor: s.professor,
+      location: s.location,
+    };
+    const { rows } = await query(
+      `INSERT INTO plan_items (user_id, year, season, name, code, section_meta, source_plan_id)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+       RETURNING id, name, code`,
+      [userId, parsed.year, parsed.season, s.course_title || s.course_code || 'Course', s.course_code, JSON.stringify(sectionMeta), planId],
+    );
+    created.push(rows[0]);
+  }
+  return { term: `${parsed.season} ${parsed.year}`, count: created.length, items: created };
 }

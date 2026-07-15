@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, Toast } from './ui';
+import { SchedulePlanner } from './SchedulePlanner';
 
 /**
  * Semester Schedule Builder — Stage A (Planner). Paste (or screenshot) a school's
@@ -28,11 +29,12 @@ function groupByCourse(sections) {
   return groups;
 }
 
-export function SemesterPlanBuilder() {
+export function SemesterPlanBuilder({ onPlanCommitted } = {}) {
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState(null); // { id, term }
   const [saved, setSaved] = useState([]); // persisted sections
-  const [step, setStep] = useState('paste'); // 'paste' | 'review' | 'saved'
+  const [requirements, setRequirements] = useState([]); // per-course Required/Optional flags
+  const [step, setStep] = useState('paste'); // 'paste' | 'review' | 'saved' | 'build'
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
 
@@ -45,10 +47,24 @@ export function SemesterPlanBuilder() {
   const [draft, setDraft] = useState([]);
   const [saving, setSaving] = useState(false);
 
+  const reload = useCallback(async () => {
+    const { data } = await api.get('/api/plan-builder/plan');
+    setPlan(data.plan);
+    setSaved(data.sections);
+    setRequirements(data.requirements || []);
+    return data;
+  }, []);
+
   useEffect(() => {
     let alive = true;
     api.get('/api/plan-builder/plan')
-      .then(({ data }) => { if (!alive) return; setPlan(data.plan); setSaved(data.sections); setStep(data.sections.length ? 'saved' : 'paste'); })
+      .then(({ data }) => {
+        if (!alive) return;
+        setPlan(data.plan);
+        setSaved(data.sections);
+        setRequirements(data.requirements || []);
+        setStep(data.sections.length ? 'saved' : 'paste');
+      })
       .catch((err) => { if (alive) setError(errorMessage(err, 'Could not load your plan.')); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -122,7 +138,22 @@ export function SemesterPlanBuilder() {
         />
       )}
       {step === 'saved' && (
-        <SavedStep sections={saved} onDelete={deleteSaved} onAddMore={() => { setError(''); setStep('paste'); }} />
+        <SavedStep
+          sections={saved}
+          onDelete={deleteSaved}
+          onAddMore={() => { setError(''); setStep('paste'); }}
+          onBuild={() => { setError(''); setStep('build'); }}
+        />
+      )}
+      {step === 'build' && plan && (
+        <SchedulePlanner
+          plan={plan}
+          sections={saved}
+          requirements={requirements}
+          onEditSections={() => { setError(''); setStep('saved'); }}
+          onExit={() => { setError(''); reload().catch(() => {}); setStep('saved'); }}
+          onCommitted={onPlanCommitted}
+        />
       )}
       <Toast toast={toast} />
     </div>
@@ -307,7 +338,7 @@ function DaysPicker({ value, onChange }) {
 }
 
 /* -------------------------------------------------------------- Step 3: saved */
-function SavedStep({ sections, onDelete, onAddMore }) {
+function SavedStep({ sections, onDelete, onAddMore, onBuild }) {
   const groups = useMemo(() => groupByCourse(sections), [sections]);
   const fmt = (s) => {
     const t = s.startTime ? `${s.startTime}${s.endTime ? `–${s.endTime}` : ''}` : null;
@@ -350,10 +381,15 @@ function SavedStep({ sections, onDelete, onAddMore }) {
         ))}
       </div>
 
-      {/* Empty slot where Stage B (the schedule solver) will go. */}
-      <div className="glass-card mt-5 border-dashed p-6 text-center">
-        <p className="text-sm font-semibold text-ink">Next: Summit will find every schedule that works.</p>
-        <p className="mt-1 text-xs text-muted">Coming soon — we&rsquo;ll build conflict-free schedules from these sections.</p>
+      {/* Stage B entry: turn these sections into conflict-free schedules. */}
+      <div className="glass-card mt-5 flex flex-col items-center gap-3 p-6 text-center sm:flex-row sm:justify-between sm:text-left">
+        <div>
+          <p className="text-sm font-semibold text-ink">Ready to see what fits?</p>
+          <p className="mt-1 text-xs text-muted">Summit will find every conflict-free schedule from these sections.</p>
+        </div>
+        <button type="button" onClick={onBuild} disabled={sections.length === 0} className="btn btn-primary shrink-0">
+          Build my schedule
+        </button>
       </div>
     </div>
   );

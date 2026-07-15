@@ -161,7 +161,7 @@ export default function PlannerPage() {
       {view === 'schedule' ? (
         <ScheduleView />
       ) : view === 'builder' ? (
-        <SemesterPlanBuilder />
+        <SemesterPlanBuilder onPlanCommitted={load} />
       ) : (
       <>
       {/* Planning sub-tabs: active vs. archived courses */}

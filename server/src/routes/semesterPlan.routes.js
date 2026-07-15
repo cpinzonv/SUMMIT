@@ -30,6 +30,11 @@ router.get('/plan', asyncHandler(pb.getPlan));
 router.post('/plan/:planId/sections', validate(pb.paramPlan, 'params'), validate(pb.appendSchema), asyncHandler(pb.appendSections));
 router.patch('/plan/:planId/term', validate(pb.paramPlan, 'params'), validate(pb.termSchema), asyncHandler(pb.setTerm));
 
+// Stage B: mark a course Required/Optional, and commit a chosen schedule into
+// the Planner's 4-year roadmap for the plan's term.
+router.patch('/plan/:planId/course-pref', validate(pb.paramPlan, 'params'), validate(pb.courseReqSchema), asyncHandler(pb.setCourseRequirement));
+router.post('/plan/:planId/commit', validate(pb.paramPlan, 'params'), validate(pb.commitSchema), asyncHandler(pb.commitSchedule));
+
 // Edit / remove a single saved section (owner-scoped).
 router.patch('/sections/:sectionId', validate(pb.paramSection, 'params'), validate(pb.updateSchema), asyncHandler(pb.updateSection));
 router.delete('/sections/:sectionId', validate(pb.paramSection, 'params'), asyncHandler(pb.deleteSection));
