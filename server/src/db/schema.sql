@@ -378,6 +378,15 @@ ALTER TABLE assignments
 -- Estimated effort in hours (nullable) — powers the weekly workload prediction.
 ALTER TABLE assignments ADD COLUMN IF NOT EXISTS estimated_hours NUMERIC(5,2);
 
+-- Time-blocking (Schedule tab): the specific day/time the student intends to DO
+-- the work, distinct from planned_date (scheduling hint) and due_date (deadline).
+-- Nullable; a timestamptz like due_date/planned_date. Existing rows unaffected.
+-- The Schedule week grid uses COALESCE(scheduled_time, planned_date, due_date) as
+-- an assignment's effective day for its per-day workload chips. Read/write via the
+-- assignment API; NOT used by the Dashboard workload widget (that stays on
+-- planned_date/due_date).
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS scheduled_time TIMESTAMPTZ;
+
 -- LMS provenance: assignments pulled from Canvas/etc. carry the source + the
 -- external assignment id, used to prevent duplicate imports and to show a badge.
 ALTER TABLE assignments ADD COLUMN IF NOT EXISTS external_source TEXT;
