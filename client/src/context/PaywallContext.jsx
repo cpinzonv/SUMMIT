@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { billingApi } from '../api/billing';
+import { useAuth } from './AuthContext';
 import { setPaywallHandler } from '../lib/paywallBus';
 import { PaywallModal } from '../components/PaywallModal';
 import { QuietNotice } from '../components/QuietNotice';
@@ -15,9 +16,10 @@ const PaywallCtx = createContext(null);
 export const usePaywall = () => useContext(PaywallCtx);
 
 export function PaywallProvider({ children }) {
+  const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [gate, setGate] = useState(null); // active gate payload, or null
-  const loaded = useRef(false);
+  const loadedFor = useRef(null); // user id we've fetched status for (null = none)
 
   const refresh = useCallback(async () => {
     try {
@@ -46,14 +48,27 @@ export function PaywallProvider({ children }) {
     });
   }, []);
 
+  // Register the app-wide 402 → paywall handler.
   useEffect(() => {
     setPaywallHandler((payload) => openGate(payload, { logShown: false }));
-    if (!loaded.current) {
-      loaded.current = true;
-      refresh();
-    }
     return () => setPaywallHandler(null);
-  }, [openGate, refresh]);
+  }, [openGate]);
+
+  // Fetch billing status ONCE per signed-in user — and NEVER while logged out.
+  // /api/billing/status requires auth, so a 401 there trips the global
+  // forceLogout redirect to /login. On public pages that carries the visitor
+  // away mid-flow — e.g. it bounced invitees straight off /register before they
+  // could sign up. Gating on `user` keeps public pages free of authed calls.
+  useEffect(() => {
+    if (user?.id) {
+      if (loadedFor.current !== user.id) {
+        loadedFor.current = user.id;
+        refresh();
+      }
+    } else {
+      loadedFor.current = null;
+    }
+  }, [user, refresh]);
 
   const onResolved = useCallback(() => refresh(), [refresh]);
 
