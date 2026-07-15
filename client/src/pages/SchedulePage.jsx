@@ -121,15 +121,15 @@ export function ScheduleView() {
       <ErrorBanner message={error} />
       {hasConflicts && (
         <div className="mb-4 rounded-2xl border border-rose-300/50 bg-rose-50/70 px-4 py-2.5 text-sm font-medium text-rose-700">
-          ⚠ Some classes have overlapping meeting times — those blocks are outlined in red.
+          Heads up — some candidate sections overlap. Those blocks are outlined in red so you can spot clashes before you register.
         </div>
       )}
 
       {blocks.length === 0 ? (
         <EmptyHero
           illustration={<ScheduleIllustration />}
-          headline="No meeting times yet"
-          subheading="Add class meeting days and times to visualize your weekly schedule."
+          headline="Preview a semester before you register"
+          subheading="As you plan courses, this shows where their meeting times would land across the week — a future-semester preview, separate from your live week in the Schedule tab."
           ctaLabel="+ Add class times"
           onCta={() => navigate('/')}
         />
