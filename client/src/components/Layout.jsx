@@ -26,6 +26,16 @@ const ICON_PATHS = {
       <circle cx="17.6" cy="6.4" r="1.7" />
     </>
   ),
+  schedule: (
+    <>
+      <rect x="3.8" y="5.4" width="16.4" height="14" rx="3" />
+      <path d="M3.8 9.6h16.4" />
+      <path d="M8.4 3.6v3.4" />
+      <path d="M15.6 3.6v3.4" />
+      <path d="M7.6 13h3.2" />
+      <path d="M7.6 16h5.2" />
+    </>
+  ),
   learn: (
     <>
       <path d="M12 6.6C10.2 5.3 8 4.9 6 5.2c-.6.1-1 .6-1 1.2v8.9c0 .7.6 1.2 1.3 1.1 1.8-.3 3.8.1 5.7 1.2" />
@@ -72,6 +82,7 @@ function TabIcon({ name, active }) {
 const navItems = [
   { to: '/', label: 'Dashboard', short: 'Home', icon: 'home', end: true },
   { to: '/calendar', label: 'To-Do', short: 'To-Do', icon: 'todo' },
+  { to: '/schedule', label: 'Schedule', short: 'Schedule', icon: 'schedule' },
   { to: '/planner', label: 'Planner', short: 'Planner', icon: 'planner' },
   { to: '/learn', label: 'Learn', short: 'Learn', icon: 'learn' },
 ];

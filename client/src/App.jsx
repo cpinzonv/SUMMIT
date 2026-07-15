@@ -9,6 +9,7 @@ import ClassDetailPage from './pages/ClassDetailPage';
 import CalendarPage from './pages/CalendarPage';
 import CreateClassPage from './pages/CreateClassPage';
 import PlannerPage from './pages/PlannerPage';
+import WeeklySchedulePage from './pages/WeeklySchedulePage';
 import LearnPage from './pages/LearnPage';
 import ActivityDetailPage from './pages/ActivityDetailPage';
 import SettingsPage from './pages/SettingsPage';
@@ -38,8 +39,10 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/classes/new" element={<CreateClassPage />} />
         <Route path="/classes/:id" element={<ClassDetailPage />} />
-        {/* Schedule now lives inside the Planner as the "Schedule" sub-view. */}
-        <Route path="/schedule" element={<Navigate to="/planner?view=schedule" replace />} />
+        {/* Top-level Schedule tab: the student's ACTUAL current weekly schedule,
+            derived from active classes' meeting times. Distinct from the Planner's
+            own (future/hypothetical) "Schedule" sub-view, which is untouched. */}
+        <Route path="/schedule" element={<WeeklySchedulePage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/planner" element={<PlannerPage />} />
         <Route path="/learn" element={<LearnPage />} />
