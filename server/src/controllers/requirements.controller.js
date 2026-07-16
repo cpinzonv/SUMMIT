@@ -1,0 +1,47 @@
+import { z } from 'zod';
+import * as svc from '../services/requirements.service.js';
+import { AppError } from '../utils/AppError.js';
+
+/* Extraction: multipart (optional photo/PDF) + a `text` field. No zod (multipart). */
+export async function extract(req, res) {
+  const text = req.body?.text;
+  if (!req.file && !(text && String(text).trim())) {
+    throw AppError.badRequest('Paste your requirements or upload a photo/PDF.');
+  }
+  res.json(await svc.extractRequirements({ text, file: req.file }));
+}
+
+export async function get(req, res) {
+  res.json(await svc.getRequirements(req.user.id));
+}
+
+// credits/creditsRequired/totalCredits arrive as numbers or strings — the
+// service coerces them; here we just bound the shape.
+const intish = z.union([z.number(), z.string()]).nullable().optional();
+const courseInput = z.object({
+  courseCode: z.string().max(500).nullable().optional(),
+  courseTitle: z.string().max(500).nullable().optional(),
+  credits: intish,
+  offeredTerms: z.array(z.enum(['Fall', 'Spring', 'Summer'])).nullable().optional(),
+  prereqGroups: z.array(z.array(z.string().max(120))).max(20).optional(),
+});
+const categoryInput = z.object({
+  name: z.string().max(500).nullable().optional(),
+  creditsRequired: intish,
+  notes: z.string().max(2000).nullable().optional(),
+  courses: z.array(courseInput).max(300).optional(),
+});
+export const saveSchema = z.object({
+  program: z
+    .object({ name: z.string().max(500).nullable().optional(), totalCredits: intish })
+    .optional(),
+  categories: z.array(categoryInput).max(100),
+});
+export async function save(req, res) {
+  res.json(await svc.saveRequirements(req.user.id, req.body));
+}
+
+export async function remove(req, res) {
+  await svc.deleteRequirements(req.user.id);
+  res.status(204).end();
+}

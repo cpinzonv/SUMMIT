@@ -23,6 +23,7 @@ import institutionAdminRoutes from './institutionAdmin.routes.js';
 import activityRoutes from './activity.routes.js';
 import todoRoutes from './todo.routes.js';
 import semesterPlanRoutes from './semesterPlan.routes.js';
+import requirementsRoutes from './requirements.routes.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import * as lmsController from '../controllers/lms.controller.js';
@@ -72,5 +73,6 @@ router.use('/institution', institutionAdminRoutes); // institution-admin: roster
 router.use('/activities', activityRoutes); // anti-procrastination projects (non-class work)
 router.use('/todo', todoRoutes); // unified calendar + Kanban feed (assignments + activity tasks)
 router.use('/plan-builder', semesterPlanRoutes); // Planner: Semester Schedule Builder (Stage A)
+router.use('/requirements', requirementsRoutes); // Planner: Degree Requirements (Stage R1)
 
 export default router;
