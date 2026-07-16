@@ -75,8 +75,19 @@ export function toPublicUser(row) {
   };
 }
 
-/** Change a user's password after verifying the current one (bcrypt). */
-export async function changePassword(userId, currentPassword, newPassword) {
+/**
+ * Change a user's password after verifying the current one (bcrypt), then end
+ * every OTHER session on the old credential — standard hygiene — while KEEPING
+ * the session that made the change signed in.
+ *
+ * We revoke all refresh tokens + remembered 2FA devices and stamp the
+ * sessions_invalidated_at watermark (so other devices' access tokens are
+ * rejected on their next request), then immediately mint a fresh token pair for
+ * THIS session and return it. The caller returns the pair so the current client
+ * swaps it in and stays logged in; every other device is already dead. `context`
+ * carries the caller's user-agent/ip onto the new refresh token.
+ */
+export async function changePassword(userId, currentPassword, newPassword, context = {}) {
   const { rows } = await query('SELECT password_hash FROM users WHERE id = $1', [userId]);
   if (!rows[0]) throw AppError.notFound('User not found');
 
@@ -85,12 +96,14 @@ export async function changePassword(userId, currentPassword, newPassword) {
 
   const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
   await query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, userId]);
-  // A password change logs out every device: revoke all refresh tokens, drop
-  // remembered 2FA devices, and invalidate outstanding access tokens (M1) so no
-  // session lingers on the old credential.
   await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
   await revokeAllTrustedDevices(userId);
   await query('UPDATE users SET sessions_invalidated_at = now() WHERE id = $1', [userId]);
+
+  // Re-establish only the current session with a fresh pair (iat is after the
+  // watermark, so it survives; other devices cannot refresh — their tokens were
+  // revoked — and their access tokens die within one cycle).
+  return issueTokensForUser(userId, context);
 }
 
 /**
@@ -134,10 +147,16 @@ export async function issueTokensForUser(userId, context = {}) {
   return issueTokens(userId, context);
 }
 
-/** Revoke ALL of a user's active refresh tokens ("sign out everywhere") AND
- *  invalidate every access token issued before now (M1). */
+/**
+ * Sign out everywhere: revoke ALL of a user's active refresh tokens, drop every
+ * remembered 2FA device, and stamp the sessions_invalidated_at watermark so
+ * every already-issued access token is rejected on its next request (M1). The
+ * current device is included — it must re-authenticate too. Same revocation
+ * primitives PR #77 uses on account deletion.
+ */
 export async function logoutAll(userId) {
   await query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
+  await revokeAllTrustedDevices(userId);
   await query('UPDATE users SET sessions_invalidated_at = now() WHERE id = $1', [userId]);
 }
 
@@ -513,13 +532,21 @@ export async function refresh({ refreshToken }) {
   return { accessToken: outcome.accessToken, refreshToken: outcome.refreshToken };
 }
 
-/** Revoke a refresh token (logout). Idempotent. */
+/**
+ * Revoke a single session's refresh token (logout on THIS device). Idempotent.
+ * Returns the owning user's id (or null if the token was unknown/already
+ * revoked) so the caller can write an audit event — the endpoint is
+ * unauthenticated, so the user is identified from the token record, not req.user.
+ * A subsequent /refresh with this token hits reuse-detection and 401s.
+ */
 export async function logout({ refreshToken }) {
-  await query(
+  const { rows } = await query(
     `UPDATE refresh_tokens SET revoked_at = now()
-     WHERE token_hash = $1 AND revoked_at IS NULL`,
+     WHERE token_hash = $1 AND revoked_at IS NULL
+     RETURNING user_id`,
     [hashToken(refreshToken)],
   );
+  return { userId: rows[0]?.user_id ?? null };
 }
 
 /* ---- Invite links (institution-admin onboarding) ------------------------ */

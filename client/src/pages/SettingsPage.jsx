@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { api, errorMessage } from '../api/client';
+import { api, errorMessage, setTokens } from '../api/client';
 import { ErrorBanner, Toast, Toggle, Modal, Spinner, ConfirmModal, gradeColor } from '../components/ui';
 import { lmsApi, lmsStatusAll, beginConnect, summarizeSync, LMS_META } from '../lib/lms';
 import { gcalApi, summarizeGcalSync } from '../lib/gcal';
@@ -134,10 +134,13 @@ function AccountTab({ user }) {
 
       {user?.twoFactorEnabled && <TrustedDevicesSection />}
 
-      <Section title="Session" description="Sign out of Summit on this device.">
-        <button onClick={handleLogout} className="btn btn-soft">
-          Log out
-        </button>
+      <Section title="Session" description="Sign out on this device, or everywhere at once.">
+        <div className="-mb-3">
+          <Row label="This device">
+            <button onClick={handleLogout} className="btn btn-soft">Log out</button>
+          </Row>
+          <LogOutEverywhere user={user} {...rowProps('logoutAll')} />
+        </div>
       </Section>
 
       {/* Danger Zone (Delete account) lands here in a follow-up PR — it stays the
@@ -622,11 +625,14 @@ function ChangePassword({ open, onToggle }) {
     if (form.next !== form.confirm) return setError('New passwords do not match.');
     setSaving(true);
     try {
-      await api.patch('/api/auth/password', {
+      const { data } = await api.patch('/api/auth/password', {
         currentPassword: form.current,
         newPassword: form.next,
       });
-      setSuccess('Password updated.');
+      // The server ended every other session and returned a fresh pair for this
+      // one — swap it in so we stay signed in here instead of getting bounced.
+      if (data?.accessToken) setTokens(data);
+      setSuccess('Password updated. Any other devices have been signed out.');
       setForm({ current: '', next: '', confirm: '' });
     } catch (err) {
       setError(errorMessage(err, 'Could not update password.'));
@@ -655,6 +661,62 @@ function ChangePassword({ open, onToggle }) {
         <Field label="Confirm new password" type="password" value={form.confirm} onChange={update('confirm')} required />
         <button type="submit" disabled={saving} className="btn btn-primary">
           {saving ? 'Updating…' : 'Update password'}
+        </button>
+      </form>
+    </DisclosureRow>
+  );
+}
+
+/* ---- Log out of all devices (sign out everywhere) --------------------- */
+function LogOutEverywhere({ user, open, onToggle }) {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const needsPassword = Boolean(user?.hasPassword);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setBusy(true);
+    try {
+      await api.post('/api/auth/logout-all', {
+        ...(needsPassword ? { password } : {}),
+        ...(totpCode.trim() ? { totpCode: totpCode.trim() } : {}),
+      });
+      // This also revoked our own session — clear locally and return to sign-in.
+      await logout();
+      navigate('/login');
+    } catch (err) {
+      setError(errorMessage(err, 'Could not sign out everywhere.'));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <DisclosureRow
+      label="Log out of all devices"
+      state="Ends every active session, including this one"
+      action="Log out all"
+      open={open}
+      onToggle={onToggle}
+    >
+      <form onSubmit={submit} className="space-y-3">
+        {error && <ErrorBanner message={error} />}
+        <p className="text-sm text-muted">
+          Signs you out of Summit everywhere and forgets remembered devices. Use this if a device was lost or you suspect someone
+          else has access. You&rsquo;ll sign in again here.
+        </p>
+        {needsPassword && (
+          <Field label="Current password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+        )}
+        {user?.twoFactorEnabled && (
+          <Field label="Authentication code" value={totpCode} onChange={(e) => setTotpCode(e.target.value)} placeholder="123456" autoComplete="one-time-code" inputMode="numeric" />
+        )}
+        <button type="submit" disabled={busy || (needsPassword && !password)} className="btn btn-danger">
+          {busy ? 'Signing out…' : 'Log out of all devices'}
         </button>
       </form>
     </DisclosureRow>
