@@ -13,6 +13,7 @@ import {
 } from '../components/ui';
 import { dueStatus } from '../lib/dueDate';
 import { generateClassSessions } from '../lib/classMeetings';
+import { effectiveDate } from '../lib/scheduleLoad';
 import { TodoBoard } from '../components/TodoBoard';
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -103,6 +104,7 @@ export default function CalendarPage() {
   const [editing, setEditing] = useState(null); // edit modal (double click)
   const [adding, setAdding] = useState(null); // quick-add modal — holds the day key
   const [classes, setClasses] = useState([]); // for the quick-add class picker
+  const [cards, setCards] = useState([]); // raw to-do feed — powers the Year "has work" signal
   const [toast, setToast] = useState(null);
   const [cursor, setCursor] = useState(() => {
     const n = new Date();
@@ -125,6 +127,7 @@ export default function CalendarPage() {
         api.get('/api/todo'),
       ]);
       setClasses(clsRes.data.classes);
+      setCards(todoRes.data.cards);
       const evs = [];
       todoRes.data.cards.forEach((card, i) => {
         // Synthesize the { a, cls } shape the calendar components expect. `cls`
@@ -227,11 +230,43 @@ export default function CalendarPage() {
       return addDays(c, dir * (view === 'week' ? 7 : 1));
     });
 
-  // Jump from the year grid into a specific month.
+  const goToday = () => {
+    const n = new Date();
+    n.setHours(0, 0, 0, 0);
+    setCursor(n);
+  };
+
+  // Jump from the year grid into a specific month, or a specific day.
   const openMonth = (monthIndex) => {
     setCursor(new Date(cursor.getFullYear(), monthIndex, 1));
     setView('month');
   };
+  const openDay = (year, monthIndex, day) => {
+    setCursor(new Date(year, monthIndex, day));
+    setView('day');
+  };
+
+  // The Year view's lightweight per-day signal. Reuses the SAME feed the calendar
+  // already fetched (no new fetch) and the load chips' shared conventions:
+  // effectiveDate = scheduled_time ?? planned_date ?? due_date, done items
+  // excluded. Class sessions also count as "has work" (no priority). Map key →
+  // { rank, hasSession, count } where rank is the top assignment priority.
+  const yearSignal = useMemo(() => {
+    const map = new Map();
+    const bump = (key, { rank = -1, hasSession = false } = {}) => {
+      const cur = map.get(key) || { rank: -1, hasSession: false, count: 0 };
+      map.set(key, { rank: Math.max(cur.rank, rank), hasSession: cur.hasSession || hasSession, count: cur.count + 1 });
+    };
+    for (const card of cards) {
+      if (card.done || card.boardStage === 'done') continue; // done items don't signal work
+      const d = effectiveDate(card);
+      if (d) bump(localKey(d), { rank: PRIORITY_RANK[card.priority || 'none'] });
+    }
+    for (const ev of events) {
+      if (ev.type === 'session') bump(localKey(ev.date), { hasSession: true });
+    }
+    return map;
+  }, [cards, events]);
 
   // ---- Drag and drop: move an assignment's date to the dropped-on day -----
   async function moveEvent(ev, targetKey) {
@@ -364,9 +399,10 @@ export default function CalendarPage() {
             ))}
           </div>
           <div className="flex flex-1 items-center justify-center gap-2 sm:flex-none">
-            <button onClick={() => shift(-1)} className="btn btn-soft !px-3 !py-1.5">←</button>
+            <button onClick={() => shift(-1)} className="btn btn-soft !px-3 !py-1.5" aria-label="Previous">←</button>
             <span className="min-w-[120px] flex-1 text-center text-sm font-bold sm:min-w-[170px] sm:flex-none">{label}</span>
-            <button onClick={() => shift(1)} className="btn btn-soft !px-3 !py-1.5">→</button>
+            <button onClick={() => shift(1)} className="btn btn-soft !px-3 !py-1.5" aria-label="Next">→</button>
+            <button onClick={goToday} className="btn btn-soft !px-3 !py-1.5">Today</button>
           </div>
         </div>
       )}
@@ -396,7 +432,7 @@ export default function CalendarPage() {
       ) : view === 'day' ? (
         <DayView cursor={cursor} byDay={byDay} act={act} />
       ) : (
-        <YearView year={cursor.getFullYear()} byDay={byDay} todayKey={todayKey} onPickMonth={openMonth} />
+        <YearView year={cursor.getFullYear()} signal={yearSignal} todayKey={todayKey} onPickMonth={openMonth} onPickDay={openDay} />
       )}
 
       {selected && <EventModal ev={selected} onClose={() => setSelected(null)} />}
@@ -536,10 +572,13 @@ function Dot({ p }) {
   return <span className={`h-2.5 w-2.5 rounded-full ${PRIORITY_DOT[p] || PRIORITY_DOT.none}`} />;
 }
 
-/* ---- Month ------------------------------------------------------------- */
-/** Year view: a 3×4 grid of 12 mini-months; days with assignments show a dot
- *  colored by the highest-priority item that day. Click a month to zoom in. */
-function YearView({ year, byDay, todayKey, onPickMonth }) {
+/* ---- Year -------------------------------------------------------------- */
+/** Year view: a responsive grid of 12 mini-months. A day with non-done work
+ *  gets a dot colored by its top priority (class-session-only days use a subtle
+ *  session tint), over a faint heat shade scaled by item count — a lightweight
+ *  signal, not full detail. Click a month header to open its Month view; click a
+ *  day to open that day. Data comes from the shared `signal` (see yearSignal). */
+function YearView({ year, signal, todayKey, onPickMonth, onPickDay }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {MONTH_NAMES.map((name, m) => (
@@ -548,26 +587,26 @@ function YearView({ year, byDay, todayKey, onPickMonth }) {
           year={year}
           month={m}
           name={name}
-          byDay={byDay}
+          signal={signal}
           todayKey={todayKey}
-          onClick={() => onPickMonth(m)}
+          onPickMonth={() => onPickMonth(m)}
+          onPickDay={onPickDay}
         />
       ))}
     </div>
   );
 }
 
-function topPriorityDot(events) {
-  if (!events || events.length === 0) return null;
-  let best = 'none';
-  for (const ev of events) {
-    const p = ev.a.priority || 'none';
-    if (PRIORITY_RANK[p] > PRIORITY_RANK[best]) best = p;
-  }
-  return PRIORITY_DOT[best];
-}
+// A yearSignal rank → its dot color. rank -1 means the day has only class
+// sessions (no assignment priority) → a neutral session tint.
+const rankDot = (rank) =>
+  rank >= 3 ? PRIORITY_DOT.high
+    : rank === 2 ? PRIORITY_DOT.medium
+    : rank === 1 ? PRIORITY_DOT.low
+    : rank === 0 ? PRIORITY_DOT.none
+    : 'bg-brand-400';
 
-function MiniMonth({ year, month, name, byDay, todayKey, onClick }) {
+function MiniMonth({ year, month, name, signal, todayKey, onPickMonth, onPickDay }) {
   const firstDow = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells = [];
@@ -575,45 +614,45 @@ function MiniMonth({ year, month, name, byDay, todayKey, onClick }) {
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={`Open ${name} ${year}`}
-      className="glass-card p-3 text-left transition hover:-translate-y-0.5 hover:shadow-lg"
-    >
-      <div className="mb-1.5 flex items-baseline justify-between">
+    <div className="glass-card p-3 transition hover:-translate-y-0.5 hover:shadow-lg">
+      <button
+        type="button"
+        onClick={onPickMonth}
+        title={`Open ${name} ${year}`}
+        className="mb-1.5 flex w-full items-baseline justify-between rounded-lg text-left transition hover:opacity-80"
+      >
         <span className="text-sm font-bold text-ink">{name}</span>
         <span className="text-[10px] font-semibold uppercase text-muted">{year}</span>
-      </div>
+      </button>
       <div className="grid grid-cols-7 gap-0.5 text-center">
         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
           <span key={i} className="text-[9px] font-semibold text-muted">{d}</span>
         ))}
         {cells.map((d, i) => {
-          if (d == null) return <span key={i} />;
+          if (d == null) return <span key={`b${i}`} />;
           const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-          const events = byDay.get(key);
-          const dot = topPriorityDot(events);
+          const sig = signal.get(key);
           const isToday = key === todayKey;
+          // Faint teal heat scaled by item count (theme-neutral translucent tint).
+          const heat = sig ? 0.06 + Math.min(1, sig.count / 4) * 0.16 : 0;
           return (
-            <span
-              key={i}
-              className={`relative grid h-5 place-items-center rounded text-[10px] ${
-                isToday ? 'bg-brand-100 font-bold text-brand-700' : 'text-slate-600'
+            <button
+              key={key}
+              type="button"
+              onClick={() => onPickDay(year, month, d)}
+              title={sig ? `${sig.count} item${sig.count === 1 ? '' : 's'} — open ${name} ${d}` : `Open ${name} ${d}`}
+              className={`relative grid h-5 place-items-center rounded text-[10px] transition hover:ring-1 hover:ring-brand-300 ${
+                isToday ? 'bg-brand-100 font-bold text-brand-700' : 'text-muted'
               }`}
+              style={!isToday && heat ? { backgroundColor: `rgba(63, 177, 184, ${heat.toFixed(2)})` } : undefined}
             >
               {d}
-              {dot && (
-                <span
-                  className={`absolute bottom-0 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${dot}`}
-                  title={`${events.length} item${events.length === 1 ? '' : 's'}`}
-                />
-              )}
-            </span>
+              {sig && <span className={`absolute bottom-0 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full ${rankDot(sig.rank)}`} />}
+            </button>
           );
         })}
       </div>
-    </button>
+    </div>
   );
 }
 
