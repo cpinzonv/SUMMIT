@@ -51,7 +51,7 @@ export function buildPlacements(planItems = [], index) {
     .filter((it) => it.status !== 'completed' && it.code)
     .map((it) => {
       const meta = resolveCourse(it.code, index);
-      return { id: it.id, code: it.code, season: it.season, year: it.year, offeredTerms: meta.offeredTerms, prereqGroups: meta.prereqGroups };
+      return { id: it.id, code: it.code, season: it.season, year: it.year, credits: it.credits, offeredTerms: meta.offeredTerms, prereqGroups: meta.prereqGroups };
     });
 }
 
