@@ -154,12 +154,31 @@ export async function refresh(req, res) {
 }
 
 export async function logout(req, res) {
-  await authService.logout(req.body);
+  const { userId } = await authService.logout(req.body);
+  // The endpoint is unauthenticated (identity comes from the token record), so
+  // only audit when a live token was actually revoked.
+  if (userId) await logSecurityEvent({ action: 'logout', outcome: 'success', userId, ip: req.ip });
   res.status(204).end();
 }
 
-/** Sign out everywhere: revoke ALL of the caller's active refresh tokens. */
+// "Log out of all devices" — sensitive, so it re-authenticates first.
+export const logoutAllSchema = z.object({
+  password: z.string().optional(),
+  totpCode: z.string().optional(),
+});
+
+/**
+ * Sign out everywhere: re-auth with the current password (+ 2FA code if on),
+ * then revoke ALL of the caller's refresh tokens + trusted devices and stamp the
+ * access-token watermark. The current device is logged out too.
+ */
 export async function logoutAll(req, res) {
+  try {
+    await authService.verifyReauth(req.user.id, { password: req.body.password, totpCode: req.body.totpCode });
+  } catch (err) {
+    await logSecurityEvent({ action: 'logout_all', outcome: 'failure', userId: req.user.id, ip: req.ip });
+    throw err;
+  }
   await authService.logoutAll(req.user.id);
   await logSecurityEvent({ action: 'logout_all', outcome: 'success', userId: req.user.id, ip: req.ip });
   res.json({ ok: true });
@@ -171,16 +190,21 @@ export async function me(req, res) {
 }
 
 export async function changePassword(req, res) {
+  let tokens;
   try {
-    await authService.changePassword(
+    // Ends all OTHER sessions and returns a fresh pair for THIS one, carrying the
+    // caller's device context onto the new refresh token.
+    tokens = await authService.changePassword(
       req.user.id,
       req.body.currentPassword,
       req.body.newPassword,
+      { userAgent: req.get('user-agent'), ip: req.ip },
     );
   } catch (err) {
     await logSecurityEvent({ action: 'password_change', outcome: 'failure', userId: req.user.id, ip: req.ip });
     throw err;
   }
   await logSecurityEvent({ action: 'password_change', outcome: 'success', userId: req.user.id, ip: req.ip });
-  res.json({ ok: true });
+  // The client swaps these in so the current device stays signed in.
+  res.json({ ok: true, ...tokens });
 }

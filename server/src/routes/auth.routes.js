@@ -83,11 +83,12 @@ router.post(
   asyncHandler(authController.logout),
 );
 
-// Sign out everywhere (authenticated) — per-account rate limited.
+// Sign out everywhere (authenticated) — re-auth required, per-account rate limited.
 router.post(
   '/logout-all',
   requireAuth,
   accountActionLimiter,
+  validate(authController.logoutAllSchema),
   asyncHandler(authController.logoutAll),
 );
 
