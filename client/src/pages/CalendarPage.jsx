@@ -39,10 +39,12 @@ const PRIORITY_DOT = {
 const PRIORITY_LABEL = { high: 'High', medium: 'Medium', low: 'Low', none: 'None' };
 
 // Dot color for a calendar event: a past-due (and not-done) DUE deadline turns
-// red to stand out; otherwise the dot follows the assignment's priority.
+// red to stand out; otherwise the dot follows the assignment's priority. A done
+// item drops to a neutral dot so it no longer "yells" its priority.
 function eventDot(ev) {
   if (ev.type === 'session') return 'bg-slate-400';
-  if (ev.type === 'due' && !ev.a.done && dueStatus(ev.a.dueDate).isPastDue) {
+  if (ev.a.done) return PRIORITY_DOT.none;
+  if (ev.type === 'due' && dueStatus(ev.a.dueDate).isPastDue) {
     return 'bg-rose-600 ring-1 ring-rose-300';
   }
   return PRIORITY_DOT[ev.a.priority || 'none'];
@@ -907,6 +909,7 @@ function DayView({ cursor, byDay, act }) {
 function DayRow({ ev, act }) {
   if (ev.type === 'session') return <SessionRow ev={ev} />;
   const isDue = ev.type === 'due';
+  const done = ev.a.done;
   const p = ev.a.priority || 'none';
   return (
     <button
@@ -915,11 +918,11 @@ function DayRow({ ev, act }) {
       onDoubleClick={() => act.edit(ev)}
       className="flex w-full items-center gap-3 rounded-xl border border-white/50 bg-white/45 px-4 py-3 text-left transition hover:bg-white/75"
     >
-      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${PRIORITY_DOT[p]}`} />
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${done ? PRIORITY_DOT.none : PRIORITY_DOT[p]}`} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate font-semibold text-ink">{ev.a.title}</span>
-          {p !== 'none' && (
+          <span className={`truncate font-semibold ${done ? 'text-muted line-through' : 'text-ink'}`}>{ev.a.title}</span>
+          {p !== 'none' && !done && (
             <span className="shrink-0 rounded-full bg-white/70 px-2 py-0.5 text-[10px] font-semibold uppercase text-muted">
               {PRIORITY_LABEL[p]}
             </span>
@@ -961,15 +964,18 @@ function EventModal({ ev, onClose }) {
           {cls.code && <span className="text-muted">· {cls.code}</span>}
         </div>
 
-        <DetailRow
-          label="Priority"
-          value={
-            <span className="flex items-center gap-1.5">
-              <span className={`h-2.5 w-2.5 rounded-full ${PRIORITY_DOT[p]}`} />
-              {PRIORITY_LABEL[p]}
-            </span>
-          }
-        />
+        {/* Priority is hidden once the item is Done — a finished task shouldn't yell HIGH. */}
+        {!a.done && (
+          <DetailRow
+            label="Priority"
+            value={
+              <span className="flex items-center gap-1.5">
+                <span className={`h-2.5 w-2.5 rounded-full ${PRIORITY_DOT[p]}`} />
+                {PRIORITY_LABEL[p]}
+              </span>
+            }
+          />
+        )}
         <DetailRow label="Stage" value={(a.boardStage || 'backlog').replace('_', ' ')} />
         <DetailRow
           label="Due date"

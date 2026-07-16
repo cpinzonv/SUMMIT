@@ -16,7 +16,7 @@ import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { lmsApi, lmsStatusAll, summarizeSync, lmsLabel } from '../lib/lms';
 import { dueStatus, countdownTone } from '../lib/dueDate';
 import { AssignmentDetailModal, estimateLabel } from '../components/AssignmentDetailModal';
-import { activitiesApi, ACTIVITY_KINDS, activityOverdue, activityProjectProgress } from '../lib/activities';
+import { activitiesApi, activityKindLabel, activityOverdue, activityProjectProgress } from '../lib/activities';
 import { CreateActivityModal } from '../components/CreateActivityModal';
 
 export default function DashboardPage() {
@@ -612,7 +612,6 @@ function AddMenu({ onAddActivity }) {
 }
 
 /* ---- Activity cards on the Dashboard (same look as classes, different link) --- */
-const activityKindLabel = (k) => ACTIVITY_KINDS.find((x) => x.value === k)?.label || 'Activity';
 
 function ActivityCard({ activity: a, index }) {
   const glass = isGlassColor(a.color);
@@ -636,7 +635,7 @@ function ActivityCard({ activity: a, index }) {
           <span className="h-12 w-1.5 rounded-full" style={{ backgroundImage: classAccent(a, index) }} />
           <div>
             <h3 className="font-bold text-ink">{a.name}</h3>
-            <p className="text-xs text-muted">{activityKindLabel(a.kind)}</p>
+            <p className="text-xs text-muted">{activityKindLabel(a)}</p>
             {overdue > 0 && (
               <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-600">
                 {overdue} overdue
@@ -675,7 +674,7 @@ function ActivityRow({ activity: a, index }) {
           )}
         </div>
         <div className="truncate text-xs text-muted">
-          {activityKindLabel(a.kind)}
+          {activityKindLabel(a)}
           {a.nextAction?.dueDate && overdue === 0 && (
             <span className={`ml-2 font-semibold ${countdownTone(dueStatus(a.nextAction.dueDate))}`}>· {dueStatus(a.nextAction.dueDate).countdownLabel}</span>
           )}

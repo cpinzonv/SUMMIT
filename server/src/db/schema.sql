@@ -378,6 +378,12 @@ ALTER TABLE assignments
 -- Estimated effort in hours (nullable) — powers the weekly workload prediction.
 ALTER TABLE assignments ADD COLUMN IF NOT EXISTS estimated_hours NUMERIC(5,2);
 
+-- Where estimated_hours came from, so a later AI run or manual edit resolves
+-- cleanly by precedence: 'manual' (user-set — NEVER overwritten by AI),
+-- 'ai' (Claude estimate), 'default' (the 1h fallback used when there are no
+-- instructions to estimate from). NULL = legacy/unset (treated like a default).
+ALTER TABLE assignments ADD COLUMN IF NOT EXISTS estimate_source TEXT;
+
 -- Time-blocking (Schedule tab): the specific day/time the student intends to DO
 -- the work, distinct from planned_date (scheduling hint) and due_date (deadline).
 -- Nullable; a timestamptz like due_date/planned_date. Existing rows unaffected.
@@ -1066,6 +1072,9 @@ CREATE TABLE IF NOT EXISTS activities (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+-- Free-text label for kind='other' (e.g. "Study group", "Side project"), shown
+-- wherever the type displays. NULL for the built-in kinds.
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS kind_label TEXT;
 CREATE INDEX IF NOT EXISTS idx_activities_user_id ON activities(user_id);
 DROP TRIGGER IF EXISTS trg_activities_updated_at ON activities;
 CREATE TRIGGER trg_activities_updated_at BEFORE UPDATE ON activities FOR EACH ROW EXECUTE FUNCTION set_updated_at();

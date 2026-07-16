@@ -3,10 +3,9 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, errorMessage } from '../api/client';
 import { Spinner, ErrorBanner, Toast, ConfirmModal } from '../components/ui';
 import { EmptyHero, AssignmentsIllustration } from '../components/EmptyHero';
-import { activitiesApi, ACTIVITY_KINDS, STAGE_LABELS, STAGES, activityProjectProgress } from '../lib/activities';
+import { activitiesApi, ACTIVITY_KINDS, STAGE_LABELS, STAGES, activityProjectProgress, activityKindLabel } from '../lib/activities';
 import { dueStatus } from '../lib/dueDate';
 
-const kindLabel = (k) => ACTIVITY_KINDS.find((x) => x.value === k)?.label || 'Activity';
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null);
 const toDateInput = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 const isOverdue = (t) => t.dueDate && !t.done && dueStatus(t.dueDate)?.isPastDue;
@@ -89,7 +88,7 @@ export default function ActivityDetailPage() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h1 className="font-display text-2xl font-bold text-ink">{a.name}</h1>
-              <p className="text-sm text-muted">{kindLabel(a.kind)} · {a.projectCount} project{a.projectCount === 1 ? '' : 's'}</p>
+              <p className="text-sm text-muted">{activityKindLabel(a)} · {a.projectCount} project{a.projectCount === 1 ? '' : 's'}</p>
             </div>
             <ActivityMenu onEdit={() => setEditing(true)} onDelete={() => setConfirmDel(true)} />
           </div>
@@ -230,9 +229,45 @@ function ActivityEditForm({ activity: a, onCancel, onSave }) {
   );
 }
 
+/* ---- ⋮ menu on a project (Reopen · Delete) — used by the collapsed done chip -- */
+function ProjectMenu({ onReopen, onDelete }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => ref.current && !ref.current.contains(e.target) && setOpen(false);
+    const onKey = (e) => e.key === 'Escape' && setOpen(false);
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const pick = (fn) => () => { setOpen(false); fn(); };
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Project options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="grid h-8 w-8 place-items-center rounded-full text-lg leading-none text-muted transition hover:bg-white/60 hover:text-ink"
+      >
+        ⋮
+      </button>
+      {open && (
+        <div role="menu" className="glass-panel absolute right-0 z-20 mt-1 w-40 p-1.5 text-sm shadow-xl">
+          <button type="button" role="menuitem" onClick={pick(onReopen)} className="menu-item"><span>↩</span> Reopen</button>
+          <button type="button" role="menuitem" onClick={pick(onDelete)} className="menu-item text-rose-600"><span>🗑</span> Delete</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---- Project card (collapsible, stage controls, tasks) ------------------ */
 function ProjectCard({ project: p, onStage, onUpdate, onDelete, onToggleTask, onUpdateTask, onDeleteTask, onAddTask }) {
-  const [open, setOpen] = useState(true);
+  const isDone = p.stage === 'done';
+  const [open, setOpen] = useState(!isDone); // completed projects start collapsed
   const [step, setStep] = useState({ title: '', dueDate: '' });
   const { done, total, percent } = p.progress;
 
@@ -242,6 +277,44 @@ function ProjectCard({ project: p, onStage, onUpdate, onDelete, onToggleTask, on
     onAddTask(step.title.trim(), step.dueDate);
     setStep({ title: '', dueDate: '' });
   };
+
+  // A completed project collapses to a compact "Done" chip so finished work
+  // stops taking space. Expand to review its steps; reopen via the ⋮ menu.
+  if (isDone) {
+    return (
+      // relative + focus-within:z raises this chip (and its ⋮ menu) above the
+      // next card while the menu is open, so the dropdown isn't painted over.
+      <div className={`glass-card relative p-3 focus-within:z-30 ${open ? 'overflow-hidden' : ''}`}>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+            <span className="shrink-0 text-xs text-muted">{open ? '▾' : '▸'}</span>
+            <h3 className="truncate font-display text-sm font-semibold text-muted">{p.name}</h3>
+            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">Done</span>
+            {total > 0 && <span className="shrink-0 text-[11px] font-semibold text-muted">{done}/{total}</span>}
+          </button>
+          <ProjectMenu onReopen={() => onStage('in_progress')} onDelete={onDelete} />
+        </div>
+        {open && (
+          <div className="mt-3 space-y-3">
+            <ProgressBar done={done} total={total} percent={percent} />
+            {total > 0 && (
+              <div className="divide-y divide-white/40">
+                {p.tasks.map((t) => (
+                  <TaskRow
+                    key={t.id}
+                    task={t}
+                    onToggle={() => onToggleTask(t)}
+                    onUpdate={(patch) => onUpdateTask(t, patch)}
+                    onDelete={() => onDeleteTask(t)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="glass-card overflow-hidden p-4">
@@ -315,8 +388,8 @@ function TaskRow({ task: t, onToggle, onUpdate, onDelete }) {
 
   return (
     <div className="py-2">
-      <div className="flex items-center gap-3">
-        <input type="checkbox" checked={t.done} onChange={onToggle} className="h-4 w-4 accent-teal-500" />
+      <div className="flex items-start gap-3">
+        <input type="checkbox" checked={t.done} onChange={onToggle} className="mt-1 h-4 w-4 shrink-0 accent-teal-500" />
         {open ? (
           <input
             defaultValue={t.title}
@@ -329,7 +402,7 @@ function TaskRow({ task: t, onToggle, onUpdate, onDelete }) {
         ) : (
           <button
             onClick={() => setOpen(true)}
-            className={`min-w-0 flex-1 truncate text-left text-sm ${t.done ? 'text-muted line-through' : 'text-ink'}`}
+            className={`min-w-0 flex-1 whitespace-normal break-words py-0.5 text-left text-sm ${t.done ? 'text-muted line-through' : 'text-ink'}`}
             title="Open step to add details"
           >
             {t.title}

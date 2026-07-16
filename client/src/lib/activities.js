@@ -25,6 +25,12 @@ export const ACTIVITY_KINDS = [
   { value: 'other', label: 'Other' },
 ];
 
+/** Display label for an activity's type — the custom free text for 'other', else the preset. */
+export function activityKindLabel(activity) {
+  if (activity?.kind === 'other' && activity?.kindLabel?.trim()) return activity.kindLabel.trim();
+  return ACTIVITY_KINDS.find((x) => x.value === activity?.kind)?.label || 'Activity';
+}
+
 export const STAGE_LABELS = { backlog: 'Backlog', active: 'Active', in_progress: 'In Progress', done: 'Done' };
 export const STAGES = ['backlog', 'active', 'in_progress', 'done'];
 

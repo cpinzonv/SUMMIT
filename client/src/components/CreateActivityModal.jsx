@@ -11,6 +11,7 @@ import { activitiesApi, ACTIVITY_KINDS } from '../lib/activities';
 export function CreateActivityModal({ onClose, onCreated }) {
   const [name, setName] = useState('');
   const [kind, setKind] = useState('club');
+  const [kindLabel, setKindLabel] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -18,9 +19,14 @@ export function CreateActivityModal({ onClose, onCreated }) {
     e.preventDefault();
     setError('');
     if (!name.trim()) return setError('Give the activity a name.');
+    if (kind === 'other' && !kindLabel.trim()) return setError('Name the type of activity.');
     setSaving(true);
     try {
-      const activity = await activitiesApi.create({ name: name.trim(), kind });
+      const activity = await activitiesApi.create({
+        name: name.trim(),
+        kind,
+        ...(kind === 'other' ? { kindLabel: kindLabel.trim() } : {}),
+      });
       onCreated(activity);
     } catch (err) {
       setError(errorMessage(err, 'Could not create the activity.'));
@@ -42,6 +48,19 @@ export function CreateActivityModal({ onClose, onCreated }) {
             {ACTIVITY_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
           </select>
         </label>
+        {kind === 'other' && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-semibold text-ink">What kind?</span>
+            <input
+              value={kindLabel}
+              onChange={(e) => setKindLabel(e.target.value)}
+              placeholder="e.g. Study group, Side project, Research"
+              maxLength={60}
+              className="field"
+              autoFocus
+            />
+          </label>
+        )}
         <p className="text-xs text-muted">Next you’ll add projects (sub-goals) and break each into a few dated steps — that’s the anti-procrastination magic.</p>
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className="btn btn-soft">Cancel</button>

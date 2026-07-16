@@ -77,6 +77,7 @@ function toActivity(row, projects) {
     description: row.description ?? null,
     color: row.color ?? null,
     kind: row.kind,
+    kindLabel: row.kind_label ?? null, // free-text name when kind === 'other'
     stage: row.stage,
     completedAt: row.completed_at ?? null,
     createdAt: row.created_at,
@@ -175,26 +176,36 @@ export async function createActivity(userId, input) {
   const name = (input.name || '').trim();
   if (!name) throw AppError.badRequest('Give the activity a name.');
   const kind = KINDS.includes(input.kind) ? input.kind : 'other';
+  // Free-text label only applies to the 'other' kind.
+  const kindLabel = kind === 'other' ? (input.kindLabel?.trim() || null) : null;
   const { rows } = await query(
-    `INSERT INTO activities (user_id, name, description, color, kind)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [userId, name, input.description?.trim() || null, input.color || null, kind],
+    `INSERT INTO activities (user_id, name, description, color, kind, kind_label)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [userId, name, input.description?.trim() || null, input.color || null, kind, kindLabel],
   );
   return getActivity(userId, rows[0].id);
 }
 
-const ACTIVITY_EDITABLE = { name: 'name', description: 'description', color: 'color', kind: 'kind' };
 export async function updateActivity(userId, id, input) {
-  await ownedActivityRow(userId, id);
+  const row = await ownedActivityRow(userId, id);
   const sets = [];
   const values = [];
   let i = 1;
-  for (const [field, col] of Object.entries(ACTIVITY_EDITABLE)) {
-    if (field in input) {
-      sets.push(`${col} = $${i++}`);
-      values.push(field === 'kind' && !KINDS.includes(input[field]) ? 'other' : input[field] ?? null);
-    }
+  const push = (col, val) => { sets.push(`${col} = $${i++}`); values.push(val); };
+
+  if ('name' in input) push('name', input.name ?? null);
+  if ('description' in input) push('description', input.description ?? null);
+  if ('color' in input) push('color', input.color ?? null);
+
+  const nextKind = 'kind' in input ? (KINDS.includes(input.kind) ? input.kind : 'other') : row.kind;
+  if ('kind' in input) push('kind', nextKind);
+  // Keep kind_label consistent with kind: only 'other' carries a custom label.
+  if (nextKind !== 'other') {
+    if (row.kind_label != null) push('kind_label', null); // clear a stale label
+  } else if ('kindLabel' in input) {
+    push('kind_label', input.kindLabel?.trim() || null);
   }
+
   if (sets.length > 0) {
     values.push(id);
     await query(`UPDATE activities SET ${sets.join(', ')} WHERE id = $${i}`, values);

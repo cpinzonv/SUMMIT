@@ -3,6 +3,7 @@ import { api, errorMessage } from '../api/client';
 import { Modal, ErrorBanner, ConfirmModal } from './ui';
 import { RichTextEditor } from './RichTextEditor';
 import { dueStatus, isDone } from '../lib/dueDate';
+import { estimateIsDefault } from '../lib/assignmentBadges';
 import { sanitizeHtml } from '../utils/sanitize';
 
 /* ------------------------------------------------------------------ helpers */
@@ -95,7 +96,6 @@ export function AssignmentDetailModal({ assignment, onClose, onChanged }) {
 
   const st = dueStatus(a.dueDate);
   const overdue = st.isPastDue && !isDone(a);
-  const estLabel = estimateLabel(a.estimatedHours);
   const active = pillFor(a.boardStage);
 
   return (
@@ -123,11 +123,7 @@ export function AssignmentDetailModal({ assignment, onClose, onChanged }) {
               {p.label}
             </button>
           ))}
-          {estLabel && (
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">
-              ⏱ Est. {estLabel}
-            </span>
-          )}
+          <EstimateControl a={a} onCommit={(hours) => patch({ estimatedHours: hours })} />
         </div>
 
         {/* Compact meta row — autosaves on change. */}
@@ -177,7 +173,7 @@ export function AssignmentDetailModal({ assignment, onClose, onChanged }) {
           <p className="py-8 text-center text-sm text-muted">Loading…</p>
         ) : (
           <>
-            {tab === 'instructions' && <InstructionsTab a={a} patch={patch} onEstimated={(hours) => setA((x) => ({ ...x, estimatedHours: hours }))} />}
+            {tab === 'instructions' && <InstructionsTab a={a} patch={patch} onEstimated={(res) => setA((x) => ({ ...x, estimatedHours: res.estimatedHours, estimateSource: res.source }))} />}
             {tab === 'files' && <FilesTab a={a} />}
             {tab === 'working' && <WorkingTab a={a} patch={patch} />}
             {tab === 'submission' && <SubmissionTab a={a} onChanged={onChanged} />}
@@ -185,6 +181,56 @@ export function AssignmentDetailModal({ assignment, onClose, onChanged }) {
         )}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * The time estimate, shown as a pill and editable in place (fix: manual override).
+ * A manual value sets estimate_source='manual' server-side and is never touched by
+ * AI re-estimation; a 'default' (no-instructions 1h fallback) is marked with "~".
+ */
+function EstimateControl({ a, onCommit }) {
+  const hours = a.estimatedHours;
+  const source = a.estimateSource;
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(hours ?? '');
+  useEffect(() => setV(hours ?? ''), [hours]);
+
+  const label = estimateLabel(hours);
+  const isDefault = estimateIsDefault(a);
+
+  const commit = () => {
+    setEditing(false);
+    const next = v === '' ? null : Math.max(0, Number(v));
+    if (Number.isNaN(next)) { setV(hours ?? ''); return; }
+    if (next !== (hours ?? null)) onCommit(next);
+  };
+
+  if (editing) {
+    return (
+      <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">
+        <span aria-hidden>⏱</span> Est.
+        <input
+          type="number" step="0.25" min="0" autoFocus value={v} aria-label="Estimated hours"
+          onChange={(e) => setV(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setV(hours ?? ''); setEditing(false); } }}
+          className="w-14 rounded-md bg-white/85 px-1.5 py-0.5 text-right text-violet-800 focus:outline-none focus:ring-2 focus:ring-violet-300"
+        />
+        h
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      title="Edit the time estimate"
+      className="ml-auto inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700 transition hover:bg-violet-200"
+    >
+      <span aria-hidden>⏱</span> Est. {label ? `${isDefault ? '~' : ''}${label}` : 'Add'}
+      {source === 'manual' && <span className="font-semibold text-violet-500">· set by you</span>}
+    </button>
   );
 }
 
@@ -215,34 +261,46 @@ function InstructionsTab({ a, patch, onEstimated }) {
   const saveDebounced = useDebouncedSave((v) => patch({ instructions: v }));
 
   const onChange = (v) => { setHtml(v); saveDebounced(v); };
+  const isManual = a.estimateSource === 'manual';
 
   const estimate = useCallback(async () => {
     setEstimating(true); setEstError('');
     try {
       const { data } = await api.post(`/api/assignments/${a.id}/estimate-time`, { instructions: html });
-      onEstimated(data.estimatedHours);
+      onEstimated(data); // { estimatedHours, source, kept? }
     } catch (err) {
       setEstError(errorMessage(err, 'Could not estimate the time.'));
     } finally { setEstimating(false); }
   }, [a.id, html, onEstimated]);
 
-  // Estimate automatically shortly after a paste (once content has settled).
-  const onPaste = () => { setTimeout(() => { if (!estimating) estimate(); }, 600); };
+  // Estimate automatically shortly after a paste — unless the user set it manually.
+  const onPaste = () => { if (isManual) return; setTimeout(() => { if (!estimating) estimate(); }, 600); };
 
   const label = estimateLabel(a.estimatedHours);
+  const isDefault = estimateIsDefault(a);
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted">Paste or write the assignment instructions. We'll estimate how long it takes.</p>
-        <button type="button" onClick={estimate} disabled={estimating} className="btn btn-soft text-sm">
+        <button
+          type="button" onClick={estimate} disabled={estimating || isManual}
+          title={isManual ? 'You set the estimate manually — clear it in the header to let AI re-estimate.' : undefined}
+          className="btn btn-soft text-sm"
+        >
           {estimating ? 'Estimating…' : '⏱ Estimate time'}
         </button>
       </div>
 
       {(label || estimating) && (
         <p className="rounded-lg bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">
-          {estimating ? 'Estimating time…' : `Estimated time: ${label} (for an average person)`}
+          {estimating
+            ? 'Estimating time…'
+            : isManual
+              ? `Estimated time: ${label} (set by you)`
+              : isDefault
+                ? `Estimated time: ~${label} — a default until you add instructions or set it yourself`
+                : `Estimated time: ${label} (for an average person)`}
         </p>
       )}
       {estError && <p className="text-sm font-semibold text-rose-600">{estError}</p>}
