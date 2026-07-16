@@ -31,4 +31,10 @@ router.put('/', validate(rq.saveSchema), asyncHandler(rq.save));
 // Remove the program entirely.
 router.delete('/', asyncHandler(rq.remove));
 
+// Stage R2: completed/transferred courses + met non-course prereq tokens.
+router.post('/completed', validate(rq.completedSchema), asyncHandler(rq.addCompleted));
+router.delete('/completed/:id', validate(rq.idParam, 'params'), asyncHandler(rq.removeCompleted));
+router.post('/met', validate(rq.metSchema), asyncHandler(rq.addMet));
+router.delete('/met/:id', validate(rq.idParam, 'params'), asyncHandler(rq.removeMet));
+
 export default router;

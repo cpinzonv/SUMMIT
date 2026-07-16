@@ -16,10 +16,13 @@
  *    their plan). A matched course with no credits still counts as matched but
  *    adds 0 credits.
  *  - A planned course that matches no requirement course still counts toward the
- *    overall planned total and is returned under `notMatched` — nothing silently
+ *    overall total and is returned under `notMatched` — nothing silently
  *    disappears. Rule-only categories (no explicit course list, e.g. "9 credits
  *    from any 300-level HIST") can't be auto-matched this stage, so such courses
  *    land in notMatched by design.
+ *  - R2: each course may carry `completed: true` (completed/transferred). A
+ *    category's satisfied credits are split into completed vs planned so the UI
+ *    can render solid vs hatched segments; both count toward "satisfied".
  */
 
 export const normCode = (code) => String(code || '').toUpperCase().replace(/\s+/g, '');
@@ -35,19 +38,23 @@ export function computeRequirementProgress(planItems = [], categories = []) {
     }
   });
 
-  const satisfied = categories.map(() => ({ credits: 0, codes: [] }));
+  const satisfied = categories.map(() => ({ credits: 0, completed: 0, planned: 0, codes: [] }));
   const notMatched = [];
   let overallPlannedCredits = 0;
+  let overallCompletedCredits = 0;
 
   for (const item of planItems) {
     const credits = Number(item.credits) || 0;
-    overallPlannedCredits += credits;
+    const done = !!item.completed;
+    if (done) overallCompletedCredits += credits;
+    else overallPlannedCredits += credits;
     const key = normCode(item.code);
     const ci = key ? codeToCat.get(key) : undefined;
     if (ci == null) {
-      notMatched.push({ code: item.code ?? null, name: item.name ?? null, credits: item.credits ?? null, term: item.term ?? null });
+      notMatched.push({ code: item.code ?? null, name: item.name ?? null, credits: item.credits ?? null, term: item.term ?? null, completed: done });
     } else {
       satisfied[ci].credits += credits;
+      satisfied[ci][done ? 'completed' : 'planned'] += credits;
       satisfied[ci].codes.push(item.code);
     }
   }
@@ -55,12 +62,15 @@ export function computeRequirementProgress(planItems = [], categories = []) {
   const cats = categories.map((cat, ci) => ({
     ...cat,
     satisfiedCredits: satisfied[ci].credits,
+    completedCredits: satisfied[ci].completed,
+    plannedCredits: satisfied[ci].planned,
     matchedCodes: satisfied[ci].codes,
   }));
 
   return {
     categories: cats,
     overallPlannedCredits,
+    overallCompletedCredits,
     satisfiedTotal: satisfied.reduce((t, s) => t + s.credits, 0),
     requiredTotal: categories.reduce((t, c) => t + (Number(c.creditsRequired) || 0), 0),
     notMatched,

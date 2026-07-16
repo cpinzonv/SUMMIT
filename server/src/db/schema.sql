@@ -1557,3 +1557,37 @@ CREATE TABLE IF NOT EXISTS requirement_courses (
 );
 CREATE INDEX IF NOT EXISTS idx_requirement_courses_category ON requirement_courses(category_id);
 CREATE INDEX IF NOT EXISTS idx_requirement_courses_code ON requirement_courses(category_id, course_code);
+
+-- ============================================================================
+-- Degree Requirements — Stage R2 (Planner). Two additions:
+--  * completed_courses — courses the student has already earned that aren't a
+--    planned roadmap semester: transfer/AP credit, or a requirement course they
+--    tick off directly. (Planned courses marked complete keep using
+--    plan_items.status='completed'.) These count toward category progress and
+--    satisfy prerequisites. `source` distinguishes completed | transferred | ap.
+--  * met_prereqs — non-course prerequisite tokens the student has satisfied out
+--    of band (e.g. "PLACEMENT", "instructor permission"), toggled from a blocked
+--    placement's reason.
+-- Both cascade from users(id), so the account-deletion purge (#77) removes them.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS completed_courses (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  course_code  TEXT NOT NULL,
+  course_title TEXT,
+  credits      INTEGER,
+  source       TEXT NOT NULL DEFAULT 'completed',    -- completed | transferred | ap
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, course_code)
+);
+CREATE INDEX IF NOT EXISTS idx_completed_courses_user ON completed_courses(user_id);
+
+CREATE TABLE IF NOT EXISTS met_prereqs (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token      TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, token)
+);
+CREATE INDEX IF NOT EXISTS idx_met_prereqs_user ON met_prereqs(user_id);
