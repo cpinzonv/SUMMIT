@@ -17,9 +17,21 @@ import { RequirementsEditor } from '../components/RequirementsEditor';
 import { RequirementsProgress } from '../components/RequirementsProgress';
 import { computeRequirementProgress, normCode } from '../lib/requirementProgress';
 import { buildRequirementIndex, buildCompletedSet, buildPlacements, buildStudentCourses, resolveCourse } from '../lib/requirementIndex';
-import { canPlace, canMove, isCourseToken } from '../lib/placement';
+import { canPlace, canMove, isCourseToken, semesterOrder } from '../lib/placement';
+import { distributePlan, generateSemesters } from '../lib/distribute';
+import { AutoFillDialog, AutoFillPreviewBar, GhostCourse, AutoFillTray } from '../components/AutoFill';
 
 const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
+
+/** The academic term containing today — the default auto-fill start. */
+function currentTerm() {
+  const now = new Date();
+  const m = now.getMonth();
+  const y = now.getFullYear();
+  if (m <= 4) return { season: 'Spring', year: y };
+  if (m <= 7) return { season: 'Summer', year: y };
+  return { season: 'Fall', year: y };
+}
 const STATUS_BADGE = {
   planned: 'bg-slate-200 text-slate-600',
   in_progress: 'bg-sky-100 text-sky-700',
@@ -47,6 +59,9 @@ export default function PlannerPage() {
   const [adding, setAdding] = useState(false);
   const [requirements, setRequirements] = useState({ program: null, categories: [] });
   const [editingReqs, setEditingReqs] = useState(false);
+  const [autofillOpen, setAutofillOpen] = useState(false);
+  const [preview, setPreview] = useState(null); // { placements, unplaceable, trayItems }
+  const [applying, setApplying] = useState(false);
   const [params, setParams] = useSearchParams();
   // Primary view: the class roadmap ("classes"), the candidate-schedule preview
   // ("schedule"), or the Semester Schedule Builder ("builder").
@@ -161,6 +176,65 @@ export default function PlannerPage() {
     return res;
   };
 
+  /* ---- Auto-fill (R3): propose → preview (ghosts) → apply/discard ---------- */
+  const runAutofill = (opts) => {
+    const semesters = generateSemesters(opts.start, opts.count, opts.includeSummer);
+    // Same canPlace the manual drags use gates every placement inside the engine.
+    const result = distributePlan({
+      categories: reqProgress.categories,
+      index: reqIndex,
+      semesters,
+      plan: placements,
+      completed: completedSet,
+      options: { target: opts.target, max: opts.max, summerMax: 8 },
+    });
+    setPreview(result);
+    setAutofillOpen(false);
+  };
+  const applyPreview = async () => {
+    if (!preview) return;
+    setApplying(true);
+    try {
+      for (const p of preview.placements) {
+        const meta = reqIndex.get(normCode(p.code));
+        await api.post('/api/plan', { name: meta?.courseTitle || p.code, code: p.code, season: p.season, year: p.year, credits: p.credits ?? undefined, status: 'planned' });
+      }
+      setPreview(null);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err, 'Could not apply the plan.'));
+    } finally {
+      setApplying(false);
+    }
+  };
+  const discardPreview = () => setPreview(null);
+
+  // Term cards, with proposed placements merged in as ghosts during a preview.
+  const displayTerms = useMemo(() => {
+    const base = new Map();
+    for (const t of terms) {
+      const parts = t.term.split(' ');
+      const year = Number(parts[parts.length - 1]);
+      const season = parts.slice(0, -1).join(' ');
+      base.set(t.term, { ...t, season, year, ghosts: [] });
+    }
+    if (preview) {
+      for (const p of preview.placements) {
+        const term = `${p.season} ${p.year}`;
+        if (!base.has(term)) base.set(term, { term, season: p.season, year: p.year, courses: [], credits: 0, ghosts: [] });
+        base.get(term).ghosts.push(p);
+      }
+    }
+    return [...base.values()].sort((a, b) => semesterOrder(a.season, a.year) - semesterOrder(b.season, b.year));
+  }, [terms, preview]);
+
+  // Category bars preview the post-apply state while a preview is open.
+  const displayProgress = useMemo(() => {
+    if (!preview) return reqProgress;
+    const ghostCourses = preview.placements.map((p) => ({ code: p.code, credits: p.credits, name: p.code, term: `${p.season} ${p.year}`, completed: false }));
+    return computeRequirementProgress([...buildStudentCourses(items, requirements.completed || []), ...ghostCourses], requirements.categories);
+  }, [preview, reqProgress, items, requirements.completed, requirements.categories]);
+
   const setStatus = async (item, status) => {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)));
     try {
@@ -198,9 +272,12 @@ export default function PlannerPage() {
           </p>
         </div>
         {view === 'classes' && tab === 'planning' && (
-          <button onClick={() => setAdding(true)} className="btn btn-primary">
-            + Add course
-          </button>
+          <div className="flex items-center gap-2">
+            {requirements.program && !editingReqs && !preview && (
+              <button onClick={() => setAutofillOpen(true)} className="btn btn-soft">Auto-fill my plan</button>
+            )}
+            <button onClick={() => setAdding(true)} className="btn btn-primary">+ Add course</button>
+          </div>
         )}
       </div>
 
@@ -263,10 +340,11 @@ export default function PlannerPage() {
           />
         ) : (
         <>
+          {preview && <AutoFillPreviewBar preview={preview} applying={applying} onApply={applyPreview} onDiscard={discardPreview} />}
           {requirements.program ? (
             <RequirementsProgress
               requirements={requirements}
-              progress={reqProgress}
+              progress={displayProgress}
               completedSet={completedSet}
               completedIndex={completedIndex}
               onMarkCompleted={markCompleted}
@@ -308,7 +386,9 @@ export default function PlannerPage() {
           </div>
           )}
 
-          {terms.length === 0 ? (
+          {preview && <AutoFillTray trayItems={preview.trayItems} unplaceable={preview.unplaceable} />}
+
+          {displayTerms.length === 0 ? (
             <EmptyHero
               illustration={<CalendarIllustration />}
               headline="Build your 4-year roadmap"
@@ -318,31 +398,39 @@ export default function PlannerPage() {
             />
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {terms.map(({ term, courses, credits }, i) => (
-                <div key={term} className="glass-card relative overflow-hidden p-5">
-                  <span
-                    className="pointer-events-none absolute inset-0 opacity-[0.10]"
-                    style={{ backgroundImage: classGradient(null, i) }}
-                  />
-                  <div className="relative mb-3 flex items-center justify-between">
-                    <h3 className="font-bold text-ink">{term}</h3>
-                    <span className="text-xs font-semibold text-muted">{credits} cr</span>
+              {displayTerms.map(({ term, courses, credits, ghosts }, i) => {
+                const ghostCredits = ghosts.reduce((t, g) => t + (g.credits || 0), 0);
+                return (
+                  <div key={term} className={`glass-card relative overflow-hidden p-5 ${ghosts.length ? 'ring-1 ring-brand-300/60' : ''}`}>
+                    <span
+                      className="pointer-events-none absolute inset-0 opacity-[0.10]"
+                      style={{ backgroundImage: classGradient(null, i) }}
+                    />
+                    <div className="relative mb-3 flex items-center justify-between">
+                      <h3 className="font-bold text-ink">{term}</h3>
+                      <span className="text-xs font-semibold text-muted">
+                        {credits + ghostCredits} cr{ghosts.length ? <span className="text-brand-600"> (+{ghostCredits})</span> : null}
+                      </span>
+                    </div>
+                    <div className="relative space-y-2">
+                      {courses.map((c) => (
+                        <PlanCourseCard
+                          key={c.id}
+                          course={c}
+                          onRemove={remove}
+                          onSetStatus={setStatus}
+                          onMove={moveCourse}
+                          onEditOfferings={() => setEditingReqs(true)}
+                          onMarkMet={markMet}
+                        />
+                      ))}
+                      {ghosts.map((g, gi) => (
+                        <GhostCourse key={`ghost-${gi}`} placement={g} />
+                      ))}
+                    </div>
                   </div>
-                  <div className="relative space-y-2">
-                    {courses.map((c) => (
-                      <PlanCourseCard
-                        key={c.id}
-                        course={c}
-                        onRemove={remove}
-                        onSetStatus={setStatus}
-                        onMove={moveCourse}
-                        onEditOfferings={() => setEditingReqs(true)}
-                        onMarkMet={markMet}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -405,6 +493,10 @@ export default function PlannerPage() {
           onEditOfferings={() => { setAdding(false); setEditingReqs(true); }}
           onMarkMet={markMet}
         />
+      )}
+
+      {autofillOpen && (
+        <AutoFillDialog start={currentTerm()} onRun={runAutofill} onClose={() => setAutofillOpen(false)} />
       )}
     </div>
   );
