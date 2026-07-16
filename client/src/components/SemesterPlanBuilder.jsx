@@ -34,6 +34,7 @@ export function SemesterPlanBuilder({ onPlanCommitted } = {}) {
   const [plan, setPlan] = useState(null); // { id, term }
   const [saved, setSaved] = useState([]); // persisted sections
   const [requirements, setRequirements] = useState([]); // per-course Required/Optional flags
+  const [preferences, setPreferences] = useState(null); // Stage C ranking preferences
   const [step, setStep] = useState('paste'); // 'paste' | 'review' | 'saved' | 'build'
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
@@ -52,6 +53,7 @@ export function SemesterPlanBuilder({ onPlanCommitted } = {}) {
     setPlan(data.plan);
     setSaved(data.sections);
     setRequirements(data.requirements || []);
+    setPreferences(data.preferences || null);
     return data;
   }, []);
 
@@ -63,6 +65,7 @@ export function SemesterPlanBuilder({ onPlanCommitted } = {}) {
         setPlan(data.plan);
         setSaved(data.sections);
         setRequirements(data.requirements || []);
+        setPreferences(data.preferences || null);
         setStep(data.sections.length ? 'saved' : 'paste');
       })
       .catch((err) => { if (alive) setError(errorMessage(err, 'Could not load your plan.')); })
@@ -150,6 +153,7 @@ export function SemesterPlanBuilder({ onPlanCommitted } = {}) {
           plan={plan}
           sections={saved}
           requirements={requirements}
+          preferences={preferences}
           onEditSections={() => { setError(''); setStep('saved'); }}
           onExit={() => { setError(''); reload().catch(() => {}); setStep('saved'); }}
           onCommitted={onPlanCommitted}

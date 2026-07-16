@@ -1477,3 +1477,28 @@ ALTER TABLE plan_items
 ALTER TABLE plan_items
   ADD COLUMN IF NOT EXISTS source_plan_id UUID REFERENCES draft_semester_plans(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_plan_items_source_plan ON plan_items(source_plan_id);
+
+-- ----------------------------------------------------------------------------
+-- Semester Schedule Builder — Stage C (Planner). Preferences rank the solver's
+-- valid schedules (pure client-side scoring), and a single Claude call explains
+-- the tradeoffs of the top candidates.
+--
+--  * draft_semester_plans.preferences — the student's ranking preferences
+--    (earliest/latest time, days free, gap style, fewer-days, per-professor
+--    prefer/avoid). One JSONB blob; all optional; survives reload.
+--  * plan_advice — cache for the AI tradeoff summary, one row per plan keyed by
+--    a hash of (top candidates + preferences). A cache hit is served WITHOUT
+--    metering a new AI event; a prefs/pins change shifts the hash → fresh call.
+--    Cascades from the draft plan, so the account-deletion purge (#77) covers it.
+-- ----------------------------------------------------------------------------
+ALTER TABLE draft_semester_plans
+  ADD COLUMN IF NOT EXISTS preferences JSONB;
+
+CREATE TABLE IF NOT EXISTS plan_advice (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id    UUID NOT NULL REFERENCES draft_semester_plans(id) ON DELETE CASCADE,
+  hash       TEXT NOT NULL,                          -- sha256 of (candidate section ids + prefs)
+  response   JSONB NOT NULL,                         -- { advice: [{ id, text }] }
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (plan_id)                                   -- one cached advice per plan (latest)
+);
