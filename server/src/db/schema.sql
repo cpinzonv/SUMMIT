@@ -1502,3 +1502,58 @@ CREATE TABLE IF NOT EXISTS plan_advice (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (plan_id)                                   -- one cached advice per plan (latest)
 );
+
+-- ============================================================================
+-- Degree Requirements — Stage R1 (Planner). A student uploads their
+-- degree-requirements sheet (photo / PDF / pasted text); AI extracts the
+-- requirement structure; the student reviews it; it persists here and makes the
+-- 4-year roadmap requirements-aware (per-category progress).
+--
+-- One degree_program per user (a minor sheet APPENDS categories, it doesn't
+-- create a second program). prereq_groups is an "or"-of-ANDs from day one: an
+-- array of groups, each group an array of course-code/tokens — satisfying ANY
+-- member of a group satisfies that group, and ALL groups must be satisfied
+-- (e.g. "MATH 161 or placement" + "CHEM 101" → [["MATH161","PLACEMENT"],
+-- ["CHEM101"]]). Enforcement is R2; we only STORE the structure now.
+-- offered_terms is a subset of Fall/Spring/Summer, or NULL when the sheet
+-- doesn't say (never guessed).
+--
+-- Account-deletion purge (#77): degree_programs cascades from users(id), and
+-- categories/courses cascade from it, so `DELETE FROM users` removes all three.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS degree_programs (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name          TEXT,                                 -- e.g. "B.S. Computer Science"
+  total_credits INTEGER,                              -- degree total, nullable
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id)                                    -- one program per user (R1)
+);
+
+CREATE TABLE IF NOT EXISTS requirement_categories (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  program_id       UUID NOT NULL REFERENCES degree_programs(id) ON DELETE CASCADE,
+  name             TEXT,                              -- e.g. "Core CS", "Mathematics"
+  credits_required INTEGER,                           -- credits this category needs, nullable
+  notes            TEXT,                              -- e.g. "9 credits from any 300-level HIST"
+  position         INTEGER NOT NULL DEFAULT 0,        -- display order
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_requirement_categories_program ON requirement_categories(program_id);
+
+CREATE TABLE IF NOT EXISTS requirement_courses (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_id   UUID NOT NULL REFERENCES requirement_categories(id) ON DELETE CASCADE,
+  course_code   TEXT,                                 -- e.g. "MATH 162"
+  course_title  TEXT,
+  credits       INTEGER,
+  offered_terms JSONB,                                -- subset of ["Fall","Spring","Summer"] or NULL (unknown)
+  prereq_groups JSONB NOT NULL DEFAULT '[]'::jsonb,   -- [[tokens], ...] — ANY of a group, ALL groups
+  position      INTEGER NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_requirement_courses_category ON requirement_courses(category_id);
+CREATE INDEX IF NOT EXISTS idx_requirement_courses_code ON requirement_courses(category_id, course_code);

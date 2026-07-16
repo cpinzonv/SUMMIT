@@ -13,6 +13,8 @@ import {
 import { EmptyHero, CalendarIllustration } from '../components/EmptyHero';
 import { ScheduleView } from './SchedulePage';
 import { SemesterPlanBuilder } from '../components/SemesterPlanBuilder';
+import { RequirementsEditor } from '../components/RequirementsEditor';
+import { RequirementsProgress } from '../components/RequirementsProgress';
 
 const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
 const STATUS_BADGE = {
@@ -40,6 +42,8 @@ export default function PlannerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [adding, setAdding] = useState(false);
+  const [requirements, setRequirements] = useState({ program: null, categories: [] });
+  const [editingReqs, setEditingReqs] = useState(false);
   const [params, setParams] = useSearchParams();
   // Primary view: the class roadmap ("classes"), the candidate-schedule preview
   // ("schedule"), or the Semester Schedule Builder ("builder").
@@ -62,9 +66,19 @@ export default function PlannerPage() {
     }
   }, []);
 
+  const loadRequirements = useCallback(async () => {
+    try {
+      const { data } = await api.get('/api/requirements');
+      setRequirements(data);
+    } catch {
+      /* requirements are optional — a load failure just leaves the bare credit view */
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadRequirements();
+  }, [load, loadRequirements]);
 
   const planningItems = useMemo(() => items.filter((i) => i.status !== 'completed'), [items]);
   const archivedItems = useMemo(() => items.filter((i) => i.status === 'completed'), [items]);
@@ -190,8 +204,18 @@ export default function PlannerPage() {
       {loading ? (
         <Spinner label="Loading your plan…" />
       ) : tab === 'planning' ? (
+        editingReqs ? (
+          <RequirementsEditor
+            initial={requirements}
+            onSaved={(data) => { setRequirements(data); setEditingReqs(false); }}
+            onClose={() => setEditingReqs(false)}
+          />
+        ) : (
         <>
-          {/* Roadmap-to-graduation progress */}
+          {requirements.program ? (
+            <RequirementsProgress requirements={requirements} planItems={items} onEdit={() => setEditingReqs(true)} />
+          ) : (
+          /* No requirements yet: bare credit total + a prompt to add them. */
           <div className="glass-card relative mb-8 overflow-hidden p-6">
             <span
               className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full opacity-50 blur-2xl"
@@ -218,7 +242,12 @@ export default function PlannerPage() {
                 style={{ width: `${pct}%`, backgroundImage: 'var(--grad-teal-purple)' }}
               />
             </div>
+            <div className="relative mt-5 flex flex-wrap items-center gap-3 border-t border-white/40 pt-4">
+              <p className="text-sm text-muted">Track this against your actual degree — Summit will show per-requirement progress.</p>
+              <button onClick={() => setEditingReqs(true)} className="btn btn-primary ml-auto">Add your degree requirements</button>
+            </div>
           </div>
+          )}
 
           {terms.length === 0 ? (
             <EmptyHero
@@ -287,6 +316,7 @@ export default function PlannerPage() {
             </div>
           )}
         </>
+        )
       ) : archivedByYear.length === 0 ? (
         <EmptyState title="Nothing archived yet">
           Completed courses appear here. Mark a class complete on its Dashboard page (or here)
