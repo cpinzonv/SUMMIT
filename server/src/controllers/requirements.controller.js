@@ -45,3 +45,28 @@ export async function remove(req, res) {
   await svc.deleteRequirements(req.user.id);
   res.status(204).end();
 }
+
+/* ------------------------------------------------- Stage R2: completed + met */
+
+export const completedSchema = z.object({
+  courseCode: z.string().min(1).max(500),
+  courseTitle: z.string().max(500).nullable().optional(),
+  credits: intish,
+  source: z.enum(['completed', 'transferred', 'ap']).optional(),
+});
+export async function addCompleted(req, res) {
+  res.json({ completed: await svc.addCompleted(req.user.id, req.body) });
+}
+export async function removeCompleted(req, res) {
+  res.json({ completed: await svc.removeCompleted(req.user.id, req.params.id) });
+}
+
+export const metSchema = z.object({ token: z.string().min(1).max(200) });
+export async function addMet(req, res) {
+  res.json({ metTokens: await svc.addMet(req.user.id, req.body.token) });
+}
+export async function removeMet(req, res) {
+  res.json({ metTokens: await svc.removeMet(req.user.id, req.params.id) });
+}
+
+export const idParam = z.object({ id: z.string().uuid('Invalid id') });

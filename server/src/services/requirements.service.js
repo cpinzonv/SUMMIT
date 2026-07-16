@@ -253,9 +253,14 @@ async function readRequirements(q, userId) {
   };
 }
 
-/** The user's degree program + categories + courses (null program if none). */
+/** The user's program + categories + courses, plus completed courses + met tokens. */
 export async function getRequirements(userId) {
-  return readRequirements(query, userId);
+  const [base, completed, metTokens] = await Promise.all([
+    readRequirements(query, userId),
+    listCompleted(userId),
+    listMet(userId),
+  ]);
+  return { ...base, completed, metTokens };
 }
 
 /**
@@ -311,4 +316,55 @@ export async function saveRequirements(userId, { program = {}, categories = [] }
 /** Delete the user's degree program entirely (categories + courses cascade). */
 export async function deleteRequirements(userId) {
   await query('DELETE FROM degree_programs WHERE user_id = $1', [userId]);
+}
+
+/* ---------------------------------------- Stage R2: completed courses + met tokens */
+
+const toPublicCompleted = (r) => ({
+  id: r.id,
+  courseCode: r.course_code,
+  courseTitle: r.course_title,
+  credits: r.credits == null ? null : Number(r.credits),
+  source: r.source,
+});
+async function listCompleted(userId) {
+  const { rows } = await query('SELECT * FROM completed_courses WHERE user_id = $1 ORDER BY created_at', [userId]);
+  return rows.map(toPublicCompleted);
+}
+async function listMet(userId) {
+  const { rows } = await query('SELECT id, token FROM met_prereqs WHERE user_id = $1 ORDER BY created_at', [userId]);
+  return rows.map((r) => ({ id: r.id, token: r.token }));
+}
+
+const SOURCES = new Set(['completed', 'transferred', 'ap']);
+
+/** Mark a course completed/transferred/AP (upsert by code). Owner-scoped. */
+export async function addCompleted(userId, { courseCode, courseTitle, credits, source } = {}) {
+  const code = str(courseCode);
+  if (!code) throw AppError.badRequest('A course code is required.');
+  await query(
+    `INSERT INTO completed_courses (user_id, course_code, course_title, credits, source)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (user_id, course_code)
+       DO UPDATE SET course_title = EXCLUDED.course_title, credits = EXCLUDED.credits, source = EXCLUDED.source, updated_at = now()`,
+    [userId, code, str(courseTitle), toInt(credits), SOURCES.has(source) ? source : 'completed'],
+  );
+  return listCompleted(userId);
+}
+/** Un-mark a completed course (reverts progress + prereq effects). */
+export async function removeCompleted(userId, id) {
+  await query('DELETE FROM completed_courses WHERE id = $1 AND user_id = $2', [id, userId]);
+  return listCompleted(userId);
+}
+
+/** Mark a non-course prerequisite token (e.g. "PLACEMENT") as met. */
+export async function addMet(userId, token) {
+  const t = str(token);
+  if (!t) throw AppError.badRequest('A prerequisite is required.');
+  await query('INSERT INTO met_prereqs (user_id, token) VALUES ($1, $2) ON CONFLICT (user_id, token) DO NOTHING', [userId, t]);
+  return listMet(userId);
+}
+export async function removeMet(userId, id) {
+  await query('DELETE FROM met_prereqs WHERE id = $1 AND user_id = $2', [id, userId]);
+  return listMet(userId);
 }

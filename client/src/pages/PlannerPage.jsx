@@ -15,6 +15,9 @@ import { ScheduleView } from './SchedulePage';
 import { SemesterPlanBuilder } from '../components/SemesterPlanBuilder';
 import { RequirementsEditor } from '../components/RequirementsEditor';
 import { RequirementsProgress } from '../components/RequirementsProgress';
+import { computeRequirementProgress, normCode } from '../lib/requirementProgress';
+import { buildRequirementIndex, buildCompletedSet, buildPlacements, buildStudentCourses, resolveCourse } from '../lib/requirementIndex';
+import { canPlace, canMove, isCourseToken } from '../lib/placement';
 
 const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
 const STATUS_BADGE = {
@@ -109,6 +112,54 @@ export default function PlannerPage() {
     }
     return [...map.entries()].sort((a, b) => b[0] - a[0]);
   }, [archivedItems]);
+
+  // R2: resolve the roadmap's courses against the requirement sheet for
+  // requirements-aware progress + prereq/offerings placement validation.
+  const reqIndex = useMemo(() => buildRequirementIndex(requirements.categories), [requirements.categories]);
+  const completedSet = useMemo(
+    () => buildCompletedSet(items, requirements.completed || [], requirements.metTokens || []),
+    [items, requirements.completed, requirements.metTokens],
+  );
+  const placements = useMemo(() => buildPlacements(items, reqIndex), [items, reqIndex]);
+  const reqProgress = useMemo(
+    () => computeRequirementProgress(buildStudentCourses(items, requirements.completed || []), requirements.categories),
+    [items, requirements.completed, requirements.categories],
+  );
+  const completedIndex = useMemo(() => {
+    const m = new Map();
+    for (const c of requirements.completed || []) m.set(normCode(c.courseCode), c);
+    return m;
+  }, [requirements.completed]);
+
+  const markCompleted = async (payload) => {
+    try { const { data } = await api.post('/api/requirements/completed', payload); setRequirements((r) => ({ ...r, completed: data.completed })); }
+    catch (err) { setError(errorMessage(err, 'Could not mark that course completed.')); }
+  };
+  const unmarkCompleted = async (id) => {
+    try { const { data } = await api.delete(`/api/requirements/completed/${id}`); setRequirements((r) => ({ ...r, completed: data.completed })); }
+    catch (err) { setError(errorMessage(err, 'Could not update that.')); }
+  };
+  const markMet = async (token) => {
+    try { const { data } = await api.post('/api/requirements/met', { token }); setRequirements((r) => ({ ...r, metTokens: data.metTokens })); }
+    catch (err) { setError(errorMessage(err, 'Could not update that.')); }
+  };
+
+  // canPlace for the add flow (against the current placements + completed set).
+  const validateAdd = (code, season, year) =>
+    canPlace({ ...resolveCourse(code, reqIndex), code }, { season, year }, placements, completedSet);
+
+  // Move a planned course to another semester, validating the move AND its
+  // downstream dependents. Returns { ok, reasons } — a blocked move is not applied.
+  const moveCourse = async (item, season, year) => {
+    const moved = { ...resolveCourse(item.code, reqIndex), code: item.code };
+    const others = placements.filter((p) => p.id !== item.id);
+    const res = canMove(moved, { season, year }, others, completedSet);
+    if (!res.ok) return res;
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, season, year, term: `${season} ${year}` } : i)));
+    try { await api.patch(`/api/plan/${item.id}`, { season, year }); await load(); }
+    catch (err) { setError(errorMessage(err)); await load(); }
+    return res;
+  };
 
   const setStatus = async (item, status) => {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, status } : i)));
@@ -213,7 +264,15 @@ export default function PlannerPage() {
         ) : (
         <>
           {requirements.program ? (
-            <RequirementsProgress requirements={requirements} planItems={items} onEdit={() => setEditingReqs(true)} />
+            <RequirementsProgress
+              requirements={requirements}
+              progress={reqProgress}
+              completedSet={completedSet}
+              completedIndex={completedIndex}
+              onMarkCompleted={markCompleted}
+              onUnmarkCompleted={unmarkCompleted}
+              onEdit={() => setEditingReqs(true)}
+            />
           ) : (
           /* No requirements yet: bare credit total + a prompt to add them. */
           <div className="glass-card relative mb-8 overflow-hidden p-6">
@@ -271,44 +330,15 @@ export default function PlannerPage() {
                   </div>
                   <div className="relative space-y-2">
                     {courses.map((c) => (
-                      <div key={c.id} className="rounded-xl border border-white/60 bg-white/45 p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-ink">{c.name}</div>
-                            <div className="text-xs text-muted">
-                              {[c.code, c.credits ? `${c.credits} cr` : null].filter(Boolean).join(' · ')}
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => remove(c)}
-                            title="Remove from plan"
-                            className="shrink-0 text-xs text-muted transition hover:text-rose-500"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_BADGE[c.status]}`}>
-                            {STATUS_LABEL[c.status]}
-                          </span>
-                          {c.status === 'in_progress' && c.linkedClassId && (
-                            <Link
-                              to={`/classes/${c.linkedClassId}`}
-                              className="text-[11px] font-semibold text-brand-600 hover:underline"
-                            >
-                              View in Dashboard →
-                            </Link>
-                          )}
-                          {c.status !== 'completed' && (
-                            <button
-                              onClick={() => setStatus(c, 'completed')}
-                              className="ml-auto text-[11px] font-semibold text-emerald-600 hover:underline"
-                            >
-                              Mark complete
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                      <PlanCourseCard
+                        key={c.id}
+                        course={c}
+                        onRemove={remove}
+                        onSetStatus={setStatus}
+                        onMove={moveCourse}
+                        onEditOfferings={() => setEditingReqs(true)}
+                        onMarkMet={markMet}
+                      />
                     ))}
                   </div>
                 </div>
@@ -371,13 +401,94 @@ export default function PlannerPage() {
             setAdding(false);
             await load();
           }}
+          onValidate={validateAdd}
+          onEditOfferings={() => { setAdding(false); setEditingReqs(true); }}
+          onMarkMet={markMet}
         />
       )}
     </div>
   );
 }
 
-function AddCourseModal({ onClose, onSaved }) {
+/** Renders block reasons; offers "edit offerings" and "I've met <token>" actions. */
+function BlockReasons({ reasons, onEditOfferings, onMarkMet }) {
+  return (
+    <ul className="space-y-1">
+      {reasons.map((r, i) => {
+        const tokens = r.type === 'prereq' ? (r.group || []).filter((t) => !isCourseToken(t)) : [];
+        return (
+          <li key={i} className="rounded-lg border border-rose-200/60 bg-rose-50/70 px-3 py-2 text-xs font-medium text-rose-700">
+            {r.message}
+            {r.type === 'offering' && (
+              <button type="button" onClick={() => onEditOfferings(r.code)} className="ml-1 font-semibold underline">edit offerings</button>
+            )}
+            {tokens.map((t) => (
+              <button key={t} type="button" onClick={() => onMarkMet(t)} className="ml-1 font-semibold underline">I&rsquo;ve met {t}</button>
+            ))}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** One planned course on the roadmap, with a prereq/offerings-validated Move. */
+function PlanCourseCard({ course: c, onRemove, onSetStatus, onMove, onEditOfferings, onMarkMet }) {
+  const [moving, setMoving] = useState(false);
+  const [sel, setSel] = useState({ season: c.season, year: c.year });
+  const [reasons, setReasons] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const openMove = () => { setMoving((m) => !m); setReasons([]); setSel({ season: c.season, year: c.year }); };
+  const apply = async () => {
+    setBusy(true);
+    setReasons([]);
+    const res = await onMove(c, sel.season, Number(sel.year));
+    setBusy(false);
+    if (!res.ok) { setReasons(res.reasons); return; }
+    setMoving(false);
+  };
+
+  return (
+    <div className="rounded-xl border border-white/60 bg-white/45 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-ink">{c.name}</div>
+          <div className="text-xs text-muted">{[c.code, c.credits ? `${c.credits} cr` : null].filter(Boolean).join(' · ')}</div>
+        </div>
+        <button onClick={() => onRemove(c)} title="Remove from plan" className="shrink-0 text-xs text-muted transition hover:text-rose-500">✕</button>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS_BADGE[c.status]}`}>{STATUS_LABEL[c.status]}</span>
+        {c.status === 'in_progress' && c.linkedClassId && (
+          <Link to={`/classes/${c.linkedClassId}`} className="text-[11px] font-semibold text-brand-600 hover:underline">View in Dashboard →</Link>
+        )}
+        <button onClick={openMove} className="text-[11px] font-semibold text-brand-600 hover:underline">Move</button>
+        {c.status !== 'completed' && (
+          <button onClick={() => onSetStatus(c, 'completed')} className="ml-auto text-[11px] font-semibold text-emerald-600 hover:underline">Mark complete</button>
+        )}
+      </div>
+      {moving && (
+        <div className="mt-2 rounded-lg border border-white/60 bg-white/60 p-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select value={sel.season} onChange={(e) => setSel((s) => ({ ...s, season: e.target.value }))} className="field !py-1 text-xs">
+              {SEASONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <input type="number" value={sel.year} onChange={(e) => setSel((s) => ({ ...s, year: e.target.value }))} className="field !py-1 w-20 text-xs" />
+            <button onClick={apply} disabled={busy} className="btn btn-primary !py-1 text-xs">{busy ? '…' : 'Apply'}</button>
+          </div>
+          {reasons.length > 0 && (
+            <div className="mt-2">
+              <BlockReasons reasons={reasons} onEditOfferings={onEditOfferings} onMarkMet={(t) => { onMarkMet(t); setReasons([]); }} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AddCourseModal({ onClose, onSaved, onValidate, onEditOfferings, onMarkMet }) {
   const now = new Date();
   const [form, setForm] = useState({
     name: '',
@@ -388,14 +499,22 @@ function AddCourseModal({ onClose, onSaved }) {
     status: 'planned',
   });
   const [error, setError] = useState('');
+  const [reasons, setReasons] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const update = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
   const submit = async (e) => {
     e.preventDefault();
-    setSaving(true);
     setError('');
+    setReasons([]);
+    // A course being ADDED as already-completed isn't a placement — only validate
+    // prereqs/offerings for courses being planned into a semester.
+    if (form.status !== 'completed' && form.code && onValidate) {
+      const res = onValidate(form.code, form.season, Number(form.year));
+      if (!res.ok) { setReasons(res.reasons); return; }
+    }
+    setSaving(true);
     try {
       await api.post('/api/plan', {
         name: form.name,
@@ -416,6 +535,9 @@ function AddCourseModal({ onClose, onSaved }) {
     <Modal title="Add course to plan" onClose={onClose}>
       <form onSubmit={submit} className="space-y-3">
         <ErrorBanner message={error} />
+        {reasons.length > 0 && (
+          <BlockReasons reasons={reasons} onEditOfferings={onEditOfferings} onMarkMet={(t) => { onMarkMet(t); setReasons([]); }} />
+        )}
         <Field label="Course name" value={form.name} onChange={update('name')} required placeholder="Organic Chemistry" />
         <Field label="Code" value={form.code} onChange={update('code')} placeholder="CHEM 210" />
         <div className="grid grid-cols-2 gap-3">

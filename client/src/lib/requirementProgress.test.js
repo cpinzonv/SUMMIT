@@ -75,5 +75,24 @@ test('requiredTotal sums category requirements; empty inputs are safe', () => {
   const categories = [cat('Core', 30, []), cat('Math', 16, [])];
   assert.equal(computeRequirementProgress([], categories).requiredTotal, 46);
   const empty = computeRequirementProgress([], []);
-  assert.deepEqual(empty, { categories: [], overallPlannedCredits: 0, satisfiedTotal: 0, requiredTotal: 0, notMatched: [] });
+  assert.deepEqual(empty, {
+    categories: [], overallPlannedCredits: 0, overallCompletedCredits: 0,
+    satisfiedTotal: 0, requiredTotal: 0, notMatched: [],
+  });
+});
+
+test('completed courses split satisfied credits into completed vs planned', () => {
+  const cat = (name, req, courses) => ({ name, creditsRequired: req, courses });
+  const rc = (courseCode, credits) => ({ courseCode, credits });
+  const categories = [cat('Core', 12, [rc('CS 101', 4), rc('CS 201', 4), rc('MATH 162', 4)])];
+  const student = [
+    { code: 'CS 101', credits: 4, completed: true }, // transfer/AP
+    { code: 'CS 201', credits: 4, completed: false }, // planned
+  ];
+  const r = computeRequirementProgress(student, categories);
+  assert.equal(r.categories[0].satisfiedCredits, 8);
+  assert.equal(r.categories[0].completedCredits, 4);
+  assert.equal(r.categories[0].plannedCredits, 4);
+  assert.equal(r.overallCompletedCredits, 4);
+  assert.equal(r.overallPlannedCredits, 4);
 });
