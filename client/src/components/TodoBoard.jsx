@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { classGradient, isGlassColor, Spinner, ErrorBanner } from './ui';
 import { dueStatus } from '../lib/dueDate';
 import { boardColumns, visibleStage } from '../lib/board';
+import { showPriority, estimatePrefix } from '../lib/assignmentBadges';
 import { StageBoard } from './StageBoard';
 import { AssignmentDetailModal, estimateLabel } from './AssignmentDetailModal';
 
@@ -130,7 +131,7 @@ function TodoCardBody({ card }) {
           {card.source === 'task' ? '◇ ' : ''}{card.contextName}
         </p>
         <div className="mt-1.5 flex items-center gap-2 text-[11px]">
-          {card.source === 'assignment' && (
+          {card.source === 'assignment' && showPriority(card) && (
             <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[card.priority || 'none']}`} title={`${card.priority || 'none'} priority`} />
           )}
           {showDue && (
@@ -139,7 +140,7 @@ function TodoCardBody({ card }) {
             </span>
           )}
           {card.source === 'assignment' && estimateLabel(card.estimatedHours) && !card.done && (
-            <span className="font-semibold text-violet-600">⏱ {estimateLabel(card.estimatedHours)}</span>
+            <span className="font-semibold text-violet-600">⏱ {estimatePrefix(card)}{estimateLabel(card.estimatedHours)}</span>
           )}
           {card.done && <span className="font-semibold text-emerald-600">✓ Done</span>}
         </div>

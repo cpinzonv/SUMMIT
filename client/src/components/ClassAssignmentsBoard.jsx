@@ -3,6 +3,7 @@ import { api, errorMessage } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { dueStatus } from '../lib/dueDate';
 import { estimateLabel } from './AssignmentDetailModal';
+import { showPriority, estimatePrefix } from '../lib/assignmentBadges';
 import { boardColumns, visibleStage } from '../lib/board';
 import { StageBoard } from './StageBoard';
 
@@ -67,15 +68,17 @@ function AssignmentCardBody({ a }) {
       <p className={`text-sm font-semibold ${done ? 'text-muted line-through' : 'text-ink'}`}>{a.title}</p>
       {a.category && <p className="truncate text-[11px] text-muted">{a.category}</p>}
       <div className="mt-1.5 flex items-center gap-2 text-[11px]">
-        <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[a.priority || 'none']}`} title={`${a.priority || 'none'} priority`} />
+        {showPriority(a) && (
+          <span className={`h-2 w-2 rounded-full ${PRIORITY_DOT[a.priority || 'none']}`} title={`${a.priority || 'none'} priority`} />
+        )}
         {showDue && (
           <span className={`font-semibold ${st.isPastDue ? 'text-rose-600' : 'text-muted'}`}>
             {st.isPastDue ? st.lateLabel : st.countdownLabel}
           </span>
         )}
         {a.pointValue != null && <span className="text-muted">{a.pointValue} pts</span>}
-        {estimateLabel(a.estimatedHours) && (
-          <span className="font-semibold text-violet-600">⏱ {estimateLabel(a.estimatedHours)}</span>
+        {estimateLabel(a.estimatedHours) && !done && (
+          <span className="font-semibold text-violet-600">⏱ {estimatePrefix(a)}{estimateLabel(a.estimatedHours)}</span>
         )}
         {done && <span className="font-semibold text-emerald-600">✓ Done</span>}
       </div>

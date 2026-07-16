@@ -19,6 +19,7 @@ function toPublicAssignment(row) {
     scheduledTime: row.scheduled_time ?? null, // time-blocking (Schedule tab); null until set
     pointValue: row.point_value == null ? null : Number(row.point_value),
     estimatedHours: row.estimated_hours == null ? null : Number(row.estimated_hours),
+    estimateSource: row.estimate_source ?? null, // 'manual' | 'ai' | 'default' | null
     status: row.status,
     boardStage: row.board_stage ?? 'not_started', // shared Kanban stage (To-Do + class boards)
     priority: row.priority ?? 'none',
@@ -90,14 +91,21 @@ export async function getOwnedAssignment(userId, assignmentId, db = { query }) {
 export async function createAssignment(userId, classId, input) {
   await getOwnedClass(userId, classId); // 404s if not owned
 
+  // A brand-new assignment has no instructions for the AI to work with, so give
+  // it a 1h DEFAULT estimate — workload math and the Schedule tray always have a
+  // duration. Tagged 'default' so a later AI run or manual edit overrides it
+  // cleanly. An estimate supplied at creation is treated as a manual entry.
+  const estimatedHours = input.estimatedHours != null ? input.estimatedHours : 1;
+  const estimateSource = input.estimatedHours != null ? 'manual' : 'default';
+
   const { rows } = await query(
     `INSERT INTO assignments
        (class_id, title, description, category, due_date, planned_date,
-        point_value, status, priority, estimated_hours, scheduled_time)
+        point_value, status, priority, estimated_hours, scheduled_time, estimate_source)
      VALUES ($1,$2,$3,$4,$5,$6,$7,
              COALESCE($8::assignment_status, 'not_started'),
              COALESCE($9::assignment_priority, 'none'),
-             $10,$11)
+             $10,$11,$12)
      RETURNING id`,
     [
       classId,
@@ -109,8 +117,9 @@ export async function createAssignment(userId, classId, input) {
       input.pointValue ?? null,
       input.status ?? null,
       input.priority ?? null,
-      input.estimatedHours ?? null,
+      estimatedHours,
       input.scheduledTime ?? null,
+      estimateSource,
     ],
   );
   return fetchPublicAssignment(rows[0].id);
@@ -154,6 +163,14 @@ export async function updateAssignment(userId, assignmentId, input) {
 
   // Stamp the Working-tab save time whenever its content changes.
   if ('workingContent' in input) sets.push('working_saved_at = now()');
+
+  // A user editing the estimate directly marks it 'manual' — AI re-estimation
+  // then leaves it alone. Clearing the estimate clears the source too.
+  if ('estimatedHours' in input) {
+    sets.push(`estimate_source = $${i}`);
+    values.push(input.estimatedHours == null ? null : 'manual');
+    i += 1;
+  }
 
   if (sets.length > 0) {
     values.push(assignmentId);
@@ -232,10 +249,15 @@ export async function clearSubmission(userId, assignmentId) {
 /** Estimate the assignment's duration with Claude and persist it (decimal hours). */
 export async function estimateTime(userId, assignmentId, instructions) {
   const a = await getOwnedAssignment(userId, assignmentId); // 404s if not owned
+  // A manual estimate is authoritative — never let AI overwrite it.
+  if (a.estimate_source === 'manual') {
+    const hours = a.estimated_hours == null ? null : Number(a.estimated_hours);
+    return { minutes: hours == null ? null : Math.round(hours * 60), estimatedHours: hours, source: 'manual', kept: true };
+  }
   const { minutes } = await estimateMinutes({ title: a.title, instructions: instructions ?? a.instructions });
   const hours = Math.round((minutes / 60) * 100) / 100; // 2 dp, matches NUMERIC(5,2)
-  await query('UPDATE assignments SET estimated_hours = $1 WHERE id = $2', [hours, assignmentId]);
-  return { minutes, estimatedHours: hours };
+  await query('UPDATE assignments SET estimated_hours = $1, estimate_source = $2 WHERE id = $3', [hours, 'ai', assignmentId]);
+  return { minutes, estimatedHours: hours, source: 'ai' };
 }
 
 /* --------------------------------------------- Detail modal: instruction files */

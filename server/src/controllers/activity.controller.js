@@ -10,6 +10,7 @@ export const createSchema = z.object({
   description: nullableStr,
   color: z.string().max(20).nullable().optional(),
   kind: z.string().max(30).optional(),
+  kindLabel: z.string().trim().max(60).nullable().optional(), // free text when kind === 'other'
 });
 export const updateSchema = z
   .object({
@@ -17,6 +18,7 @@ export const updateSchema = z
     description: nullableStr,
     color: z.string().max(20).nullable().optional(),
     kind: z.string().max(30).optional(),
+    kindLabel: z.string().trim().max(60).nullable().optional(),
   })
   .refine((o) => Object.keys(o).length > 0, { message: 'Nothing to update' });
 
